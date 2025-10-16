@@ -1,32 +1,91 @@
-<!doctype html><html><body><h1>Chat</h1></body></html>
 <!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>{{ brand }} – Chat</title>
+  <title>{{ brand }} – Votre bot {{ (cfg.prompt_profile or 'métier')|capitalize }}</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <style>:root{ --accent: {{ cfg.accent or '#7aa2ff' }}; }</style>
+  <style>
+    :root{ --accent: {{ cfg.accent or '#7aa2ff' }}; }
+    .top { display:flex; gap:14px; align-items:center; margin-bottom:10px }
+    .top .title { margin:0 }
+    .badge { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.2); font-size:12px; color:#e5e7eb }
+    .recap { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; margin:14px 0 }
+    .recap h3 { margin:0 0 8px; font-size:16px }
+    .recap ul { margin:0; padding-left:18px; color:var(--muted) }
+    .pitch { margin:10px 0 16px; color:#cbd5e1 }
+    .cta-row { display:flex; gap:10px; flex-wrap:wrap; margin: 8px 0 14px; }
+    .cta-row .btn { border-color: rgba(255,255,255,.28); }
+  </style>
 </head>
 <body>
   <div class="chat-card">
-    <h1>{{ brand }}</h1>
-    {% if cfg.avatar_url %}
-      <div class="avatar"><img src="{{ cfg.avatar_url }}" alt="Avatar"></div>
-    {% endif %}
-    <p class="subtitle">{{ cfg.company or 'Assistant(e) IA' }}</p>
+    <div class="top">
+      {% if cfg.avatar_url %}
+        <div class="avatar" style="margin:0"><img src="{{ cfg.avatar_url }}" alt="Avatar"></div>
+      {% endif %}
+      <div>
+        <h1 class="title">{{ brand }} – {{ (cfg.prompt_profile or 'métier')|capitalize }}</h1>
+        <div class="badge">ID: {{ tenant_id }}</div>
+      </div>
+    </div>
+
+    <!-- Récapitulatif de la commande -->
+    <div class="recap">
+      <h3>Récapitulatif</h3>
+      <ul>
+        <li><strong>Métier :</strong> {{ (cfg.prompt_profile or '—')|capitalize }}</li>
+        <li><strong>Personnalité :</strong> {% if cfg.prompt_custom %}{{ cfg.prompt_custom }}{% else %}—{% endif %}</li>
+        <li><strong>Avatar :</strong> {% if cfg.avatar_url %}défini{% else %}non défini{% endif %}</li>
+      </ul>
+    </div>
+
+    <!-- Pitch contextuel selon le métier -->
+    <div class="pitch">
+      {% set m = (cfg.prompt_profile or '') %}
+      {% if m == 'danse' %}
+        Voici <strong>Betty Danse</strong> : accueil chaleureux, infos cours & niveaux, et conversion en essai/inscription. Posez une question (tarifs, planning, disponibilité…).
+      {% elif m == 'immobilier' %}
+        Voici <strong>Betty Immo</strong> : qualifie vos besoins, propose visites/estimations et facilite la prise de contact. Demandez un bien, un secteur, un budget.
+      {% elif m == 'mecanique' %}
+        Voici <strong>Betty Garage</strong> : qualifie la panne, récupère modèle/année et propose un créneau atelier. Décrivez le symptôme.
+      {% elif m == 'nutrition' %}
+        Voici <strong>Betty Nutrition</strong> : conseille prudemment, fixe des objectifs et propose un suivi. Parlez de vos habitudes et contraintes.
+      {% elif m == 'avocat' %}
+        Voici <strong>Betty Avocat (accueil)</strong> : qualifie le besoin, explique les étapes et propose un RDV (sans avis juridique).
+      {% else %}
+        Voici votre <strong>Betty</strong> : assistante IA personnalisée, prête à répondre et capter des prospects.
+      {% endif %}
+    </div>
 
     <div id="chat">
       <div id="messages">
         <div class="bubble bot">{{ cfg.welcome or 'Bonjour !' }}</div>
+        {% if m == 'danse' %}
+          <div class="bubble bot">Souhaitez-vous un essai ? Dites-moi votre style et vos disponibilités.</div>
+        {% elif m == 'immobilier' %}
+          <div class="bubble bot">Quel type de bien recherchez-vous, sur quel secteur, et votre budget ?</div>
+        {% elif m == 'mecanique' %}
+          <div class="bubble bot">Quel est le modèle/année de votre véhicule et le symptôme constaté ?</div>
+        {% elif m == 'nutrition' %}
+          <div class="bubble bot">Quel est votre objectif et avez-vous des contraintes alimentaires ?</div>
+        {% elif m == 'avocat' %}
+          <div class="bubble bot">Pouvez-vous préciser votre demande (sans détails sensibles) pour un premier rendez-vous ?</div>
+        {% endif %}
       </div>
+
       <div class="row">
         <input id="msg" placeholder="Posez votre question…" />
         <button id="send">Envoyer</button>
       </div>
     </div>
 
-    <p class="tiny">Client: {{ cfg.full_name }} — {{ cfg.email }} — ID: {{ tenant_id }}</p>
+    <div class="cta-row">
+      <a class="btn" href="{{ url_for('dashboard', tenant_id=tenant_id) }}">Retour réglages</a>
+      <a class="btn" href="{{ PUBLIC_BASE_URL }}/static/embed.js" target="_blank" rel="noopener">Voir le bloc d’intégration</a>
+    </div>
+
+    <p class="tiny">Client: {{ cfg.full_name }} — {{ cfg.email }}</p>
   </div>
 
   <script>
