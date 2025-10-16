@@ -6,42 +6,52 @@
   <title>{{ brand }} – Assistant {{ (cfg.prompt_profile or 'métier')|capitalize }}</title>
   <link rel="stylesheet" href="/static/style.css" />
   <style>
-    /* Thème pastel “Betty” (local à la page) */
     :root{
-      --bb-bg: #ffeef6;         /* fond rose très clair */
-      --bb-card: #ffffff;       /* cartes blanches */
-      --bb-accent: {{ cfg.accent or '#ff5fa0' }}; /* accent (bouton/bulle) */
-      --bb-accent-soft: color-mix(in srgb, {{ cfg.accent or '#ff5fa0' }} 25%, #fff);
-      --bb-text: #3a2a35;       /* texte principal */
-      --bb-muted: #876b7a;      /* texte secondaire */
+      --bb-bg: #fff5f8;
+      --bb-card: #ffffff;
+      --bb-accent: {{ cfg.accent or '#ff66a1' }};
+      --bb-accent-soft: color-mix(in srgb, {{ cfg.accent or '#ff66a1' }} 20%, #fff);
+      --bb-text: #3a2a35;
+      --bb-muted: #7e5e70;
     }
-    body { background: var(--bb-bg); color: var(--bb-text); }
-    .betty-wrap{ max-width: 980px; margin: 28px auto 40px; padding: 0 16px; }
+    body { background: var(--bb-bg); color: var(--bb-text); font-family: "Poppins", sans-serif; }
+    .betty-wrap{ max-width: 960px; margin: 28px auto 40px; padding: 0 16px; }
     .betty-top{ text-align:center; margin-bottom: 16px; }
-    .betty-top .logo{ width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 50%; overflow:hidden; }
-    .betty-top .logo img{ width:100%; height:100%; object-fit:cover; }
+    .logo{ width: 70px; height: 70px; margin: 0 auto 12px; border-radius: 50%; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .logo img{ width:100%; height:100%; object-fit:cover; }
     .hello{
-      display:inline-block; padding:16px 20px; border-radius:18px;
-      background: var(--bb-accent-soft); color: var(--bb-text);
-      box-shadow: 0 10px 30px rgba(0,0,0,.06);
+      display:inline-block;
+      padding:18px 22px;
+      border-radius:18px;
+      background: var(--bb-accent-soft);
+      color: var(--bb-text);
+      box-shadow: 0 10px 30px rgba(0,0,0,.05);
       max-width: 880px;
+      line-height:1.4;
     }
     .hello b{ color:#2b1924 }
-    .betty-chat{ background: var(--bb-card); border-radius:24px; padding:22px;
-      margin: 22px auto 12px; max-width: 900px;
+    .recap{
+      background:#fff; border:1px solid #f4d6e4; border-radius:18px;
+      padding:16px 18px; margin:20px auto; max-width:900px;
+    }
+    .recap h3{ margin:0 0 10px; font-size:16px; color:#432b38 }
+    .recap ul{ margin:0; padding-left:18px; color:var(--bb-muted); line-height:1.5; }
+    .betty-chat{
+      background: var(--bb-card);
+      border-radius:24px;
+      padding:22px;
+      margin: 22px auto 12px;
+      max-width: 900px;
       box-shadow: 0 18px 50px rgba(0,0,0,.08);
     }
-    #messages{ height:min(48vh,480px); min-height:200px; overflow:auto; padding:10px 6px; display:flex; flex-direction:column; gap:12px; }
-    .bubble{ max-width:72%; padding:12px 14px; border-radius:16px; line-height:1.4; font-size:16px; }
+    #messages{ height:min(48vh,480px); min-height:220px; overflow:auto; padding:10px 6px; display:flex; flex-direction:column; gap:12px; }
+    .bubble{ max-width:75%; padding:13px 16px; border-radius:16px; line-height:1.45; font-size:16px; }
     .bubble.bot{ align-self:flex-start; background:#fff3fa; border:1px solid #ffd3e9; }
     .bubble.user{ align-self:flex-end; background:#edf1ff; border:1px solid #cfd7ff; }
     .betty-row{ display:flex; gap:10px; margin-top:12px; }
     .betty-row input{ flex:1; font-size:16px; padding:14px 16px; border-radius:14px; border:1px solid #e6d8e1; background:#fff; outline:none; }
-    .betty-row button{ font-size:16px; padding:14px 18px; border-radius:14px; border:0; background: var(--bb-accent); color:#fff; cursor:pointer; }
-    .betty-row button:hover{ filter:brightness(.98); }
-    .recap{ background:#fff; border:1px solid #f3dbe7; border-radius:18px; padding:14px 16px; max-width:900px; margin: 16px auto 4px; }
-    .recap h3{ margin:0 0 8px; font-size:16px; color:#432b38 }
-    .recap ul{ margin:0; padding-left:18px; color:var(--bb-muted) }
+    .betty-row button{ font-size:16px; padding:14px 18px; border-radius:14px; border:0; background: var(--bb-accent); color:#fff; cursor:pointer; transition:.2s ease; }
+    .betty-row button:hover{ filter:brightness(1.05); transform:scale(1.02); }
     .tiny{ color: var(--bb-muted); text-align:center; margin-top:12px; font-size:13px; }
   </style>
 </head>
@@ -52,12 +62,12 @@
         <div class="logo"><img src="{{ cfg.avatar_url }}" alt="Avatar"></div>
       {% endif %}
       <div class="hello">
-        <div><b>Bonjour ! Je suis Betty</b>, l’assistante {{ (cfg.prompt_profile or 'métier') }}{% if cfg.company %} de {{ cfg.company }}{% endif %}.</div>
-        <div>Que puis-je faire pour vous ?</div>
+        <b>Bonjour ! Je suis Betty</b>, votre assistante IA.  
+        Je peux vous aider à comprendre vos besoins, vous conseiller, ou vous recontacter si vous le souhaitez 🌸  
+        Que puis-je faire pour vous aujourd’hui ?
       </div>
     </div>
 
-    <!-- Récap clair de la commande -->
     <div class="recap">
       <h3>Récapitulatif</h3>
       <ul>
@@ -69,20 +79,10 @@
 
     <div class="betty-chat">
       <div id="messages">
-        <!-- messages init en fonction du métier -->
-        <div class="bubble bot">{{ cfg.welcome or 'Bonjour !' }}</div>
-        {% set m = (cfg.prompt_profile or '') %}
-        {% if m == 'danse' %}
-          <div class="bubble bot">Souhaitez-vous un essai ? Dites-moi votre style et vos disponibilités 💃</div>
-        {% elif m == 'immobilier' %}
-          <div class="bubble bot">Quel type de bien, secteur et budget vous intéressent 🏡 ?</div>
-        {% elif m == 'mecanique' %}
-          <div class="bubble bot">Modèle/année du véhicule et symptôme constaté 🔧 ?</div>
-        {% elif m == 'nutrition' %}
-          <div class="bubble bot">Quel est votre objectif et vos préférences alimentaires 🥗 ?</div>
-        {% elif m == 'avocat' %}
-          <div class="bubble bot">Précisez votre demande (sans informations sensibles). Je peux vous proposer un RDV ⚖️.</div>
-        {% endif %}
+        <div class="bubble bot">
+          👋 Bonjour ! Je suis Betty, votre assistante IA.  
+          Pour mieux vous répondre, puis-je connaître votre prénom ? 😊
+        </div>
       </div>
 
       <div class="betty-row">
@@ -99,6 +99,7 @@
     const sendBtn  = document.getElementById('send');
     const input    = document.getElementById('msg');
     const messages = document.getElementById('messages');
+    const leadData = { nom: null, email: null, besoin: null };
 
     function addBubble(text, who){
       const div = document.createElement('div');
@@ -113,6 +114,36 @@
       if(!text) return;
       addBubble(text, 'user');
       input.value = '';
+
+      // Logique simple de collecte de lead
+      if(!leadData.nom){
+        leadData.nom = text;
+        addBubble(`Enchantée ${text} 🌸 ! Puis-je avoir votre email pour vous envoyer des infos ?`, 'bot');
+        return;
+      }
+      if(!leadData.email && text.includes('@')){
+        leadData.email = text;
+        addBubble(`Merci ${leadData.nom} 💌 ! Pouvez-vous me dire en deux mots votre besoin ou projet ?`, 'bot');
+        return;
+      }
+      if(!leadData.besoin){
+        leadData.besoin = text;
+        addBubble(`Merci pour ces précisions 🙏 ! Je vais transmettre votre demande à notre équipe.`, 'bot');
+
+        // Envoi des données lead à l’API
+        try {
+          await fetch(`/api/lead/${tenantId}`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(leadData)
+          });
+        } catch(e){ console.error(e); }
+
+        addBubble(`Souhaitez-vous continuer à discuter ou recevoir un devis personnalisé ? 💬`, 'bot');
+        return;
+      }
+
+      // Sinon, conversation normale
       try {
         const res = await fetch(`/api/chat/${tenantId}`, {
           method:'POST',
