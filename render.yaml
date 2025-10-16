@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: betty-bots
+    env: python
+    plan: starter
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 2 -k gthread -b 0.0.0.0:$PORT app:app
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: BRAND_NAME
+        value: "Betty Bots"
+      - key: PUBLIC_BASE_URL
+        # remplace après le premier deploy par l'URL Render HTTPS
+        value: "https://betty-bots.onrender.com"
+      - key: SUPPORT_EMAIL
+        value: "support@spectramedia.ai"
+      - key: LLM_MODEL
+        value: "gpt-4o-mini"
+      - key: OPENAI_API_KEY
+        sync: false   # tu la mets dans le Dashboard Render (masquée)
+    disk:
+      name: tenants-disk
+      mountPath: /opt/render/project/src/tenants
+      sizeGB: 1
