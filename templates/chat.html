@@ -3,34 +3,61 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>{{ brand }} – Votre bot {{ (cfg.prompt_profile or 'métier')|capitalize }}</title>
+  <title>{{ brand }} – Assistant {{ (cfg.prompt_profile or 'métier')|capitalize }}</title>
   <link rel="stylesheet" href="/static/style.css" />
   <style>
-    :root{ --accent: {{ cfg.accent or '#7aa2ff' }}; }
-    .top { display:flex; gap:14px; align-items:center; margin-bottom:10px }
-    .top .title { margin:0 }
-    .badge { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.2); font-size:12px; color:#e5e7eb }
-    .recap { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; margin:14px 0 }
-    .recap h3 { margin:0 0 8px; font-size:16px }
-    .recap ul { margin:0; padding-left:18px; color:var(--muted) }
-    .pitch { margin:10px 0 16px; color:#cbd5e1 }
-    .cta-row { display:flex; gap:10px; flex-wrap:wrap; margin: 8px 0 14px; }
-    .cta-row .btn { border-color: rgba(255,255,255,.28); }
+    /* Thème pastel “Betty” (local à la page) */
+    :root{
+      --bb-bg: #ffeef6;         /* fond rose très clair */
+      --bb-card: #ffffff;       /* cartes blanches */
+      --bb-accent: {{ cfg.accent or '#ff5fa0' }}; /* accent (bouton/bulle) */
+      --bb-accent-soft: color-mix(in srgb, {{ cfg.accent or '#ff5fa0' }} 25%, #fff);
+      --bb-text: #3a2a35;       /* texte principal */
+      --bb-muted: #876b7a;      /* texte secondaire */
+    }
+    body { background: var(--bb-bg); color: var(--bb-text); }
+    .betty-wrap{ max-width: 980px; margin: 28px auto 40px; padding: 0 16px; }
+    .betty-top{ text-align:center; margin-bottom: 16px; }
+    .betty-top .logo{ width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 50%; overflow:hidden; }
+    .betty-top .logo img{ width:100%; height:100%; object-fit:cover; }
+    .hello{
+      display:inline-block; padding:16px 20px; border-radius:18px;
+      background: var(--bb-accent-soft); color: var(--bb-text);
+      box-shadow: 0 10px 30px rgba(0,0,0,.06);
+      max-width: 880px;
+    }
+    .hello b{ color:#2b1924 }
+    .betty-chat{ background: var(--bb-card); border-radius:24px; padding:22px;
+      margin: 22px auto 12px; max-width: 900px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.08);
+    }
+    #messages{ height:min(48vh,480px); min-height:200px; overflow:auto; padding:10px 6px; display:flex; flex-direction:column; gap:12px; }
+    .bubble{ max-width:72%; padding:12px 14px; border-radius:16px; line-height:1.4; font-size:16px; }
+    .bubble.bot{ align-self:flex-start; background:#fff3fa; border:1px solid #ffd3e9; }
+    .bubble.user{ align-self:flex-end; background:#edf1ff; border:1px solid #cfd7ff; }
+    .betty-row{ display:flex; gap:10px; margin-top:12px; }
+    .betty-row input{ flex:1; font-size:16px; padding:14px 16px; border-radius:14px; border:1px solid #e6d8e1; background:#fff; outline:none; }
+    .betty-row button{ font-size:16px; padding:14px 18px; border-radius:14px; border:0; background: var(--bb-accent); color:#fff; cursor:pointer; }
+    .betty-row button:hover{ filter:brightness(.98); }
+    .recap{ background:#fff; border:1px solid #f3dbe7; border-radius:18px; padding:14px 16px; max-width:900px; margin: 16px auto 4px; }
+    .recap h3{ margin:0 0 8px; font-size:16px; color:#432b38 }
+    .recap ul{ margin:0; padding-left:18px; color:var(--bb-muted) }
+    .tiny{ color: var(--bb-muted); text-align:center; margin-top:12px; font-size:13px; }
   </style>
 </head>
 <body>
-  <div class="chat-card">
-    <div class="top">
+  <div class="betty-wrap">
+    <div class="betty-top">
       {% if cfg.avatar_url %}
-        <div class="avatar" style="margin:0"><img src="{{ cfg.avatar_url }}" alt="Avatar"></div>
+        <div class="logo"><img src="{{ cfg.avatar_url }}" alt="Avatar"></div>
       {% endif %}
-      <div>
-        <h1 class="title">{{ brand }} – {{ (cfg.prompt_profile or 'métier')|capitalize }}</h1>
-        <div class="badge">ID: {{ tenant_id }}</div>
+      <div class="hello">
+        <div><b>Bonjour ! Je suis Betty</b>, l’assistante {{ (cfg.prompt_profile or 'métier') }}{% if cfg.company %} de {{ cfg.company }}{% endif %}.</div>
+        <div>Que puis-je faire pour vous ?</div>
       </div>
     </div>
 
-    <!-- Récapitulatif de la commande -->
+    <!-- Récap clair de la commande -->
     <div class="recap">
       <h3>Récapitulatif</h3>
       <ul>
@@ -40,52 +67,31 @@
       </ul>
     </div>
 
-    <!-- Pitch contextuel selon le métier -->
-    <div class="pitch">
-      {% set m = (cfg.prompt_profile or '') %}
-      {% if m == 'danse' %}
-        Voici <strong>Betty Danse</strong> : accueil chaleureux, infos cours & niveaux, et conversion en essai/inscription. Posez une question (tarifs, planning, disponibilité…).
-      {% elif m == 'immobilier' %}
-        Voici <strong>Betty Immo</strong> : qualifie vos besoins, propose visites/estimations et facilite la prise de contact. Demandez un bien, un secteur, un budget.
-      {% elif m == 'mecanique' %}
-        Voici <strong>Betty Garage</strong> : qualifie la panne, récupère modèle/année et propose un créneau atelier. Décrivez le symptôme.
-      {% elif m == 'nutrition' %}
-        Voici <strong>Betty Nutrition</strong> : conseille prudemment, fixe des objectifs et propose un suivi. Parlez de vos habitudes et contraintes.
-      {% elif m == 'avocat' %}
-        Voici <strong>Betty Avocat (accueil)</strong> : qualifie le besoin, explique les étapes et propose un RDV (sans avis juridique).
-      {% else %}
-        Voici votre <strong>Betty</strong> : assistante IA personnalisée, prête à répondre et capter des prospects.
-      {% endif %}
-    </div>
-
-    <div id="chat">
+    <div class="betty-chat">
       <div id="messages">
+        <!-- messages init en fonction du métier -->
         <div class="bubble bot">{{ cfg.welcome or 'Bonjour !' }}</div>
+        {% set m = (cfg.prompt_profile or '') %}
         {% if m == 'danse' %}
-          <div class="bubble bot">Souhaitez-vous un essai ? Dites-moi votre style et vos disponibilités.</div>
+          <div class="bubble bot">Souhaitez-vous un essai ? Dites-moi votre style et vos disponibilités 💃</div>
         {% elif m == 'immobilier' %}
-          <div class="bubble bot">Quel type de bien recherchez-vous, sur quel secteur, et votre budget ?</div>
+          <div class="bubble bot">Quel type de bien, secteur et budget vous intéressent 🏡 ?</div>
         {% elif m == 'mecanique' %}
-          <div class="bubble bot">Quel est le modèle/année de votre véhicule et le symptôme constaté ?</div>
+          <div class="bubble bot">Modèle/année du véhicule et symptôme constaté 🔧 ?</div>
         {% elif m == 'nutrition' %}
-          <div class="bubble bot">Quel est votre objectif et avez-vous des contraintes alimentaires ?</div>
+          <div class="bubble bot">Quel est votre objectif et vos préférences alimentaires 🥗 ?</div>
         {% elif m == 'avocat' %}
-          <div class="bubble bot">Pouvez-vous préciser votre demande (sans détails sensibles) pour un premier rendez-vous ?</div>
+          <div class="bubble bot">Précisez votre demande (sans informations sensibles). Je peux vous proposer un RDV ⚖️.</div>
         {% endif %}
       </div>
 
-      <div class="row">
-        <input id="msg" placeholder="Posez votre question…" />
+      <div class="betty-row">
+        <input id="msg" placeholder="Écrivez votre message ici…" />
         <button id="send">Envoyer</button>
       </div>
     </div>
 
-    <div class="cta-row">
-      <a class="btn" href="{{ url_for('dashboard', tenant_id=tenant_id) }}">Retour réglages</a>
-      <a class="btn" href="{{ PUBLIC_BASE_URL }}/static/embed.js" target="_blank" rel="noopener">Voir le bloc d’intégration</a>
-    </div>
-
-    <p class="tiny">Client: {{ cfg.full_name }} — {{ cfg.email }}</p>
+    <div class="tiny">Client : {{ cfg.full_name }} — {{ cfg.email }} — ID : {{ tenant_id }}</div>
   </div>
 
   <script>
@@ -114,7 +120,7 @@
           body: JSON.stringify({message:text})
         });
         const data = await res.json();
-        addBubble(data.reply || '…', 'bot');
+        addBubble(data.reply || '[…]', 'bot');
       } catch(e){
         addBubble("Désolé, une erreur réseau est survenue.", "bot");
         console.error(e);
