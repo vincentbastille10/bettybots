@@ -1,4 +1,4 @@
-cat > static/style.css <<"CSS"
+cat > static/style.css <<"EOF"
 :root { --bg:#0b1020; --card:#11162a; --text:#e5e7eb; --muted:#93a2b8; --accent:#7aa2ff; }
 * { box-sizing: border-box; }
 body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background: var(--bg); color: var(--text); }
@@ -9,31 +9,20 @@ body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI,
 .hero h1 { margin:0 0 8px; font-size: 32px; }
 .lead { color: var(--muted); margin: 0; }
 .pricing { display:grid; grid-template-columns: 1fr; gap: 18px; }
-.card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)), var(--card); border-radius: 20px; padding: 20px; box-shadow: 0 8px 26px rgba(0,0,0,.35); }
+.card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)), var(--card);
+        border-radius: 20px; padding: 20px; box-shadow: 0 8px 26px rgba(0,0,0,.35); }
 .card h2 { margin-top:0; }
 .price { font-size: 22px; margin-top: -6px; }
 .signup { display: grid; gap: 10px; margin-top: 12px; }
-.signup input, .signup select { padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); background: #0f1426; color: var(--text); }
-.signup button, .btn { padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(122,162,255,.45); background: linear-gradient(180deg, rgba(122,162,255,.3), rgba(122,162,255,.2)); color: var(--text); cursor: pointer; text-decoration:none; display:inline-block; }
+.signup input, .signup select {
+  padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12);
+  background: #0f1426; color: var(--text);
+}
+.signup button, .btn {
+  padding: 12px 16px; border-radius: 12px;
+  border: 1px solid rgba(122,162,255,.45);
+  background: linear-gradient(180deg, rgba(122,162,255,.3), rgba(122,162,255,.2));
+  color: var(--text); cursor: pointer; text-decoration:none; display:inline-block;
+}
 .foot { text-align:center; color: var(--muted); margin-top: 24px; font-size: 13px; }
-
-/* Dashboard & Chat */
-.grid-2 { display:grid; grid-template-columns: 1fr; gap: 18px; }
-@media (min-width: 860px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
-.code { background:#0b1020; color:#e5e7eb; padding:10px; border-radius:12px; overflow:auto; }
-
-.chat-card { width:min(760px, 92vw); margin: 30px auto; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)), var(--card); border-radius:22px; padding:28px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
-.subtitle { color:var(--muted); text-align:center; }
-#chat { border:1px solid rgba(255,255,255,.08); border-radius:16px; padding:14px; background: rgba(255,255,255,.02); }
-#messages { height:48vh; min-height:240px; max-height:420px; overflow:auto; display:flex; flex-direction:column; gap:10px; padding:6px; }
-.bubble { max-width:85%; padding:10px 12px; border-radius:14px; line-height:1.35; font-size:15px; }
-.bubble.user { align-self:flex-end; background: rgba(122,162,255,.2); border:1px solid rgba(122,162,255,.35); }
-.bubble.bot { align-self:flex-start; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); }
-.row { display:flex; gap:10px; margin-top:10px; }
-.row input { flex:1; padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:#0f1426; color:var(--text); outline:none; }
-.row button { padding:12px 16px; border-radius:12px; border:1px solid rgba(122,162,255,.45); background: linear-gradient(180deg, rgba(122,162,255,.3), rgba(122,162,255,.2)); color: var(--text); cursor:pointer; }
-
-/* Avatar */
-.avatar { display:flex; justify-content:center; margin: 12px 0 18px; }
-.avatar img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.15); }
-CSS
+EOF
