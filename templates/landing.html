@@ -1,1 +1,43 @@
-<!doctype html><html><body><h1>Landing</h1></body></html>
+cat > templates/landing.html <<"HTML"
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ brand }} – Votre ChatBot métier</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="hero">
+      <h1>{{ brand }} – Votre ChatBot métier</h1>
+      <p class="lead">Créez votre assistante IA en 2 minutes. Un script à coller. Ça marche.</p>
+    </header>
+
+    <section class="pricing">
+      <div class="card">
+        <h2>Starter</h2>
+        <p class="price">9,99 € / mois</p>
+        <ul>
+          <li>Widget chat prêt à l'emploi</li>
+          <li>Profil métier au choix</li>
+          <li>Avatar + message d’accueil</li>
+        </ul>
+        <form action="/signup" method="post" class="signup">
+          <input name="full_name" placeholder="Votre nom" required>
+          <input name="email" type="email" placeholder="Email" required>
+          <select name="profile">
+            {% for key in prompts %}
+              <option value="{{ key }}">{{ key|capitalize }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Créer ma Betty</button>
+        </form>
+      </div>
+    </section>
+
+    <footer class="foot">© {{ brand }} — propulsé par Spectra Media</footer>
+  </div>
+</body>
+</html>
+HTML
