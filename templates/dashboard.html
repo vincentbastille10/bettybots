@@ -1,1 +1,86 @@
-<!doctype html><html><body><h1>Dashboard</h1></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mon bot – {{ brand }}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="hero">
+      <h1>Bienvenue, {{ cfg.full_name or 'Client' }}</h1>
+      <p class="lead">Personnalisez votre bot puis copiez le script d’intégration.</p>
+    </header>
+
+    <section class="grid-2">
+      <div class="card">
+        <h2>Réglages</h2>
+
+        <label for="prompt_profile">Métier</label>
+        <select id="prompt_profile">
+          {% for key, text in prompts.items() %}
+            <option value="{{ key }}" {% if cfg.prompt_profile==key %}selected{% endif %}>{{ key|capitalize }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="prompt_custom">Prompt personnalisé (optionnel)</label>
+        <textarea id="prompt_custom" rows="4" placeholder="Contraintes spécifiques, ton, mots à éviter…">{{ cfg.prompt_custom }}</textarea>
+
+        <label for="welcome">Message d’accueil</label>
+        <input id="welcome" value="{{ cfg.welcome }}" />
+
+        <label for="avatar_url">Avatar (URL)</label>
+        <input id="avatar_url" value="{{ cfg.avatar_url }}" placeholder="https://…"/>
+
+        <label for="accent">Couleur d’accent</label>
+        <input id="accent" value="{{ cfg.accent }}" />
+
+        <button id="save">Enregistrer</button>
+      </div>
+
+      <div class="card">
+        <h2>Intégration</h2>
+        <p>Collez ce script juste avant <code>&lt;/body&gt;</code> sur votre site :</p>
+        <pre class="code"><code>&lt;script src="{{ PUBLIC_BASE_URL }}/static/embed.js" data-tenant="{{ cfg.tenant_id }}"&gt;&lt;/script&gt;</code></pre>
+        <p>Tester maintenant :</p>
+        <p><a class="btn" href="{{ url_for('chat_ui', tenant_id=cfg.tenant_id) }}" target="_blank">Ouvrir mon bot</a></p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const TENANT = {{ cfg.tenant_id|tojson }};
+    const saveBtn = document.getElementById('save');
+    const $ = (id) => document.getElementById(id);
+
+    async function saveCfg() {
+      const payload = {
+        prompt_profile: $('prompt_profile').value,
+        prompt_custom:  $('prompt_custom').value,
+        welcome:        $('welcome').value,
+        avatar_url:     $('avatar_url').value,
+        accent:         $('accent').value
+      };
+      try {
+        const res = await fetch(`/api/tenant/${TENANT}/update`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          alert('✅ Sauvegardé');
+        } else {
+          alert('❌ Erreur lors de la sauvegarde');
+        }
+      } catch (e) {
+        alert('❌ Erreur réseau');
+        console.error(e);
+      }
+    }
+
+    saveBtn.addEventListener('click', saveCfg);
+  </script>
+</body>
+</html>
