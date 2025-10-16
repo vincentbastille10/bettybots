@@ -5,55 +5,180 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Mon bot – {{ brand }}</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* Mini styles pour les tiroirs (accordéons) */
+    .accordion { display: grid; gap: 12px; }
+    .acc-item { background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)), var(--card); border-radius: 14px; border:1px solid rgba(255,255,255,.1); overflow: hidden; }
+    .acc-head { width:100%; text-align:left; padding:14px 16px; background:transparent; color:var(--text); border:0; font-size:16px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+    .acc-body { display:none; padding:16px; border-top:1px solid rgba(255,255,255,.08); }
+    .acc-item.open .acc-body { display:block; }
+    .hint { color: var(--muted); font-size: 14px; }
+    .row { display:grid; gap:10px; }
+    .grid-2 { display:grid; grid-template-columns: 1fr; gap:18px; }
+    @media (min-width: 860px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
+    .input, .select, .textarea { padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:#0f1426; color:var(--text); width:100%; }
+    .btn { padding:12px 16px; border-radius:12px; border:1px solid rgba(122,162,255,.45); background:linear-gradient(180deg, rgba(122,162,255,.3), rgba(122,162,255,.2)); color:var(--text); cursor:pointer; text-decoration:none; display:inline-block; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+    .avatar-preview { display:flex; align-items:center; gap:12px; }
+    .avatar-preview img { width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.15); }
+    .code { background:#0b1020; color:#e5e7eb; padding:10px; border-radius:12px; overflow:auto; }
+    label { font-size:14px; color:var(--muted); }
+  </style>
 </head>
 <body>
   <div class="shell">
     <header class="hero">
       <h1>Bienvenue, {{ cfg.full_name or 'Client' }}</h1>
-      <p class="lead">Personnalisez votre bot puis copiez le script d’intégration.</p>
+      <p class="lead">
+        <strong>Étapes simples :</strong> (1) Choisissez le métier, le caractère et l’avatar. (2) Cliquez “Enregistrer”. (3) Copiez le <em>bloc d’intégration</em> à la fin et collez-le sur votre site.
+      </p>
     </header>
 
     <section class="grid-2">
-      <div class="card">
-        <h2>Réglages</h2>
+      <!-- Colonne réglages (tiroirs) -->
+      <div>
+        <div class="accordion">
 
-        <label for="prompt_profile">Métier</label>
-        <select id="prompt_profile">
-          {% for key, text in prompts.items() %}
-            <option value="{{ key }}" {% if cfg.prompt_profile==key %}selected{% endif %}>{{ key|capitalize }}</option>
-          {% endfor %}
-        </select>
+          <!-- Métier -->
+          <div class="acc-item open" id="acc-metier">
+            <button class="acc-head" type="button">
+              <span>1) Choisir le <strong>métier</strong></span><span>▾</span>
+            </button>
+            <div class="acc-body">
+              <p class="hint">Sélectionnez le domaine d’activité. Le bot parlera avec les bons réflexes métier.</p>
+              <select id="prompt_profile" class="select">
+                {% for key, text in prompts.items() %}
+                  <option value="{{ key }}" {% if cfg.prompt_profile==key %}selected{% endif %}>{{ key|capitalize }}</option>
+                {% endfor %}
+              </select>
+              <label for="prompt_custom">Ajustement (optionnel)</label>
+              <textarea id="prompt_custom" class="textarea" rows="4" placeholder="Contraintes spécifiques, ton, mots à éviter…">{{ cfg.prompt_custom }}</textarea>
+            </div>
+          </div>
 
-        <label for="prompt_custom">Prompt personnalisé (optionnel)</label>
-        <textarea id="prompt_custom" rows="4" placeholder="Contraintes spécifiques, ton, mots à éviter…">{{ cfg.prompt_custom }}</textarea>
+          <!-- Comportement -->
+          <div class="acc-item" id="acc-comportement">
+            <button class="acc-head" type="button">
+              <span>2) Choisir le <strong>comportement</strong></span><span>▾</span>
+            </button>
+            <div class="acc-body">
+              <p class="hint">Style de réponse du bot. Vous pourrez affiner à tout moment.</p>
+              <div class="btn-row" id="tone-buttons">
+                <button class="btn" data-tone="Chaleureuse et bienveillante">Chaleureuse</button>
+                <button class="btn" data-tone="Professionnelle et concise">Professionnelle</button>
+                <button class="btn" data-tone="Dynamique et motivante">Dynamique</button>
+                <button class="btn" data-tone="Rassurante et simple">Rassurante</button>
+              </div>
+            </div>
+          </div>
 
-        <label for="welcome">Message d’accueil</label>
-        <input id="welcome" value="{{ cfg.welcome }}" />
+          <!-- Avatar -->
+          <div class="acc-item" id="acc-avatar">
+            <button class="acc-head" type="button">
+              <span>3) Choisir l’<strong>avatar</strong></span><span>▾</span>
+            </button>
+            <div class="acc-body">
+              <p class="hint">Collez une adresse d’image (ex : votre logo ou photo). Un aperçu s’affiche.</p>
+              <div class="row">
+                <input id="avatar_url" class="input" value="{{ cfg.avatar_url }}" placeholder="https://… (lien d’une image)"/>
+                <div class="avatar-preview">
+                  <img id="avatar_preview" src="{{ cfg.avatar_url or '' }}" alt="Avatar"/>
+                  <span class="hint">Aperçu</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        <label for="avatar_url">Avatar (URL)</label>
-        <input id="avatar_url" value="{{ cfg.avatar_url }}" placeholder="https://…"/>
+          <!-- Couleur -->
+          <div class="acc-item" id="acc-couleur">
+            <button class="acc-head" type="button">
+              <span>4) Choisir la <strong>couleur</strong></span><span>▾</span>
+            </button>
+            <div class="acc-body">
+              <p class="hint">Couleur d’accent (boutons, bulles). Exemple : <code>#7aa2ff</code></p>
+              <input id="accent" class="input" value="{{ cfg.accent }}" />
+            </div>
+          </div>
 
-        <label for="accent">Couleur d’accent</label>
-        <input id="accent" value="{{ cfg.accent }}" />
+          <!-- Message d’accueil -->
+          <div class="acc-item" id="acc-welcome">
+            <button class="acc-head" type="button">
+              <span>5) Message d’<strong>accueil</strong></span><span>▾</span>
+            </button>
+            <div class="acc-body">
+              <input id="welcome" class="input" value="{{ cfg.welcome }}" />
+              <p class="hint">Exemple : “👋 Bonjour, je suis Betty. Comment puis-je vous aider ?”</p>
+            </div>
+          </div>
 
-        <button id="save">Enregistrer</button>
+          <!-- Bouton Enregistrer -->
+          <div class="acc-item">
+            <div class="acc-body" style="display:block">
+              <button id="save" class="btn">Enregistrer</button>
+              <span class="hint">Pensez à enregistrer avant de passer à l’étape suivante.</span>
+            </div>
+          </div>
+
+        </div>
       </div>
 
+      <!-- Colonne intégration (sans parler de “script”) -->
       <div class="card">
-        <h2>Intégration</h2>
-        <p>Collez ce script juste avant <code>&lt;/body&gt;</code> sur votre site :</p>
-        <pre class="code"><code>&lt;script src="{{ PUBLIC_BASE_URL }}/static/embed.js" data-tenant="{{ cfg.tenant_id }}"&gt;&lt;/script&gt;</code></pre>
-        <p>Tester maintenant :</p>
-        <p><a class="btn" href="{{ url_for('chat_ui', tenant_id=cfg.tenant_id) }}" target="_blank">Ouvrir mon bot</a></p>
+        <h2>Étape finale — Ajouter le bot sur votre site</h2>
+        <p class="hint">
+          Copiez-collez le <strong>bloc ci-dessous</strong> tel quel, à la fin de votre page (avant la fermeture).
+          Vous pouvez aussi <strong>télécharger le bloc</strong> en fichier à mettre sur votre site.
+        </p>
+
+        <!-- Bloc à copier (on évite le mot 'script' dans le texte, mais le code est celui requis) -->
+        <pre class="code" id="embedCode"><code>&lt;!-- Bloc d’intégration Betty (à copier tel quel) --&gt;
+&lt;script src="{{ PUBLIC_BASE_URL }}/static/embed.js" data-tenant="{{ cfg.tenant_id }}"&gt;&lt;/script&gt;</code></pre>
+
+        <div class="btn-row">
+          <button id="copy" class="btn">Copier le bloc</button>
+          <button id="download" class="btn">Télécharger le bloc</button>
+          <a class="btn" href="{{ url_for('chat_ui', tenant_id=cfg.tenant_id) }}" target="_blank">Tester mon bot</a>
+        </div>
+
+        <p class="hint" style="margin-top:10px">
+          💡 Si vous ne gérez pas votre site, envoyez ce bloc (ou le fichier téléchargé) à votre webmaster :  
+          “Merci d’ajouter ce bloc à la fin de la page d’accueil.”
+        </p>
       </div>
     </section>
   </div>
 
   <script>
     const TENANT = {{ cfg.tenant_id|tojson }};
-    const saveBtn = document.getElementById('save');
     const $ = (id) => document.getElementById(id);
 
+    // Accordéons
+    document.querySelectorAll('.acc-head').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const item = btn.parentElement;
+        item.classList.toggle('open');
+      });
+    });
+
+    // Prévisualisation avatar
+    const avatarInput = $('avatar_url');
+    const avatarPrev  = $('avatar_preview');
+    function updatePreview(){ avatarPrev.src = avatarInput.value || ''; }
+    avatarInput.addEventListener('input', updatePreview);
+    updatePreview();
+
+    // Comportement (ton) → on remplit prompt_custom en ajout
+    document.querySelectorAll('#tone-buttons .btn').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const tone = b.getAttribute('data-tone');
+        const box  = $('prompt_custom');
+        const line = `Ton souhaité : ${tone}.`;
+        box.value = box.value ? (box.value.trim() + "\\n" + line) : line;
+        alert('Comportement ajouté au réglage ✅');
+      });
+    });
+
+    // Sauvegarde
     async function saveCfg() {
       const payload = {
         prompt_profile: $('prompt_profile').value,
@@ -69,18 +194,31 @@
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        if (data && data.ok) {
-          alert('✅ Sauvegardé');
-        } else {
-          alert('❌ Erreur lors de la sauvegarde');
-        }
+        alert(data && data.ok ? '✅ Sauvegardé' : '❌ Erreur lors de la sauvegarde');
       } catch (e) {
         alert('❌ Erreur réseau');
         console.error(e);
       }
     }
+    $('save').addEventListener('click', saveCfg);
 
-    saveBtn.addEventListener('click', saveCfg);
+    // Copier le bloc d’intégration
+    $('copy').addEventListener('click', async ()=>{
+      const text = document.getElementById('embedCode').innerText;
+      try { await navigator.clipboard.writeText(text); alert('Bloc copié ✅'); }
+      catch(e){ alert('Copie non autorisée : sélectionnez et copiez manuellement.'); }
+    });
+
+    // Télécharger le bloc d’intégration en fichier .html
+    $('download').addEventListener('click', ()=>{
+      const content = document.getElementById('embedCode').innerText;
+      const blob = new Blob([content], {type:'text/html'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'betty-integration.html';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
   </script>
 </body>
 </html>
