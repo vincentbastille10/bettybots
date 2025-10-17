@@ -4,7 +4,7 @@ import time
 import sqlite3
 import requests
 import stripe
-from flask import Flask, render_template, request, redirect, jsonify, abort
+from flask import Flask, render_template, request, redirect, jsonify
 from dotenv import load_dotenv
 
 # -----------------------------------------
@@ -16,7 +16,7 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 # -----------------------------------------
 # Config applicative
 # -----------------------------------------
-# BASE_URL prioritaire, sinon PUBLIC_BASE_URL (comme ta capture Render)
+# BASE_URL prioritaire, sinon PUBLIC_BASE_URL (comme sur Render)
 BASE_URL = os.environ.get("BASE_URL") or os.environ.get("PUBLIC_BASE_URL", "http://localhost:5000")
 
 # Stripe
@@ -24,12 +24,19 @@ stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "")              # ex: price_xxx
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")  # ex: whsec_xxx
 
-# PayPal (Live par défaut; pour sandbox, remplace api-m.paypal.com par api-m.sandbox.paypal.com + clés sandbox)
+# PayPal
+# >>> IMPORTANT : mets PAYPAL_ENV=sandbox en ce moment (et live plus tard)
+PAYPAL_ENV = (os.environ.get("PAYPAL_ENV", "sandbox") or "sandbox").lower()  # "sandbox" ou "live"
 PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "")
 PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_PLAN_ID = os.environ.get("PAYPAL_PLAN_ID", "")                # ex: P-XXXX
-PAYPAL_OAUTH = "https://api-m.paypal.com/v1/oauth2/token"
-PAYPAL_SUBS = "https://api-m.paypal.com/v1/billing/subscriptions/"
+
+if PAYPAL_ENV == "sandbox":
+    PAYPAL_OAUTH = "https://api-m.sandbox.paypal.com/v1/oauth2/token"
+    PAYPAL_SUBS  = "https://api-m.sandbox.paypal.com/v1/billing/subscriptions/"
+else:
+    PAYPAL_OAUTH = "https://api-m.paypal.com/v1/oauth2/token"
+    PAYPAL_SUBS  = "https://api-m.paypal.com/v1/billing/subscriptions/"
 
 # SQLite (persistance simple)
 DB_PATH = os.environ.get("DB_PATH", "payments.sqlite3")
@@ -89,7 +96,6 @@ def home():
 
 @app.route("/dashboard")
 def dashboard():
-    # Page de configuration (métier / couleur / avatar prédéfini)
     return render_template("dashboard.html")
 
 @app.route("/pay")
@@ -102,12 +108,17 @@ def pay():
     role   = request.args.get("role", "psychologue")
     color  = request.args.get("color", "#2563eb")
     avatar = request.args.get("avatar", "")
+
     return render_template(
         "pay.html",
-        tenant=tenant, role=role, color=color, avatar=avatar,
+        tenant=tenant,
+        role=role,
+        color=color,
+        avatar=avatar,
         stripe_price_id=STRIPE_PRICE_ID,
         paypal_plan_id=PAYPAL_PLAN_ID,
-        paypal_client_id=PAYPAL_CLIENT_ID
+        paypal_client_id=PAYPAL_CLIENT_ID,
+        paypal_env=PAYPAL_ENV,   # <-- pour charger la bonne SDK (sandbox/live)
     )
 
 @app.route("/bot")
@@ -138,8 +149,7 @@ def bot_page():
 def stripe_checkout():
     """
     Crée une session Stripe Checkout (subscription) et renvoie l'URL.
-    success_url -> /bot (déverrouillage après webhook)
-    cancel_url  -> /pay
+    success_url -> /bot ; cancel_url -> /pay
     """
     if not stripe.api_key or not STRIPE_PRICE_ID:
         return jsonify({"error": "Stripe non configuré (clé ou price manquant)."}), 400
@@ -201,11 +211,10 @@ def stripe_webhook():
                 upsert_sub(tenant, provider="stripe", status="active", email=email, plan_id=STRIPE_PRICE_ID)
 
         elif etype == "customer.subscription.deleted":
-            # Si tu veux marquer "canceled", il faut stocker l'id d'abonnement Stripe pour le mapper à un tenant.
+            # Si besoin: rebasculer en canceled (si tu stockes l'ID d'abonnement Stripe)
             pass
 
     except Exception as e:
-        # On log sans casser le webhook
         print("Stripe webhook processing error:", e)
 
     return "ok", 200
