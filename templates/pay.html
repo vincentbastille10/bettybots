@@ -6,7 +6,7 @@
   <title>Betty — Paiement</title>
   <style>
     :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb}
-    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
     body{margin:0;background:var(--bg);color:var(--text)}
     .wrap{max-width:900px;margin:40px auto;padding:0 16px}
     h1{margin:0 0 12px;font-size:30px}
@@ -24,7 +24,6 @@
 <div class="wrap">
   <h1>Abonnement Betty Bot — Paiement</h1>
 
-  <!-- Récap config -->
   <div class="card">
     <div class="kv">
       <div>Tenant</div><div>{{ tenant }}</div>
@@ -36,140 +35,87 @@
       </div>
       <div>Avatar</div><div>{{ "fourni" if avatar else "—" }}</div>
     </div>
-    <p class="note">Après paiement, vous serez automatiquement redirigé·e vers la page d’intégration du bot.</p>
+    <p class="note">Après paiement, vous serez automatiquement redirigé·e vers la page d’intégration du bot, et vous recevrez le code par e-mail.</p>
   </div>
 
   <div class="grid2">
-    <!-- Stripe -->
     <div class="card">
       <h3>Payer par carte (Stripe)</h3>
-      <p class="note">Checkout sécurisé (3D Secure / PSD2). Vos données bancaires ne transitent jamais par notre serveur.</p>
+      <p class="note">Checkout sécurisé (3D Secure / PSD2).</p>
       <button id="btnStripe" class="btn">Payer avec Stripe</button>
       <p id="stripeErr" class="note" style="display:none;color:#fca5a5;"></p>
     </div>
 
-    <!-- PayPal -->
     <div class="card">
       <h3>Payer avec PayPal</h3>
-      <p class="note">Abonnement récurrent via PayPal. Vous pouvez annuler à tout moment depuis votre compte PayPal.</p>
       <div id="paypal-buttons"></div>
       <p id="ppErr" class="note" style="display:none;color:#fca5a5;"></p>
     </div>
   </div>
 
-  <div class="card">
-    <h3>Besoin d’aide ?</h3>
-    <p class="note">Si un paiement échoue, réessayez dans quelques minutes ou contactez-nous.</p>
+  <div class="btns">
+    <button class="btn" onclick="window.location='/preview?tenant={{ tenant }}'">Retour à la prévisualisation</button>
   </div>
 </div>
 
-<!-- Contexte injecté par Flask -->
 <script>
   const TENANT = {{ tenant|tojson }};
   const ROLE   = {{ role|tojson }};
   const COLOR  = {{ color|tojson }};
   const AVATAR = {{ avatar|tojson }};
-
-  const PAYPAL_ENV = {{ paypal_env|tojson }};           // "sandbox" ou "live"
+  const PAYPAL_ENV = {{ paypal_env|tojson }};
   const PAYPAL_CLIENT_ID = {{ paypal_client_id|tojson }};
-  const PAYPAL_PLAN_ID   = {{ paypal_plan_id|tojson }}; // "P-XXXX..."
+  const PAYPAL_PLAN_ID   = {{ paypal_plan_id|tojson }};
 </script>
 
-<!-- Stripe: création de session checkout côté serveur -->
 <script>
+  // Stripe
   const btnStripe = document.getElementById("btnStripe");
   const stripeErr = document.getElementById("stripeErr");
-
-  btnStripe.addEventListener("click", async () => {
-    stripeErr.style.display = "none";
-    btnStripe.disabled = true;
-
-    try {
+  btnStripe.addEventListener("click", async ()=>{
+    stripeErr.style.display="none"; btnStripe.disabled = true;
+    try{
       const r = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ tenant: TENANT, role: ROLE, color: COLOR, avatar: AVATAR })
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ tenant:TENANT })
       });
       const js = await r.json();
-      if (js.url) {
-        window.location = js.url;
-      } else {
-        stripeErr.textContent = "Impossible d’ouvrir le paiement Stripe. " + (js.error || "");
-        stripeErr.style.display = "block";
-        btnStripe.disabled = false;
-      }
-    } catch(e) {
-      stripeErr.textContent = "Erreur réseau Stripe. Réessayez.";
-      stripeErr.style.display = "block";
-      btnStripe.disabled = false;
-    }
+      if (js.url) window.location = js.url;
+      else { stripeErr.textContent = js.error || "Erreur Stripe."; stripeErr.style.display="block"; btnStripe.disabled=false; }
+    }catch(e){ stripeErr.textContent="Erreur réseau Stripe."; stripeErr.style.display="block"; btnStripe.disabled=false; }
   });
 </script>
 
-<!-- PayPal SDK (Sandbox/Live auto) -->
 <script>
+  // PayPal SDK dynamique (sandbox/live)
   (function loadPaypalSdk(){
     const base = PAYPAL_ENV === "sandbox" ? "https://www.sandbox.paypal.com" : "https://www.paypal.com";
     const src  = `${base}/sdk/js?client-id=${encodeURIComponent(PAYPAL_CLIENT_ID)}&vault=true&intent=subscription`;
     const s = document.createElement("script");
-    s.src = src;
-    s.onload = initPaypalButtons;
-    s.onerror = () => {
-      const el = document.getElementById("ppErr");
-      el.textContent = "Impossible de charger la SDK PayPal.";
-      el.style.display = "block";
-    };
+    s.src = src; s.onload = initPaypal; s.onerror = ()=>{ const el=document.getElementById("ppErr"); el.textContent="Impossible de charger PayPal."; el.style.display="block"; };
     document.body.appendChild(s);
   })();
 
-  function initPaypalButtons(){
-    if (!window.paypal) {
-      const el = document.getElementById("ppErr");
-      el.textContent = "PayPal SDK introuvable.";
-      el.style.display = "block";
-      return;
-    }
+  function initPaypal(){
+    if (!window.paypal) { const el=document.getElementById("ppErr"); el.textContent="PayPal SDK introuvable."; el.style.display="block"; return; }
     paypal.Buttons({
       style: { layout: "vertical", color: "gold", shape: "pill", label: "subscribe" },
-
       createSubscription: function(data, actions) {
-        if (!PAYPAL_PLAN_ID) {
-          const el = document.getElementById("ppErr");
-          el.textContent = "Plan PayPal manquant (PAYPAL_PLAN_ID).";
-          el.style.display = "block";
-          return;
-        }
+        if (!PAYPAL_PLAN_ID) { const el=document.getElementById("ppErr"); el.textContent="Plan PayPal manquant."; el.style.display="block"; return; }
         return actions.subscription.create({ plan_id: PAYPAL_PLAN_ID });
       },
-
       onApprove: async function(data) {
-        try {
+        try{
           const r = await fetch("/api/paypal/verify", {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
+            method:"POST", headers:{"Content-Type":"application/json"},
             body: JSON.stringify({ tenant: TENANT, subscriptionID: data.subscriptionID })
           });
           const js = await r.json();
-          if (js.ok) {
-            const qs = new URLSearchParams({ tenant:TENANT, role:ROLE, color:COLOR, avatar:AVATAR }).toString();
-            window.location = "/bot?" + qs;
-          } else {
-            const el = document.getElementById("ppErr");
-            el.textContent = "Paiement PayPal non validé : " + (js.reason || "inconnu");
-            el.style.display = "block";
-          }
-        } catch (e) {
-          const el = document.getElementById("ppErr");
-          el.textContent = "Erreur de vérification PayPal. Réessayez.";
-          el.style.display = "block";
-        }
+          if (js.ok) window.location = "/bot?tenant="+encodeURIComponent(TENANT)+"&paid=1";
+          else { const el=document.getElementById("ppErr"); el.textContent="Paiement PayPal non validé : "+(js.reason||"inconnu"); el.style.display="block"; }
+        }catch(e){ const el=document.getElementById("ppErr"); el.textContent="Erreur de vérification PayPal."; el.style.display="block"; }
       },
-
-      onError: function(err){
-        const el = document.getElementById("ppErr");
-        el.textContent = "Erreur PayPal : " + (err && err.message ? err.message : "inconnue");
-        el.style.display = "block";
-      }
+      onError: function(err){ const el=document.getElementById("ppErr"); el.textContent="Erreur PayPal."; el.style.display="block"; }
     }).render("#paypal-buttons");
   }
 </script>
