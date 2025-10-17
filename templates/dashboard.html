@@ -6,67 +6,53 @@
   <title>Betty — Configuration</title>
   <style>
     :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb;--pill:#1f2937}
-    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
     body{margin:0;background:var(--bg);color:var(--text)}
     .wrap{max-width:980px;margin:40px auto;padding:0 16px}
-    h1{font-size:34px;margin:0 0 14px}
+    h1{font-size:28px;margin:0 0 12px}
     .muted{color:var(--muted)}
     .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
-    .steps{line-height:1.6;margin-bottom:18px}
-    .pill{display:inline-block;padding:6px 10px;background:var(--pill);border-radius:999px;font-size:12px;color:#cbd5e1}
     .row{display:grid;grid-template-columns:1fr 2fr;gap:16px;align-items:center;padding:12px 0;border-bottom:1px dashed #1f2937}
     .row:last-child{border-bottom:0}
-    select,input[type="text"]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:var(--text)}
+    select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:var(--text)}
     .swatches{display:flex;gap:10px;flex-wrap:wrap}
     .swatch{width:36px;height:36px;border-radius:999px;border:2px solid #0b1220;cursor:pointer;outline:2px solid transparent;position:relative}
     .swatch.active{outline:2px solid #fff}
-    .swatch.active::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;font-size:18px;color:#fff}
-    .colorLabel{margin-top:6px;font-size:12px;color:#94a3b8}
-    .avatars{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-    .avatar{border:2px solid #1f2937;border-radius:12px;overflow:hidden;background:#0b1220;cursor:pointer;position:relative}
-    .avatar img{width:100%;height:180px;object-fit:cover;display:block}
-    .avatar .cap{padding:8px 10px;font-size:13px;color:#cbd5e1;border-top:1px solid #1f2937;text-align:center}
+    .avatars{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .avatar{border:2px solid #1f2937;border-radius:12px;overflow:hidden;background:#0b1220;cursor:pointer}
+    .avatar img{width:100%;height:180px;object-fit:cover}
     .avatar.active{border-color:#fff;box-shadow:0 0 0 2px #fff inset}
     .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
     button{background:var(--btn);border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
     button.secondary{background:#334155}
-    button[disabled]{opacity:.5;cursor:not-allowed}
-    .hint{font-size:12px;color:#94a3b8}
+    .pill{display:inline-block;padding:6px 10px;background:var(--pill);border-radius:999px;font-size:12px;color:#cbd5e1}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Bienvenue, vincent</h1>
+  <h1>Configuration de votre bot</h1>
+  <div class="muted">Bienvenue {{ name }} ({{ email }}) — tenant: <span class="pill">{{ tenant }}</span></div>
 
-  <div class="steps card">
-    <div class="muted">Étapes simples :</div>
-    <div>1 — Choisissez le <strong>métier</strong>, la <strong>couleur</strong> et l’<strong>avatar</strong> de votre Bot Conversationnel.</div>
-    <div>2 — Cliquez sur <strong>« Enregistrer »</strong>.</div>
-    <div>3 — Cliquez sur <strong>« Passer à la page du bot »</strong>.</div>
-  </div>
+  <form id="cfgForm" method="post" action="/save">
+    <input type="hidden" name="tenant" value="{{ tenant }}"/>
 
-  <div class="card" id="setupCard">
-    <h2 style="margin:0 0 8px;">Configuration de votre bot</h2>
-    <span class="pill" id="tenantPill">tenant: vincentbastile100–gmail–com</span>
-
-    <div class="row">
-      <label for="role">Métier</label>
-      <div>
-        <select id="role">
-          <option value="psychologue">Psychologue</option>
-          <option value="agent-immobilier">Agent Immobilier</option>
-          <option value="avocat">Avocat / Avocate</option>
-          <option value="medecin">Médecin</option>
-          <option value="comptable">Comptable</option>
-          <option value="danse">Danse (assistant·e)</option>
-        </select>
-        <p class="hint">La liste pourra s’enrichir sans changer ce tableau de bord.</p>
+    <div class="card">
+      <div class="row">
+        <label>Métier</label>
+        <div>
+          <select name="role" id="role">
+            <option value="psychologue">Psychologue</option>
+            <option value="agent-immobilier">Agent Immobilier</option>
+            <option value="avocat">Avocat / Avocate</option>
+            <option value="medecin">Médecin</option>
+            <option value="comptable">Comptable</option>
+            <option value="danse">Danse (assistant·e)</option>
+          </select>
+        </div>
       </div>
-    </div>
 
-    <div class="row">
-      <label>Couleur (thème)</label>
-      <div>
+      <div class="row">
+        <label>Couleur</label>
         <div class="swatches" id="swatches">
           <div class="swatch" data-color="#2563eb" style="background:#2563eb"></div>
           <div class="swatch" data-color="#16a34a" style="background:#16a34a"></div>
@@ -77,119 +63,54 @@
           <div class="swatch" data-color="#111827" style="background:#111827"></div>
           <div class="swatch" data-color="#e5e7eb" style="background:#e5e7eb"></div>
         </div>
-        <div class="colorLabel" id="colorLabel">Couleur sélectionnée : —</div>
+        <input type="hidden" name="color" id="color" value="#2563eb"/>
       </div>
-    </div>
 
-    <div class="row">
-      <label>Avatar</label>
-      <div class="avatars" id="avatars">
-        <div class="avatar" data-role="medecin" data-url="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg">
-          <img src="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg" alt="Betty Médecine">
-          <div class="cap">Betty Médecine</div>
-        </div>
-        <div class="avatar" data-role="agent-immobilier" data-url="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg">
-          <img src="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg" alt="Betty Agent Immobilier">
-          <div class="cap">Betty Agent Immobilier</div>
-        </div>
-        <div class="avatar" data-role="avocat" data-url="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg">
-          <img src="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg" alt="Betty Avocate">
-          <div class="cap">Betty Avocate</div>
+      <div class="row">
+        <label>Avatar</label>
+        <div class="avatars" id="avatars">
+          <label class="avatar">
+            <input type="radio" name="avatar" value="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg" style="display:none">
+            <img src="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg" alt="Betty Médecine">
+          </label>
+          <label class="avatar">
+            <input type="radio" name="avatar" value="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg" style="display:none">
+            <img src="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg" alt="Betty Agent Immobilier">
+          </label>
+          <label class="avatar">
+            <input type="radio" name="avatar" value="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg" style="display:none">
+            <img src="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg" alt="Betty Avocate">
+          </label>
         </div>
       </div>
-      <p class="hint" style="grid-column:2">Seuls les avatars fournis sont disponibles (pas d’upload utilisateur).</p>
     </div>
 
     <div class="btns">
-      <button id="saveBtn">Enregistrer</button>
-      <button class="secondary" id="resetBtn">Réinitialiser</button>
-      <button class="secondary" id="goBtn" disabled>Passer à la page du bot</button>
+      <button type="submit">Enregistrer et prévisualiser</button>
+      <button type="button" class="secondary" onclick="window.location='/'">Retour accueil</button>
     </div>
-    <p class="hint" id="saveStatus"></p>
-  </div>
+  </form>
 </div>
 
 <script>
-  // --------- CONFIG ----------
-  const TENANT = "vincentbastile100–gmail–com";
-  const BOT_PAGE_URL = "/pay"; // redirige maintenant vers la page de paiement
-  const STORAGE_KEY = "bettyConfig:" + TENANT;
-  const $ = sel => document.querySelector(sel);
-
-  let state = { role:"psychologue", color:null, avatarUrl:null };
-
-  function setActiveSwatch(hex){
-    document.querySelectorAll('.swatch').forEach(s=>{
-      s.classList.toggle('active', s.dataset.color===hex);
+  // Couleur
+  const sw = document.querySelectorAll('.swatch');
+  const colorHidden = document.getElementById('color');
+  sw.forEach(el=>{
+    el.addEventListener('click', ()=>{
+      sw.forEach(s=>s.classList.remove('active'));
+      el.classList.add('active');
+      colorHidden.value = el.dataset.color;
     });
-    $('#colorLabel').textContent = "Couleur sélectionnée : " + (hex || "—");
-  }
-  function setActiveAvatar(url){
-    document.querySelectorAll('.avatar').forEach(a=>{
-      a.classList.toggle('active', a.dataset.url===url);
+  });
+  // Avatar
+  const labels = document.querySelectorAll('.avatar');
+  labels.forEach(l=>{
+    l.addEventListener('click', ()=>{
+      labels.forEach(x=>x.classList.remove('active'));
+      l.classList.add('active');
     });
-  }
-  function autoPickAvatarForRole(role){
-    const match = [...document.querySelectorAll('.avatar')].find(a => a.dataset.role===role);
-    if (match){ state.avatarUrl = match.dataset.url; setActiveAvatar(state.avatarUrl); }
-  }
-  function saveState(showMsg=true){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    if(showMsg) $('#saveStatus').textContent = "✅ Paramètres enregistrés.";
-    $('#goBtn').disabled = false;
-  }
-  function loadState(){
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw) return;
-    try { state = JSON.parse(raw) || state; } catch(_) {}
-  }
-
-  (function init(){
-    $('#tenantPill').textContent = "tenant: " + TENANT;
-
-    document.querySelectorAll('.swatch').forEach(s=>{
-      s.addEventListener('click', ()=>{
-        state.color = s.dataset.color;
-        setActiveSwatch(state.color);
-      });
-    });
-    document.querySelectorAll('.avatar').forEach(a=>{
-      a.addEventListener('click', ()=>{
-        state.avatarUrl = a.dataset.url;
-        setActiveAvatar(state.avatarUrl);
-      });
-    });
-    $('#role').addEventListener('change', (e)=>{
-      state.role = e.target.value;
-      autoPickAvatarForRole(state.role);
-    });
-
-    $('#saveBtn').addEventListener('click', ()=> saveState(true));
-    $('#resetBtn').addEventListener('click', ()=>{
-      state = { role:"psychologue", color:null, avatarUrl:null };
-      localStorage.removeItem(STORAGE_KEY);
-      $('#role').value = state.role;
-      setActiveSwatch(null);
-      setActiveAvatar(null);
-      $('#saveStatus').textContent = "Réinitialisé.";
-      $('#goBtn').disabled = true;
-    });
-    $('#goBtn').addEventListener('click', ()=>{
-      const qs = new URLSearchParams({
-        tenant: TENANT.replace(/[–]/g,'-'),
-        role: state.role || "",
-        color: state.color || "",
-        avatar: state.avatarUrl || ""
-      }).toString();
-      window.location.href = BOT_PAGE_URL + (BOT_PAGE_URL.includes('?') ? '&' : '?') + qs;
-    });
-
-    loadState();
-    $('#role').value = state.role || 'psychologue';
-    if(state.color) setActiveSwatch(state.color);
-    if(state.avatarUrl) setActiveAvatar(state.avatarUrl); else autoPickAvatarForRole(state.role);
-    if(localStorage.getItem(STORAGE_KEY)) $('#goBtn').disabled = false;
-  })();
+  });
 </script>
 </body>
 </html>
