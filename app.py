@@ -20,13 +20,13 @@ LEADS_DIR = BASE_DIR / "leads"
 LEADS_DIR.mkdir(exist_ok=True)
 
 # Variables d'environnement
-BRAND            = os.getenv("BRAND_NAME", "Betty Bots")
-PUBLIC_BASE_URL  = os.getenv("PUBLIC_BASE_URL", "http://localhost:5000")
-SUPPORT_EMAIL    = os.getenv("SUPPORT_EMAIL", "support@spectramedia.ai")
-OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY", "")
-LLM_MODEL        = os.getenv("LLM_MODEL", "gpt-4o-mini")
-SMTP_USER        = os.getenv("SMTP_USER", "vinylestorefrance@gmail.com")
-SMTP_PASS        = os.getenv("SMTP_PASS", "")
+BRAND           = os.getenv("BRAND_NAME", "Betty Bots")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:5000")
+SUPPORT_EMAIL   = os.getenv("SUPPORT_EMAIL", "support@spectramedia.ai")
+OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
+LLM_MODEL       = os.getenv("LLM_MODEL", "gpt-4o-mini")
+SMTP_USER       = os.getenv("SMTP_USER", "vinylestorefrance@gmail.com")
+SMTP_PASS       = os.getenv("SMTP_PASS", "")
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 logging.basicConfig(level=logging.INFO)
@@ -36,10 +36,12 @@ logging.basicConfig(level=logging.INFO)
 # ─────────────────────────────
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-def _now_iso():
+def _now_iso() -> str:
+    """Retourne l’heure UTC ISO 8601."""
     return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()
 
 def slugify(txt: str) -> str:
+    """Crée un slug à partir du texte (max 60 caractères)."""
     s = re.sub(r"[^a-zA-Z0-9]+", "-", (txt or "").strip().lower()).strip("-")
     return s[:60] or f"user-{int(time.time())}"
 
@@ -50,16 +52,19 @@ def lead_path(tenant_id: str) -> Path:
     safe = re.sub(r"[^a-z0-9\-]+", "-", tenant_id.lower())
     return LEADS_DIR / f"{safe}.jsonl"
 
-def append_jsonl(path: Path, row: dict):
+def append_jsonl(path: Path, row: dict) -> None:
+    """Ajoute une ligne JSON dans un fichier .jsonl."""
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 def read_prompts() -> dict:
+    """Lit prompts.json ou renvoie un dictionnaire de secours."""
     if PROMPTS_PATH.exists():
         try:
             return json.loads(PROMPTS_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
+    # Valeurs par défaut utilisées si le fichier est absent ou illisible
     return {
         "immobilier": "Tu es Betty Immo. Accueil pro, objectif : prise de contact / visite.",
         "danse": "Tu es Betty Danse. Accueil chaleureux, conversion essai / inscription.",
@@ -69,6 +74,7 @@ def read_prompts() -> dict:
     }
 
 def read_tenant(tenant_id: str) -> dict:
+    """Charge la configuration d’un tenant."""
     p = tenant_path(tenant_id)
     if p.exists():
         try:
@@ -78,6 +84,7 @@ def read_tenant(tenant_id: str) -> dict:
     return {}
 
 def save_tenant(cfg: dict) -> str:
+    """Enregistre (ou met à jour) un fichier tenant et renvoie l’ID."""
     tid = cfg.get("tenant_id") or f"{slugify(cfg.get('email','')) or 'client'}-{secrets.token_hex(3)}"
     p = tenant_path(tid)
     base = {}
@@ -96,17 +103,18 @@ def save_tenant(cfg: dict) -> str:
 # ─────────────────────────────
 @app.get("/")
 def landing():
+    """Page d’accueil (landing) avec liste des profils disponibles."""
     prompts = read_prompts()
-    return render_template("dashboard.html",
-                       brand=BRAND,
-                       cfg=cfg,
-                       prompts=prompts,
-                       PUBLIC_BASE_URL="https://bettybots-flote-abonement.onrender.com")
-
+    # On passe uniquement la marque et la liste des clés
+    return render_template(
+        "landing.html",
+        brand=BRAND,
+        prompts=list(prompts.keys())
+    )
 
 @app.post("/signup")
 def signup():
-    """Création d’un bot + enregistrement client"""
+    """Création d’un bot + enregistrement client après la landing."""
     email = (request.form.get("email") or "").strip().lower()
     full_name = (request.form.get("full_name") or "Client").strip()
     profile = (request.form.get("profile") or "immobilier").strip()
@@ -127,14 +135,23 @@ def signup():
 
 @app.get("/dashboard/<tenant_id>")
 def dashboard(tenant_id):
+    """Affiche le tableau de bord du tenant."""
     cfg = read_tenant(tenant_id)
     if not cfg:
         return ("Inconnu", 404)
     prompts = read_prompts()
-    return render_template("dashboard.html", brand=BRAND, cfg=cfg, prompts=prompts)
+    # On injecte PUBLIC_BASE_URL pour que le script d’intégration soit absolu
+    return render_template(
+        "dashboard.html",
+        brand=BRAND,
+        cfg=cfg,
+        prompts=prompts,
+        PUBLIC_BASE_URL=PUBLIC_BASE_URL.rstrip("/")
+    )
 
 @app.post("/api/tenant/<tenant_id>/update")
 def api_update_tenant(tenant_id):
+    """Met à jour les réglages du bot (profil, message d’accueil, etc.)."""
     cfg = read_tenant(tenant_id)
     if not cfg:
         return jsonify({"ok": False, "error": "unknown tenant"}), 404
@@ -148,6 +165,7 @@ def api_update_tenant(tenant_id):
 
 @app.get("/t/<tenant_id>")
 def chat_ui(tenant_id):
+    """Interface client du chat."""
     cfg = read_tenant(tenant_id)
     if not cfg:
         return ("Inconnu", 404)
@@ -160,6 +178,7 @@ def chat_ui(tenant_id):
 # ─────────────────────────────
 @app.post("/api/chat/<tenant_id>")
 def api_chat(tenant_id):
+    """Interagit avec l’API OpenAI pour répondre aux utilisateurs."""
     cfg = read_tenant(tenant_id)
     if not cfg:
         return jsonify({"error": "unknown tenant"}), 404
@@ -178,7 +197,10 @@ def api_chat(tenant_id):
 
     try:
         import requests
-        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
         body = {
             "model": LLM_MODEL,
             "messages": [
@@ -186,7 +208,8 @@ def api_chat(tenant_id):
                 {"role": "user", "content": user_msg}
             ]
         }
-        r = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=body, timeout=30)
+        r = requests.post("https://api.openai.com/v1/chat/completions",
+                          headers=headers, json=body, timeout=30)
         r.raise_for_status()
         data = r.json()
         reply = data["choices"][0]["message"]["content"].strip()
@@ -200,6 +223,7 @@ def api_chat(tenant_id):
 # ─────────────────────────────
 @app.post("/api/lead/<tenant_id>")
 def api_store_lead(tenant_id):
+    """Enregistre un prospect et envoie un mail au propriétaire."""
     payload = request.get_json(silent=True) or {}
     nom    = (payload.get("nom") or "").strip()
     email  = (payload.get("email") or "").strip().lower()
@@ -263,6 +287,7 @@ Spectra Media / {BRAND}
 
 @app.get("/leads/<tenant_id>")
 def api_list_leads(tenant_id):
+    """Retourne la liste des leads pour un tenant."""
     path = lead_path(tenant_id)
     out = []
     if path.exists():
