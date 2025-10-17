@@ -11,9 +11,6 @@ import stripe
 from flask import Flask, render_template, request, redirect, jsonify, url_for
 from dotenv import load_dotenv
 
-# -------------------------------------------------------------------
-# Initialisation
-# -------------------------------------------------------------------
 load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -23,9 +20,9 @@ app = Flask(
     template_folder=os.path.join(BASE_DIR, "templates"),
 )
 
-# -------------------------------------------------------------------
-# Config générique
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Config
+# -----------------------------------------------------------------------------
 BASE_URL = os.environ.get("BASE_URL") or os.environ.get("PUBLIC_BASE_URL", "http://localhost:5000")
 
 # Stripe
@@ -33,12 +30,11 @@ stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
-# PayPal (sandbox par défaut tant que tu testes)
-PAYPAL_ENV = (os.environ.get("PAYPAL_ENV", "sandbox") or "sandbox").lower()  # "sandbox" ou "live"
+# PayPal
+PAYPAL_ENV = (os.environ.get("PAYPAL_ENV", "sandbox") or "sandbox").lower()  # sandbox|live
 PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "")
 PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_PLAN_ID = os.environ.get("PAYPAL_PLAN_ID", "")
-
 if PAYPAL_ENV == "sandbox":
     PAYPAL_OAUTH = "https://api-m.sandbox.paypal.com/v1/oauth2/token"
     PAYPAL_SUBS  = "https://api-m.sandbox.paypal.com/v1/billing/subscriptions/"
@@ -51,15 +47,14 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
-SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", SMTP_USER or "support@example.com")
 BRAND_NAME = os.environ.get("BRAND_NAME", "Betty Bots")
 
 # SQLite
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "payments.sqlite3"))
 
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # DB helpers
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def _db_conn():
     c = sqlite3.connect(DB_PATH)
     c.execute("""
@@ -95,7 +90,8 @@ def upsert_user(tenant, name, email, role=None, color=None, avatar=None):
     if row:
         c.execute("""
             UPDATE users SET name=?, email=?, role=COALESCE(?, role),
-                             color=COALESCE(?, color), avatar=COALESCE(?, avatar), updated_at=?
+                             color=COALESCE(?, color), avatar=COALESCE(?, avatar),
+                             updated_at=?
             WHERE tenant=?
         """, (name, email, role, color, avatar, now, tenant))
     else:
@@ -112,7 +108,6 @@ def get_user(tenant):
     return row
 
 def upsert_sub(tenant: str, provider: str, status: str, email: str, plan_id: str):
-    tenant = (tenant or "").strip()
     if not tenant:
         return
     c = _db_conn()
@@ -125,8 +120,7 @@ def upsert_sub(tenant: str, provider: str, status: str, email: str, plan_id: str
           email=excluded.email,
           plan_id=excluded.plan_id
     """, (tenant, provider, status, email or "", plan_id or "", int(time.time())))
-    c.commit()
-    c.close()
+    c.commit(); c.close()
 
 def get_sub(tenant: str):
     c = _db_conn()
@@ -134,11 +128,10 @@ def get_sub(tenant: str):
     c.close()
     return row
 
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Utils
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def build_snippet(tenant, role, color, avatar):
-    # Pas de dépendance à url_for ici → robuste dans les webhooks
     embed_src = f"{BASE_URL.rstrip('/')}/static/embed.js"
     attrs = [
         f'src="{embed_src}"',
@@ -168,12 +161,12 @@ def send_email(to_email: str, subject: str, html_body: str):
 def qstr(d: dict) -> str:
     return "&".join([f"{k}={quote(str(v))}" for k, v in d.items()])
 
-# -------------------------------------------------------------------
-# Parcours
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Pages
+# -----------------------------------------------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def welcome():
-    # Formulaire nom/email
+    # Accueil : Nom + Email
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
         email = (request.form.get("email") or "").strip()
@@ -225,10 +218,7 @@ def pay():
     return render_template(
         "pay.html",
         tenant=tenant, role=role, color=color, avatar=avatar,
-        stripe_price_id=STRIPE_PRICE_ID,
-        paypal_plan_id=PAYPAL_PLAN_ID,
-        paypal_client_id=PAYPAL_CLIENT_ID,
-        paypal_env=PAYPAL_ENV
+        paypal_env=PAYPAL_ENV, paypal_client_id=PAYPAL_CLIENT_ID, paypal_plan_id=PAYPAL_PLAN_ID
     )
 
 @app.route("/bot")
@@ -242,16 +232,24 @@ def bot_page():
         return redirect(url_for("pay", tenant=tenant))
 
     u = get_user(tenant)
+    if not u:
+        return redirect(url_for("welcome"))
     _, name, email, role, color, avatar, _ = u
-    return render_template("bot.html", tenant=tenant, role=role, color=color, avatar=avatar)
 
-# -------------------------------------------------------------------
-# Stripe
-# -------------------------------------------------------------------
+    # Affiche "merci…" si ?paid=1
+    paid_flag = request.args.get("paid") == "1"
+
+    return render_template("bot.html",
+                           tenant=tenant, role=role, color=color, avatar=avatar, paid=paid_flag)
+
+# -----------------------------------------------------------------------------
+# Stripe API
+# -----------------------------------------------------------------------------
 @app.route("/api/stripe/checkout", methods=["POST"])
 def stripe_checkout():
     if not stripe.api_key or not STRIPE_PRICE_ID:
         return jsonify({"error": "Stripe non configuré (clé ou price manquant)."}), 400
+
     data = request.get_json(force=True, silent=True) or {}
     tenant = (data.get("tenant") or "").strip()
     if not tenant:
@@ -301,7 +299,7 @@ def stripe_webhook():
                 email_from_stripe = obj["customer_details"].get("email") or ""
             if tenant:
                 upsert_sub(tenant, provider="stripe", status="active", email=email_from_stripe, plan_id=STRIPE_PRICE_ID)
-                # email de confirmation avec snippet
+                # Email de confirmation avec snippet
                 u = get_user(tenant)
                 if u:
                     _, name, email, role, color, avatar, _ = u
@@ -309,9 +307,9 @@ def stripe_webhook():
                     snippet = build_snippet(tenant, role, color, avatar)
                     html = f"""
                     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial">
-                      <h2>🎉 Paiement validé — {BRAND_NAME}</h2>
+                      <h2>🎉 Merci de vous être abonné — {BRAND_NAME}</h2>
                       <p>Bonjour {name},</p>
-                      <p>Merci pour votre abonnement. Voici le bloc à intégrer sur votre site :</p>
+                      <p>Votre abonnement est actif. Voici votre code d’intégration :</p>
                       <pre style="background:#0b1220;color:#e5e7eb;padding:12px;border-radius:8px;white-space:pre-wrap">{snippet}</pre>
                       <p>Collez-le <b>avant &lt;/body&gt;</b> dans votre site (Wix, WordPress, Webflow…).</p>
                       <p>Retrouvez-le aussi ici : <a href="{BASE_URL}/bot?tenant={tenant}&paid=1">{BASE_URL}/bot?tenant={tenant}&paid=1</a></p>
@@ -322,7 +320,7 @@ def stripe_webhook():
                     """
                     if to:
                         try:
-                            send_email(to, f"{BRAND_NAME} — Paiement validé", html)
+                            send_email(to, f"{BRAND_NAME} — Abonnement confirmé", html)
                         except Exception as e:
                             print("Email send error:", e)
 
@@ -331,9 +329,9 @@ def stripe_webhook():
 
     return "ok", 200
 
-# -------------------------------------------------------------------
-# PayPal
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# PayPal API
+# -----------------------------------------------------------------------------
 def paypal_token() -> str:
     if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
         raise RuntimeError("PayPal non configuré (CLIENT_ID/SECRET manquants).")
@@ -362,6 +360,7 @@ def paypal_verify():
 
         if status == "ACTIVE":
             upsert_sub(tenant, provider="paypal", status="active", email=email_pp, plan_id=PAYPAL_PLAN_ID)
+            # Email de confirmation
             u = get_user(tenant)
             if u:
                 _, name, email, role, color, avatar, _ = u
@@ -369,9 +368,9 @@ def paypal_verify():
                 snippet = build_snippet(tenant, role, color, avatar)
                 html = f"""
                 <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial">
-                  <h2>🎉 Paiement validé — {BRAND_NAME}</h2>
+                  <h2>🎉 Merci de vous être abonné — {BRAND_NAME}</h2>
                   <p>Bonjour {name},</p>
-                  <p>Merci pour votre abonnement. Voici le bloc à intégrer sur votre site :</p>
+                  <p>Votre abonnement est actif. Voici votre code d’intégration :</p>
                   <pre style="background:#0b1220;color:#e5e7eb;padding:12px;border-radius:8px;white-space:pre-wrap">{snippet}</pre>
                   <p>Collez-le <b>avant &lt;/body&gt;</b> dans votre site (Wix, WordPress, Webflow…).</p>
                   <p>Retrouvez-le aussi ici : <a href="{BASE_URL}/bot?tenant={tenant}&paid=1">{BASE_URL}/bot?tenant={tenant}&paid=1</a></p>
@@ -382,10 +381,9 @@ def paypal_verify():
                 """
                 if to:
                     try:
-                        send_email(to, f"{BRAND_NAME} — Paiement validé", html)
+                        send_email(to, f"{BRAND_NAME} — Abonnement confirmé", html)
                     except Exception as e:
                         print("Email send error:", e)
-
             return jsonify({"ok": True})
 
         return jsonify({"ok": False, "reason": status or "unknown"}), 400
@@ -393,16 +391,16 @@ def paypal_verify():
     except Exception as e:
         return jsonify({"ok": False, "reason": str(e)}), 400
 
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Health
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 @app.route("/healthz")
 def healthz():
     return jsonify({"ok": True, "ts": int(time.time())})
 
-# -------------------------------------------------------------------
-# Main
-# -------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Entrée
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=bool(os.environ.get("DEBUG")))
