@@ -5,78 +5,152 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Betty — Paiement</title>
   <style>
-    body{margin:0;background:#0f172a;color:#e5e7eb;font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial}
-    .wrap{max-width:820px;margin:40px auto;padding:0 16px}
-    .card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
-    button{background:#2563eb;border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
-    .kv{display:grid;grid-template-columns:160px 1fr;gap:8px}
+    :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb}
+    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    body{margin:0;background:var(--bg);color:var(--text)}
+    .wrap{max-width:900px;margin:40px auto;padding:0 16px}
+    h1{margin:0 0 12px;font-size:30px}
+    h3{margin:0 0 10px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
+    .kv{display:grid;grid-template-columns:180px 1fr;gap:8px}
     .kv div{padding:6px 0;border-bottom:1px dashed #1f2937}
+    .note{color:var(--muted);font-size:13px;margin-top:8px}
+    .btn{background:var(--btn);border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media (max-width:780px){.grid2{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Abonnement Betty Bot</h1>
+  <h1>Abonnement Betty Bot — Paiement</h1>
+
+  <!-- Récap config -->
   <div class="card">
     <div class="kv">
       <div>Tenant</div><div>{{ tenant }}</div>
       <div>Métier</div><div>{{ role }}</div>
-      <div>Couleur</div><div>{{ color }}</div>
+      <div>Couleur</div>
+      <div>
+        <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:{{ color }};vertical-align:-2px;margin-right:6px;"></span>
+        {{ color }}
+      </div>
       <div>Avatar</div><div>{{ "fourni" if avatar else "—" }}</div>
+    </div>
+    <p class="note">Après paiement, vous serez automatiquement redirigé·e vers la page d’intégration du bot.</p>
+  </div>
+
+  <div class="grid2">
+    <!-- Stripe -->
+    <div class="card">
+      <h3>Payer par carte (Stripe)</h3>
+      <p class="note">Checkout sécurisé (3D Secure / PSD2). Vos données bancaires ne transitent jamais par notre serveur.</p>
+      <button id="btnStripe" class="btn">Payer avec Stripe</button>
+      <p id="stripeErr" class="note" style="display:none;color:#fca5a5;"></p>
+    </div>
+
+    <!-- PayPal -->
+    <div class="card">
+      <h3>Payer avec PayPal</h3>
+      <p class="note">Abonnement récurrent via PayPal. Vous pouvez annuler à tout moment depuis votre compte PayPal.</p>
+      <div id="paypal-buttons"></div>
+      <p id="ppErr" class="note" style="display:none;color:#fca5a5;"></p>
     </div>
   </div>
 
   <div class="card">
-    <h3>Payer par carte (Stripe)</h3>
-    <p>Checkout sécurisé, 3D Secure/PSD2 activé.</p>
-    <button id="btnStripe">Payer avec Stripe</button>
-  </div>
-
-  <div class="card">
-    <h3>Payer avec PayPal</h3>
-    <div id="paypal-buttons"></div>
+    <h3>Besoin d’aide ?</h3>
+    <p class="note">Si un paiement échoue, réessayez dans quelques minutes ou contactez-nous.</p>
   </div>
 </div>
 
+<!-- Contexte injecté par Flask -->
 <script>
   const TENANT = {{ tenant|tojson }};
   const ROLE   = {{ role|tojson }};
   const COLOR  = {{ color|tojson }};
   const AVATAR = {{ avatar|tojson }};
+</script>
 
-  document.getElementById("btnStripe").addEventListener("click", async ()=>{
-    const r = await fetch("/api/stripe/checkout", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ tenant:TENANT, role:ROLE, color:COLOR, avatar:AVATAR })
-    });
-    const js = await r.json();
-    if (js.url) window.location = js.url;
+<!-- Stripe: actionne la création de session checkout côté serveur -->
+<script>
+  const btnStripe = document.getElementById("btnStripe");
+  const stripeErr = document.getElementById("stripeErr");
+
+  btnStripe.addEventListener("click", async () => {
+    stripeErr.style.display = "none";
+    btnStripe.disabled = true;
+
+    try {
+      const r = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ tenant: TENANT, role: ROLE, color: COLOR, avatar: AVATAR })
+      });
+      const js = await r.json();
+      if (js.url) {
+        window.location = js.url;
+      } else {
+        stripeErr.textContent = "Impossible d’ouvrir le paiement Stripe. " + (js.error || "");
+        stripeErr.style.display = "block";
+        btnStripe.disabled = false;
+      }
+    } catch(e) {
+      stripeErr.textContent = "Erreur réseau Stripe. Réessayez.";
+      stripeErr.style.display = "block";
+      btnStripe.disabled = false;
+    }
   });
 </script>
 
-<!-- PayPal SDK (Subscriptions) -->
+<!-- PayPal SDK (utilise ton client id et crée un abonnement sur le plan fourni) -->
 <script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&vault=true&intent=subscription"></script>
 <script>
+  const PAYPAL_PLAN_ID = {{ paypal_plan_id|tojson }}; // ex: "P-XXXX..."
+
   paypal.Buttons({
-    style: { layout: 'vertical', color: 'gold', shape: 'pill', label: 'subscribe' },
-    createSubscription: function (data, actions) {
-      return actions.subscription.create({ plan_id: "{{ paypal_plan_id }}" });
-    },
-    onApprove: async function (data, actions) {
-      // data.subscriptionID
-      const r = await fetch("/api/paypal/verify", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ tenant: TENANT, subscriptionID: data.subscriptionID })
-      });
-      const js = await r.json();
-      if (js.ok) {
-        const qs = new URLSearchParams({ tenant:TENANT, role:ROLE, color:COLOR, avatar:AVATAR }).toString();
-        window.location = "/bot?" + qs;
-      } else {
-        alert("Paiement PayPal non validé: " + (js.reason || "inconnu"));
+    style: { layout: "vertical", color: "gold", shape: "pill", label: "subscribe" },
+
+    createSubscription: function(data, actions) {
+      if (!PAYPAL_PLAN_ID) {
+        const el = document.getElementById("ppErr");
+        el.textContent = "Plan PayPal manquant. Contactez le support.";
+        el.style.display = "block";
+        return;
       }
+      return actions.subscription.create({ plan_id: PAYPAL_PLAN_ID });
+    },
+
+    onApprove: async function(data, actions) {
+      // Vérifie côté serveur que l’abonnement est bien ACTIVE
+      try {
+        const r = await fetch("/api/paypal/verify", {
+          method: "POST",
+          headers: { "Content-Type":"application/json" },
+          body: JSON.stringify({ tenant: TENANT, subscriptionID: data.subscriptionID })
+        });
+        const js = await r.json();
+        if (js.ok) {
+          const qs = new URLSearchParams({ tenant:TENANT, role:ROLE, color:COLOR, avatar:AVATAR }).toString();
+          window.location = "/bot?" + qs;
+        } else {
+          const el = document.getElementById("ppErr");
+          el.textContent = "Paiement PayPal non validé : " + (js.reason || "inconnu");
+          el.style.display = "block";
+        }
+      } catch (e) {
+        const el = document.getElementById("ppErr");
+        el.textContent = "Erreur de vérification PayPal. Réessayez.";
+        el.style.display = "block";
+      }
+    },
+
+    onError: function(err) {
+      const el = document.getElementById("ppErr");
+      el.textContent = "Erreur PayPal : " + (err && err.message ? err.message : "inconnue");
+      el.style.display = "block";
     }
-  }).render('#paypal-buttons');
+
+  }).render("#paypal-buttons");
 </script>
 </body>
 </html>
