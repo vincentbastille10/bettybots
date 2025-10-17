@@ -69,9 +69,13 @@
   const ROLE   = {{ role|tojson }};
   const COLOR  = {{ color|tojson }};
   const AVATAR = {{ avatar|tojson }};
+
+  const PAYPAL_ENV = {{ paypal_env|tojson }};           // "sandbox" ou "live"
+  const PAYPAL_CLIENT_ID = {{ paypal_client_id|tojson }};
+  const PAYPAL_PLAN_ID   = {{ paypal_plan_id|tojson }}; // "P-XXXX..."
 </script>
 
-<!-- Stripe: actionne la création de session checkout côté serveur -->
+<!-- Stripe: création de session checkout côté serveur -->
 <script>
   const btnStripe = document.getElementById("btnStripe");
   const stripeErr = document.getElementById("stripeErr");
@@ -102,55 +106,72 @@
   });
 </script>
 
-<!-- PayPal SDK (utilise ton client id et crée un abonnement sur le plan fourni) -->
-<script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&vault=true&intent=subscription"></script>
+<!-- PayPal SDK (Sandbox/Live auto) -->
 <script>
-  const PAYPAL_PLAN_ID = {{ paypal_plan_id|tojson }}; // ex: "P-XXXX..."
+  (function loadPaypalSdk(){
+    const base = PAYPAL_ENV === "sandbox" ? "https://www.sandbox.paypal.com" : "https://www.paypal.com";
+    const src  = `${base}/sdk/js?client-id=${encodeURIComponent(PAYPAL_CLIENT_ID)}&vault=true&intent=subscription`;
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = initPaypalButtons;
+    s.onerror = () => {
+      const el = document.getElementById("ppErr");
+      el.textContent = "Impossible de charger la SDK PayPal.";
+      el.style.display = "block";
+    };
+    document.body.appendChild(s);
+  })();
 
-  paypal.Buttons({
-    style: { layout: "vertical", color: "gold", shape: "pill", label: "subscribe" },
+  function initPaypalButtons(){
+    if (!window.paypal) {
+      const el = document.getElementById("ppErr");
+      el.textContent = "PayPal SDK introuvable.";
+      el.style.display = "block";
+      return;
+    }
+    paypal.Buttons({
+      style: { layout: "vertical", color: "gold", shape: "pill", label: "subscribe" },
 
-    createSubscription: function(data, actions) {
-      if (!PAYPAL_PLAN_ID) {
-        const el = document.getElementById("ppErr");
-        el.textContent = "Plan PayPal manquant. Contactez le support.";
-        el.style.display = "block";
-        return;
-      }
-      return actions.subscription.create({ plan_id: PAYPAL_PLAN_ID });
-    },
-
-    onApprove: async function(data, actions) {
-      // Vérifie côté serveur que l’abonnement est bien ACTIVE
-      try {
-        const r = await fetch("/api/paypal/verify", {
-          method: "POST",
-          headers: { "Content-Type":"application/json" },
-          body: JSON.stringify({ tenant: TENANT, subscriptionID: data.subscriptionID })
-        });
-        const js = await r.json();
-        if (js.ok) {
-          const qs = new URLSearchParams({ tenant:TENANT, role:ROLE, color:COLOR, avatar:AVATAR }).toString();
-          window.location = "/bot?" + qs;
-        } else {
+      createSubscription: function(data, actions) {
+        if (!PAYPAL_PLAN_ID) {
           const el = document.getElementById("ppErr");
-          el.textContent = "Paiement PayPal non validé : " + (js.reason || "inconnu");
+          el.textContent = "Plan PayPal manquant (PAYPAL_PLAN_ID).";
+          el.style.display = "block";
+          return;
+        }
+        return actions.subscription.create({ plan_id: PAYPAL_PLAN_ID });
+      },
+
+      onApprove: async function(data) {
+        try {
+          const r = await fetch("/api/paypal/verify", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ tenant: TENANT, subscriptionID: data.subscriptionID })
+          });
+          const js = await r.json();
+          if (js.ok) {
+            const qs = new URLSearchParams({ tenant:TENANT, role:ROLE, color:COLOR, avatar:AVATAR }).toString();
+            window.location = "/bot?" + qs;
+          } else {
+            const el = document.getElementById("ppErr");
+            el.textContent = "Paiement PayPal non validé : " + (js.reason || "inconnu");
+            el.style.display = "block";
+          }
+        } catch (e) {
+          const el = document.getElementById("ppErr");
+          el.textContent = "Erreur de vérification PayPal. Réessayez.";
           el.style.display = "block";
         }
-      } catch (e) {
+      },
+
+      onError: function(err){
         const el = document.getElementById("ppErr");
-        el.textContent = "Erreur de vérification PayPal. Réessayez.";
+        el.textContent = "Erreur PayPal : " + (err && err.message ? err.message : "inconnue");
         el.style.display = "block";
       }
-    },
-
-    onError: function(err) {
-      const el = document.getElementById("ppErr");
-      el.textContent = "Erreur PayPal : " + (err && err.message ? err.message : "inconnue");
-      el.style.display = "block";
-    }
-
-  }).render("#paypal-buttons");
+    }).render("#paypal-buttons");
+  }
 </script>
 </body>
 </html>
