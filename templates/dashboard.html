@@ -1,67 +1,73 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Betty — Configuration</title>
   <style>
-    :root { --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --btn:#2563eb; --pill:#1f2937; }
-    * { box-sizing:border-box; font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
-    body { margin:0; background:var(--bg); color:var(--text); }
-    .wrap { max-width:980px; margin:40px auto; padding:0 16px;}
-    h1 { font-size:34px; margin:0 0 8px; }
-    .muted { color:var(--muted); }
-    .card { background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:22px; margin:18px 0; }
-    .row { display:grid; grid-template-columns: 1fr 2fr; gap:16px; align-items:center; padding:10px 0; border-bottom:1px dashed #1f2937;}
-    .row:last-child{ border-bottom:0; }
-    select, input[type="text"], input[type="file"]{
-      width:100%; padding:12px 14px; border-radius:10px; border:1px solid #374151; background:#0b1220; color:var(--text);
-    }
-    .swatches { display:flex; gap:10px; flex-wrap:wrap; }
-    .swatch { width:36px; height:36px; border-radius:999px; border:2px solid #0b1220; cursor:pointer; outline:2px solid transparent; }
-    .swatch.active { outline:2px solid white; }
-    .btns { display:flex; gap:10px; flex-wrap:wrap; }
-    button {
-      background:var(--btn); border:none; color:white; padding:12px 16px; border-radius:10px; cursor:pointer; font-weight:600;
-    }
-    button.secondary{ background:#334155; }
-    code.block {
-      display:block; white-space:pre-wrap; background:#0b1220; border:1px solid #1f2937; padding:16px; border-radius:10px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    }
-    .pill { display:inline-block; padding:6px 10px; background:var(--pill); border-radius:999px; font-size:12px; color:#cbd5e1; }
-    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .hint { font-size:12px; color:#94a3b8; }
+    :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb;--pill:#1f2937}
+    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    body{margin:0;background:var(--bg);color:var(--text)}
+    .wrap{max-width:980px;margin:40px auto;padding:0 16px}
+    h1{font-size:34px;margin:0 0 14px}
+    .muted{color:var(--muted)}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
+    .steps{line-height:1.6;margin-bottom:18px}
+    .pill{display:inline-block;padding:6px 10px;background:var(--pill);border-radius:999px;font-size:12px;color:#cbd5e1}
+    .row{display:grid;grid-template-columns:1fr 2fr;gap:16px;align-items:center;padding:12px 0;border-bottom:1px dashed #1f2937}
+    .row:last-child{border-bottom:0}
+    select,input[type="text"]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:var(--text)}
+    .swatches{display:flex;gap:10px;flex-wrap:wrap}
+    .swatch{width:36px;height:36px;border-radius:999px;border:2px solid #0b1220;cursor:pointer;outline:2px solid transparent;position:relative}
+    .swatch.active{outline:2px solid #fff}
+    .swatch.active::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;font-size:18px;color:#fff}
+    .colorLabel{margin-top:6px;font-size:12px;color:#94a3b8}
+    .avatars{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .avatar{border:2px solid #1f2937;border-radius:12px;overflow:hidden;background:#0b1220;cursor:pointer;position:relative}
+    .avatar img{width:100%;height:180px;object-fit:cover;display:block}
+    .avatar .cap{padding:8px 10px;font-size:13px;color:#cbd5e1;border-top:1px solid #1f2937;text-align:center}
+    .avatar.active{border-color:#fff;box-shadow:0 0 0 2px #fff inset}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+    button{background:var(--btn);border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+    button.secondary{background:#334155}
+    button[disabled]{opacity:.5;cursor:not-allowed}
+    .hint{font-size:12px;color:#94a3b8}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Bienvenue, vincent</h1>
-    <p class="muted">Étapes simples : (1) Choisissez le métier, la couleur et l’avatar. (2) Cliquez “Enregistrer”. (3) Copiez le bloc d’intégration et collez-le sur votre site.</p>
+<div class="wrap">
+  <h1>Bienvenue, vincent</h1>
 
-    <!-- Étape 1 : Sélecteurs -->
-    <div class="card" id="setupCard">
-      <h2 style="margin:0 0 8px;">Configuration de votre bot</h2>
-      <span class="pill" id="tenantPill">tenant: vincentbastile100–gmail–com</span>
+  <div class="steps card">
+    <div class="muted">Étapes simples :</div>
+    <div>1 — Choisissez le <strong>métier</strong>, la <strong>couleur</strong> et l’<strong>avatar</strong> de votre Bot Conversationnel</div>
+    <div>2 — Cliquez sur <strong>« Enregistrer »</strong>.</div>
+    <div>3 — Cliquez sur <strong>« Passer à la page du bot »</strong>.</div>
+  </div>
 
-      <div class="row">
-        <label for="role">Métier</label>
-        <div>
-          <select id="role">
-            <option value="avocat">Avocat / Avocate</option>
-            <option value="agent-immobilier">Agent Immobilier</option>
-            <option value="psychologue">Psychologue</option>
-            <option value="comptable">Comptable</option>
-            <option value="medecin">Médecin</option>
-            <option value="danse">Danse (assistant·e)</option>
-          </select>
-          <p class="hint">La liste peut être enrichie plus tard sans changer ce tableau de bord.</p>
-        </div>
+  <div class="card" id="setupCard">
+    <h2 style="margin:0 0 8px;">Configuration de votre bot</h2>
+    <span class="pill" id="tenantPill">tenant: vincentbastile100–gmail–com</span>
+
+    <div class="row">
+      <label for="role">Métier</label>
+      <div>
+        <select id="role">
+          <option value="psychologue">Psychologue</option>
+          <option value="agent-immobilier">Agent Immobilier</option>
+          <option value="avocat">Avocat / Avocate</option>
+          <option value="medecin">Médecin</option>
+          <option value="comptable">Comptable</option>
+          <option value="danse">Danse (assistant·e)</option>
+        </select>
+        <p class="hint">La liste pourra s’enrichir sans changer ce tableau de bord.</p>
       </div>
+    </div>
 
-      <div class="row">
-        <label>Couleur (thème)</label>
+    <div class="row">
+      <label>Couleur (thème)</label>
+      <div>
         <div class="swatches" id="swatches">
-          <!-- couleurs “safe UI” -->
           <div class="swatch" data-color="#2563eb" style="background:#2563eb"></div>
           <div class="swatch" data-color="#16a34a" style="background:#16a34a"></div>
           <div class="swatch" data-color="#9333ea" style="background:#9333ea"></div>
@@ -71,185 +77,119 @@
           <div class="swatch" data-color="#111827" style="background:#111827"></div>
           <div class="swatch" data-color="#e5e7eb" style="background:#e5e7eb"></div>
         </div>
+        <div class="colorLabel" id="colorLabel">Couleur sélectionnée : —</div>
       </div>
+    </div>
 
-      <div class="row">
-        <label>Avatar</label>
-        <div class="grid2">
-          <input type="text" id="avatarUrl" placeholder="URL de l’avatar (PNG/JPG, 512×512 recommandé)" />
-          <input type="file" id="avatarFile" accept="image/*" />
+    <div class="row">
+      <label>Avatar</label>
+      <div class="avatars" id="avatars">
+        <div class="avatar" data-role="medecin" data-url="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg">
+          <img src="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg" alt="Betty Médecine">
+          <div class="cap">Betty Médecine</div>
         </div>
-        <p class="hint" style="grid-column:2;">Optionnel. Si vous chargez un fichier, il sera converti en Data URL et intégré au script d’embed.</p>
+        <div class="avatar" data-role="agent-immobilier" data-url="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg">
+          <img src="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg" alt="Betty Agent Immobilier">
+          <div class="cap">Betty Agent Immobilier</div>
+        </div>
+        <div class="avatar" data-role="avocat" data-url="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg">
+          <img src="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg" alt="Betty Avocate">
+          <div class="cap">Betty Avocate</div>
+        </div>
       </div>
-
-      <div class="btns">
-        <button id="saveBtn">Enregistrer</button>
-        <button class="secondary" id="resetBtn">Réinitialiser</button>
-      </div>
-      <p class="hint" id="saveStatus"></p>
+      <p class="hint" style="grid-column:2">Seuls les avatars fournis sont disponibles (pas d’upload utilisateur).</p>
     </div>
 
-    <!-- Étape finale : Intégration -->
-    <div class="card" id="finalCard" style="display:none;">
-      <h2 style="margin:0 0 12px;">Étape finale — Ajouter le bot sur votre site</h2>
-      <p>Copiez-collez le bloc ci-dessous tel quel, à la fin de votre page (avant la fermeture <code>&lt;/body&gt;</code>).</p>
-
-      <code class="block" id="embedBlock"></code>
-
-      <div class="btns">
-        <button id="copyBtn">Copier le bloc</button>
-        <button class="secondary" id="downloadBtn">Télécharger le bloc</button>
-        <button class="secondary" id="testBtn">Tester mon bot</button>
-      </div>
-      <p class="hint">💡 Si vous ne gérez pas votre site, envoyez ce bloc (ou le fichier téléchargé) à votre webmaster.</p>
+    <div class="btns">
+      <button id="saveBtn">Enregistrer</button>
+      <button class="secondary" id="resetBtn">Réinitialiser</button>
+      <button class="secondary" id="goBtn" disabled>Passer à la page du bot</button>
     </div>
+    <p class="hint" id="saveStatus"></p>
   </div>
+</div>
 
-  <script>
-    // --- Constantes ---
-    const TENANT = "vincentbastile100–gmail–com"; // garde le même affichage que ton screenshot
-    const TENANT_ATTR = "vincentbastile100–gmail–com".replace(/[–]/g,'-').replace(/–/g,'-'); // fallback
-    const STORAGE_KEY = "bettyConfig:" + TENANT;
+<script>
+  // --------- CONFIG ----------
+  const TENANT = "vincentbastile100–gmail–com";
+  const BOT_PAGE_URL = "https://bettybots-flote-abonement.onrender.com/dashboard"; // destination finale
+  const STORAGE_KEY = "bettyConfig:" + TENANT;
+  const $ = sel => document.querySelector(sel);
 
-    // --- Helpers ---
-    const $ = (sel)=>document.querySelector(sel);
-    function setActiveSwatch(hex) {
-      document.querySelectorAll('.swatch').forEach(s=>{
-        s.classList.toggle('active', s.dataset.color===hex);
-      });
-    }
-    function b64Download(filename, text) {
-      const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
-    }
-    function toDataUrl(file) {
-      return new Promise((resolve,reject)=>{
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
-    }
+  let state = { role:"psychologue", color:null, avatarUrl:null };
 
-    // --- État en mémoire ---
-    let state = {
-      role: "avocat",
-      color: "#2563eb",
-      avatarUrl: ""
-    };
+  function setActiveSwatch(hex){
+    document.querySelectorAll('.swatch').forEach(s=>{
+      s.classList.toggle('active', s.dataset.color===hex);
+    });
+    $('#colorLabel').textContent = "Couleur sélectionnée : " + (hex || "—");
+  }
+  function setActiveAvatar(url){
+    document.querySelectorAll('.avatar').forEach(a=>{
+      a.classList.toggle('active', a.dataset.url===url);
+    });
+  }
+  function autoPickAvatarForRole(role){
+    const match = [...document.querySelectorAll('.avatar')].find(a => a.dataset.role===role);
+    if (match){ state.avatarUrl = match.dataset.url; setActiveAvatar(state.avatarUrl); }
+  }
+  function saveState(showMsg=true){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(showMsg) $('#saveStatus').textContent = "✅ Paramètres enregistrés.";
+    $('#goBtn').disabled = false;
+  }
+  function loadState(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    try { state = JSON.parse(raw) || state; } catch(_) {}
+  }
 
-    // --- Init UI ---
-    (function init(){
-      // Pill tenant affiché
-      $('#tenantPill').textContent = 'tenant: ' + TENANT;
+  (function init(){
+    $('#tenantPill').textContent = "tenant: " + TENANT;
 
-      // Restaure config si dispo
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try {
-          state = JSON.parse(saved);
-        } catch {}
-      }
-      // Applique UI
-      $('#role').value = state.role || 'avocat';
-      setActiveSwatch(state.color || '#2563eb');
-      $('#avatarUrl').value = state.avatarUrl || '';
-
-      // Events swatches
-      document.querySelectorAll('.swatch').forEach(s=>{
-        s.addEventListener('click', ()=>{
-          state.color = s.dataset.color;
-          setActiveSwatch(state.color);
-        });
-      });
-
-      // Enregistrer
-      $('#saveBtn').addEventListener('click', async ()=>{
-        // Avatar file => DataURL prioritaire
-        const file = $('#avatarFile').files[0];
-        if (file) {
-          try {
-            state.avatarUrl = await toDataUrl(file);
-          } catch(e) {
-            console.warn('Avatar file read error', e);
-          }
-        } else {
-          state.avatarUrl = $('#avatarUrl').value.trim();
-        }
-        state.role = $('#role').value;
-
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        $('#saveStatus').textContent = '✅ Paramètres enregistrés pour ' + TENANT;
-
-        // Construit bloc d’embed
-        renderEmbed();
-        // Affiche la carte finale
-        $('#finalCard').style.display = 'block';
-        // Scroll
-        setTimeout(()=> document.getElementById('finalCard').scrollIntoView({behavior:'smooth'}), 50);
-      });
-
-      // Reset
-      $('#resetBtn').addEventListener('click', ()=>{
-        state = { role:'avocat', color:'#2563eb', avatarUrl:'' };
-        localStorage.removeItem(STORAGE_KEY);
-        $('#role').value = state.role;
-        $('#avatarUrl').value = '';
-        $('#avatarFile').value = '';
+    document.querySelectorAll('.swatch').forEach(s=>{
+      s.addEventListener('click', ()=>{
+        state.color = s.dataset.color;
         setActiveSwatch(state.color);
-        $('#saveStatus').textContent = 'Réinitialisé.';
-        $('#finalCard').style.display = 'none';
       });
-
-      // Boutons intégration
-      $('#copyBtn')?.addEventListener('click', ()=>{
-        const txt = $('#embedBlock').textContent;
-        navigator.clipboard.writeText(txt).then(()=>{
-          alert('Bloc copié ✅');
-        });
+    });
+    document.querySelectorAll('.avatar').forEach(a=>{
+      a.addEventListener('click', ()=>{
+        state.avatarUrl = a.dataset.url;
+        setActiveAvatar(state.avatarUrl);
       });
+    });
+    $('#role').addEventListener('change', (e)=>{
+      state.role = e.target.value;
+      autoPickAvatarForRole(state.role);
+    });
 
-      $('#downloadBtn')?.addEventListener('click', ()=>{
-        const txt = $('#embedBlock').textContent;
-        b64Download('betty-embed.html', txt);
-      });
+    $('#saveBtn').addEventListener('click', ()=> saveState(true));
+    $('#resetBtn').addEventListener('click', ()=>{
+      state = { role:"psychologue", color:null, avatarUrl:null };
+      localStorage.removeItem(STORAGE_KEY);
+      $('#role').value = state.role;
+      setActiveSwatch(null);
+      setActiveAvatar(null);
+      $('#saveStatus').textContent = "Réinitialisé.";
+      $('#goBtn').disabled = true;
+    });
+    $('#goBtn').addEventListener('click', ()=>{
+      const qs = new URLSearchParams({
+        tenant: TENANT.replace(/[–]/g,'-'),
+        role: state.role || "",
+        color: state.color || "",
+        avatar: state.avatarUrl || ""
+      }).toString();
+      window.location.href = BOT_PAGE_URL + (BOT_PAGE_URL.includes('?') ? '&' : '?') + qs;
+    });
 
-      $('#testBtn')?.addEventListener('click', ()=>{
-        // Ouvre une page de test avec l’embed injecté
-        const embed = $('#embedBlock').textContent;
-        const testDoc = `
-<!doctype html><meta charset="utf-8">
-<title>Test — Betty</title>
-<body style="font-family:system-ui; margin:40px;">
-<h2>Prévisualisation</h2>
-<p>Cette page charge le même bloc d’intégration que vous collerez sur votre site.</p>
-${embed}
-</body>`;
-        const blob = new Blob([testDoc], {type: 'text/html;charset=utf-8'});
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-      });
-
-      // Si une config existe déjà => afficher directement l’étape finale
-      if (saved) { renderEmbed(); $('#finalCard').style.display = 'block'; }
-    })();
-
-    function renderEmbed(){
-      // On passe les paramètres au script via data-* (facile côté embed.js)
-      // NOTE: garde ton URL de prod telle qu’en screenshot
-      const src = "https://bettybots-flote-abonement.onrender.com/static/embed.js";
-      const attrs = [
-        `src="${src}"`,
-        `data-tenant="${TENANT_ATTR}"`,
-        `data-role="${state.role}"`,
-        `data-color="${state.color}"`,
-        state.avatarUrl ? `data-avatar="${state.avatarUrl}"` : null
-      ].filter(Boolean).join(' ');
-      const snippet = `<script ${attrs}></script>`;
-      $('#embedBlock').textContent = snippet;
-    }
-  </script>
+    loadState();
+    $('#role').value = state.role || 'psychologue';
+    if(state.color) setActiveSwatch(state.color);
+    if(state.avatarUrl) setActiveAvatar(state.avatarUrl); else autoPickAvatarForRole(state.role);
+    if(localStorage.getItem(STORAGE_KEY)) $('#goBtn').disabled = false;
+  })();
+</script>
 </body>
 </html>
