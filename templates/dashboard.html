@@ -21,8 +21,8 @@
     .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
     .avatar-preview { display:flex; align-items:center; gap:12px; }
     .avatar-preview img { width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.15); }
-    .code { background:#0b1020; color:#e5e7eb; padding:10px; border-radius:12px; overflow:auto; }
-    label { font-size:14px; color:var(--muted); }
+    .code { background:#0b1020; color:#e5e7eb; padding:10px; border-radius:12px; overflow:auto; font-family: monospace; white-space: pre; }
+    label { font-size:14px; color:var(--muted); display:block; margin-bottom:6px; }
   </style>
 </head>
 <body>
@@ -30,7 +30,7 @@
     <header class="hero">
       <h1>Bienvenue, {{ cfg.full_name or 'Client' }}</h1>
       <p class="lead">
-        <strong>Étapes simples :</strong> (1) Choisissez le métier, le caractère et l’avatar. (2) Cliquez “Enregistrer”. (3) Copiez le <em>bloc d’intégration</em> à la fin et collez-le sur votre site.
+        <strong>Étapes simples :</strong> (1) Choisissez le métier, le caractère et l'avatar. (2) Cliquez "Enregistrer". (3) Copiez le <em>bloc d'intégration</em> à la fin et collez-le sur votre site.
       </p>
     </header>
 
@@ -45,7 +45,7 @@
               <span>1) Choisir le <strong>métier</strong></span><span>▾</span>
             </button>
             <div class="acc-body">
-              <p class="hint">Sélectionnez le domaine d’activité. Le bot parlera avec les bons réflexes métier.</p>
+              <p class="hint">Sélectionnez le domaine d'activité. Le bot parlera avec les bons réflexes métier.</p>
               <select id="prompt_profile" class="select">
                 {% for key, text in prompts.items() %}
                   <option value="{{ key }}" {% if cfg.prompt_profile==key %}selected{% endif %}>{{ key|capitalize }}</option>
@@ -75,14 +75,14 @@
           <!-- Avatar -->
           <div class="acc-item" id="acc-avatar">
             <button class="acc-head" type="button">
-              <span>3) Choisir l’<strong>avatar</strong></span><span>▾</span>
+              <span>3) Choisir l'<strong>avatar</strong></span><span>▾</span>
             </button>
             <div class="acc-body">
-              <p class="hint">Collez une adresse d’image (ex : votre logo ou photo). Un aperçu s’affiche.</p>
+              <p class="hint">Collez une adresse d'image (ex : votre logo ou photo). Un aperçu s'affiche.</p>
               <div class="row">
-                <input id="avatar_url" class="input" value="{{ cfg.avatar_url }}" placeholder="https://… (lien d’une image)"/>
+                <input id="avatar_url" class="input" value="{{ cfg.avatar_url }}" placeholder="https://… (lien d'une image)"/>
                 <div class="avatar-preview">
-                  <img id="avatar_preview" src="{{ cfg.avatar_url or '' }}" alt="Avatar"/>
+                  <img id="avatar_preview" src="{{ cfg.avatar_url or '' }}" alt="Avatar" onerror="this.style.display='none'" onload="this.style.display='block'"/>
                   <span class="hint">Aperçu</span>
                 </div>
               </div>
@@ -95,34 +95,34 @@
               <span>4) Choisir la <strong>couleur</strong></span><span>▾</span>
             </button>
             <div class="acc-body">
-              <p class="hint">Couleur d’accent (boutons, bulles). Exemple : <code>#7aa2ff</code></p>
-              <input id="accent" class="input" value="{{ cfg.accent }}" />
+              <p class="hint">Couleur d'accent (boutons, bulles). Exemple : <code>#7aa2ff</code></p>
+              <input id="accent" class="input" type="text" value="{{ cfg.accent }}" placeholder="#7aa2ff" />
             </div>
           </div>
 
-          <!-- Message d’accueil -->
+          <!-- Message d'accueil -->
           <div class="acc-item" id="acc-welcome">
             <button class="acc-head" type="button">
-              <span>5) Message d’<strong>accueil</strong></span><span>▾</span>
+              <span>5) Message d'<strong>accueil</strong></span><span>▾</span>
             </button>
             <div class="acc-body">
-              <input id="welcome" class="input" value="{{ cfg.welcome }}" />
-              <p class="hint">Exemple : “👋 Bonjour, je suis Betty. Comment puis-je vous aider ?”</p>
+              <input id="welcome" class="input" value="{{ cfg.welcome }}" placeholder="👋 Bonjour, je suis Betty..." />
+              <p class="hint">Exemple : "👋 Bonjour, je suis Betty. Comment puis-je vous aider ?"</p>
             </div>
           </div>
 
           <!-- Bouton Enregistrer -->
           <div class="acc-item">
-            <div class="acc-body" style="display:block">
-              <button id="save" class="btn">Enregistrer</button>
-              <span class="hint">Pensez à enregistrer avant de passer à l’étape suivante.</span>
+            <div class="acc-body" style="display:block; border-top:0;">
+              <button id="save" class="btn" style="width:100%; justify-content:center;">Enregistrer</button>
+              <p class="hint" style="margin-top:8px; text-align:center;">Pensez à enregistrer avant de passer à l'étape suivante.</p>
             </div>
           </div>
 
         </div>
       </div>
 
-      <!-- Colonne intégration (sans parler de “script”) -->
+      <!-- Colonne intégration -->
       <div class="card">
         <h2>Étape finale — Ajouter le bot sur votre site</h2>
         <p class="hint">
@@ -130,10 +130,8 @@
           Vous pouvez aussi <strong>télécharger le bloc</strong> en fichier à mettre sur votre site.
         </p>
 
-        <!-- Bloc à copier (on évite le mot 'script' dans le texte, mais le code est celui requis) -->
-        <pre class="code" id="embedCode"><code>
-&lt;script src="{{ PUBLIC_BASE_URL }}/static/embed.js" data-tenant="{{ cfg.tenant_id }}"&gt;&lt;/script&gt;
-</code></pre>
+        <!-- Bloc à copier -->
+        <pre class="code" id="embedCode">&lt;script src="{{ PUBLIC_BASE_URL }}/static/embed.js" data-tenant="{{ cfg.tenant_id }}"&gt;&lt;/script&gt;</pre>
 
         <div class="btn-row">
           <button id="copy" class="btn">Copier le bloc</button>
@@ -143,7 +141,7 @@
 
         <p class="hint" style="margin-top:10px">
           💡 Si vous ne gérez pas votre site, envoyez ce bloc (ou le fichier téléchargé) à votre webmaster :  
-          “Merci d’ajouter ce bloc à la fin de la page d’accueil.”
+          "Merci d'ajouter ce bloc à la fin de la page d'accueil."
         </p>
       </div>
     </section>
@@ -154,8 +152,8 @@
     const $ = (id) => document.getElementById(id);
 
     // Accordéons
-    document.querySelectorAll('.acc-head').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.acc-head').forEach(btn => {
+      btn.addEventListener('click', () => {
         const item = btn.parentElement;
         item.classList.toggle('open');
       });
@@ -163,18 +161,28 @@
 
     // Prévisualisation avatar
     const avatarInput = $('avatar_url');
-    const avatarPrev  = $('avatar_preview');
-    function updatePreview(){ avatarPrev.src = avatarInput.value || ''; }
+    const avatarPrev = $('avatar_preview');
+    
+    function updatePreview() {
+      const url = avatarInput.value.trim();
+      if (url) {
+        avatarPrev.src = url;
+        avatarPrev.style.display = 'block';
+      } else {
+        avatarPrev.style.display = 'none';
+      }
+    }
+    
     avatarInput.addEventListener('input', updatePreview);
     updatePreview();
 
     // Comportement (ton) → on remplit prompt_custom en ajout
-    document.querySelectorAll('#tone-buttons .btn').forEach(b=>{
-      b.addEventListener('click', ()=>{
+    document.querySelectorAll('#tone-buttons .btn').forEach(b => {
+      b.addEventListener('click', () => {
         const tone = b.getAttribute('data-tone');
-        const box  = $('prompt_custom');
+        const box = $('prompt_custom');
         const line = `Ton souhaité : ${tone}.`;
-        box.value = box.value ? (box.value.trim() + "\\n" + line) : line;
+        box.value = box.value.trim() ? (box.value.trim() + "\n" + line) : line;
         alert('Comportement ajouté au réglage ✅');
       });
     });
@@ -183,37 +191,61 @@
     async function saveCfg() {
       const payload = {
         prompt_profile: $('prompt_profile').value,
-        prompt_custom:  $('prompt_custom').value,
-        welcome:        $('welcome').value,
-        avatar_url:     $('avatar_url').value,
-        accent:         $('accent').value
+        prompt_custom: $('prompt_custom').value,
+        welcome: $('welcome').value,
+        avatar_url: $('avatar_url').value,
+        accent: $('accent').value
       };
+      
       try {
         const res = await fetch(`/api/tenant/${TENANT}/update`, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload)
         });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const data = await res.json();
-        alert(data && data.ok ? '✅ Sauvegardé' : '❌ Erreur lors de la sauvegarde');
+        alert(data && data.ok ? '✅ Sauvegardé avec succès' : '❌ Erreur lors de la sauvegarde');
       } catch (e) {
-        alert('❌ Erreur réseau');
-        console.error(e);
+        alert('❌ Erreur réseau : ' + e.message);
+        console.error('Erreur de sauvegarde:', e);
       }
     }
+    
     $('save').addEventListener('click', saveCfg);
 
-    // Copier le bloc d’intégration
-    $('copy').addEventListener('click', async ()=>{
-      const text = document.getElementById('embedCode').innerText;
-      try { await navigator.clipboard.writeText(text); alert('Bloc copié ✅'); }
-      catch(e){ alert('Copie non autorisée : sélectionnez et copiez manuellement.'); }
+    // Copier le bloc d'intégration
+    $('copy').addEventListener('click', async () => {
+      const text = $('embedCode').textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        alert('✅ Bloc copié dans le presse-papiers');
+      } catch(e) {
+        // Fallback pour navigateurs plus anciens
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          alert('✅ Bloc copié');
+        } catch(err) {
+          alert('❌ Copie non autorisée : sélectionnez et copiez manuellement.');
+        }
+        document.body.removeChild(textarea);
+      }
     });
 
-    // Télécharger le bloc d’intégration en fichier .html
-    $('download').addEventListener('click', ()=>{
-      const content = document.getElementById('embedCode').innerText;
-      const blob = new Blob([content], {type:'text/html'});
+    // Télécharger le bloc d'intégration en fichier .html
+    $('download').addEventListener('click', () => {
+      const content = $('embedCode').textContent;
+      const blob = new Blob([content], {type: 'text/html'});
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'betty-integration.html';
