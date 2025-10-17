@@ -1,8 +1,7 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Betty — Prévisualisation</title>
   <style>
     :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb}
@@ -18,11 +17,9 @@
 <body>
 <div class="wrap">
   <h1>Prévisualisation du bot</h1>
-  <p class="muted">Testez votre bot avec vos paramètres avant de passer à l’abonnement.</p>
+  <p class="muted">Testez votre bot avant de vous abonner.</p>
 
-  <div class="card">
-    <div id="preview"></div>
-  </div>
+  <div class="card"><div id="preview"></div></div>
 
   <div class="btns">
     <button class="secondary" onclick="window.location='/dashboard?tenant={{ tenant }}'">Revenir à la configuration</button>
@@ -31,19 +28,12 @@
 </div>
 
 <script>
-  const TENANT = {{ tenant|tojson }};
-  const ROLE   = {{ role|tojson }};
-  const COLOR  = {{ color|tojson }};
-  const AVATAR = {{ avatar|tojson }};
-  const EMBED_SRC = "{{ ( (request.host_url.rstrip('/')) + url_for('static', filename='embed.js') ).replace('//', 'https://').replace('https:https://','https://') }}";
-
+  const TENANT={{ tenant|tojson }}, ROLE={{ role|tojson }}, COLOR={{ color|tojson }}, AVATAR={{ avatar|tojson }};
+  const EMBED_SRC="{{ ( (request.host_url.rstrip('/')) + url_for('static', filename='embed.js') ).replace('//','https://').replace('https:https://','https://') }}";
   (function(){
     const s=document.createElement('script');
-    s.src = EMBED_SRC;
-    s.dataset.tenant = TENANT;
-    s.dataset.role = ROLE;
-    s.dataset.color = COLOR;
-    if (AVATAR) s.dataset.avatar = AVATAR;
+    s.src=EMBED_SRC; s.dataset.tenant=TENANT; s.dataset.role=ROLE; s.dataset.color=COLOR;
+    if(AVATAR) s.dataset.avatar=AVATAR;
     document.getElementById('preview').appendChild(s);
   })();
 </script>
