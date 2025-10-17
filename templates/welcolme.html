@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Betty — Bienvenue</title>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb}
+    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
+    body{margin:0;background:var(--bg);color:var(--text)}
+    .wrap{max-width:720px;margin:60px auto;padding:0 16px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px}
+    label{display:block;margin:10px 0 6px}
+    input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:var(--text)}
+    button{margin-top:16px;background:var(--btn);border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+    .muted{color:var(--muted)}
+    .err{color:#fca5a5;margin-bottom:10px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bonjour 👋</h1>
+  <p class="muted">Pour configurer votre bot Betty, merci d’indiquer votre nom et votre email.</p>
+
+  <div class="card">
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <form method="post" action="/">
+      <label>Nom et prénom</label>
+      <input type="text" name="name" placeholder="Ex. Marie Dupont" required>
+      <label>Email</label>
+      <input type="email" name="email" placeholder="vous@exemple.com" required>
+      <button type="submit">Continuer</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>
