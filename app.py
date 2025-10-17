@@ -97,7 +97,12 @@ def save_tenant(cfg: dict) -> str:
 @app.get("/")
 def landing():
     prompts = read_prompts()
-    return render_template("landing.html", brand=BRAND, prompts=list(prompts.keys()))
+    return render_template("dashboard.html",
+                       brand=BRAND,
+                       cfg=cfg,
+                       prompts=prompts,
+                       PUBLIC_BASE_URL="https://bettybots-flote-abonement.onrender.com")
+
 
 @app.post("/signup")
 def signup():
