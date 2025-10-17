@@ -1,8 +1,7 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Betty — Configuration</title>
   <style>
     :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb;--pill:#1f2937}
@@ -10,13 +9,12 @@
     body{margin:0;background:var(--bg);color:var(--text)}
     .wrap{max-width:980px;margin:40px auto;padding:0 16px}
     h1{font-size:28px;margin:0 0 12px}
-    .muted{color:var(--muted)}
-    .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
+    .muted{color:var(--muted)} .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
     .row{display:grid;grid-template-columns:1fr 2fr;gap:16px;align-items:center;padding:12px 0;border-bottom:1px dashed #1f2937}
     .row:last-child{border-bottom:0}
     select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:var(--text)}
     .swatches{display:flex;gap:10px;flex-wrap:wrap}
-    .swatch{width:36px;height:36px;border-radius:999px;border:2px solid #0b1220;cursor:pointer;outline:2px solid transparent;position:relative}
+    .swatch{width:36px;height:36px;border-radius:999px;border:2px solid #0b1220;cursor:pointer;outline:2px solid transparent}
     .swatch.active{outline:2px solid #fff}
     .avatars{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
     .avatar{border:2px solid #1f2937;border-radius:12px;overflow:hidden;background:#0b1220;cursor:pointer}
@@ -60,8 +58,6 @@
           <div class="swatch" data-color="#ef4444" style="background:#ef4444"></div>
           <div class="swatch" data-color="#f59e0b" style="background:#f59e0b"></div>
           <div class="swatch" data-color="#0ea5e9" style="background:#0ea5e9"></div>
-          <div class="swatch" data-color="#111827" style="background:#111827"></div>
-          <div class="swatch" data-color="#e5e7eb" style="background:#e5e7eb"></div>
         </div>
         <input type="hidden" name="color" id="color" value="#2563eb"/>
       </div>
@@ -93,7 +89,6 @@
 </div>
 
 <script>
-  // Couleur
   const sw = document.querySelectorAll('.swatch');
   const colorHidden = document.getElementById('color');
   sw.forEach(el=>{
@@ -103,7 +98,6 @@
       colorHidden.value = el.dataset.color;
     });
   });
-  // Avatar
   const labels = document.querySelectorAll('.avatar');
   labels.forEach(l=>{
     l.addEventListener('click', ()=>{
