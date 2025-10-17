@@ -2,256 +2,254 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Mon bot – {{ brand }}</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Betty — Configuration</title>
   <style>
-    /* Mini styles pour les tiroirs (accordéons) */
-    .accordion { display: grid; gap: 12px; }
-    .acc-item { background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)), var(--card); border-radius: 14px; border:1px solid rgba(255,255,255,.1); overflow: hidden; }
-    .acc-head { width:100%; text-align:left; padding:14px 16px; background:transparent; color:var(--text); border:0; font-size:16px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
-    .acc-body { display:none; padding:16px; border-top:1px solid rgba(255,255,255,.08); }
-    .acc-item.open .acc-body { display:block; }
-    .hint { color: var(--muted); font-size: 14px; }
-    .row { display:grid; gap:10px; }
-    .grid-2 { display:grid; grid-template-columns: 1fr; gap:18px; }
-    @media (min-width: 860px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
-    .input, .select, .textarea { padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:#0f1426; color:var(--text); width:100%; }
-    .btn { padding:12px 16px; border-radius:12px; border:1px solid rgba(122,162,255,.45); background:linear-gradient(180deg, rgba(122,162,255,.3), rgba(122,162,255,.2)); color:var(--text); cursor:pointer; text-decoration:none; display:inline-block; }
-    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
-    .avatar-preview { display:flex; align-items:center; gap:12px; }
-    .avatar-preview img { width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.15); }
-    .code { background:#0b1020; color:#e5e7eb; padding:10px; border-radius:12px; overflow:auto; font-family: monospace; white-space: pre; }
-    label { font-size:14px; color:var(--muted); display:block; margin-bottom:6px; }
+    :root { --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --btn:#2563eb; --pill:#1f2937; }
+    * { box-sizing:border-box; font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    body { margin:0; background:var(--bg); color:var(--text); }
+    .wrap { max-width:980px; margin:40px auto; padding:0 16px;}
+    h1 { font-size:34px; margin:0 0 8px; }
+    .muted { color:var(--muted); }
+    .card { background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:22px; margin:18px 0; }
+    .row { display:grid; grid-template-columns: 1fr 2fr; gap:16px; align-items:center; padding:10px 0; border-bottom:1px dashed #1f2937;}
+    .row:last-child{ border-bottom:0; }
+    select, input[type="text"], input[type="file"]{
+      width:100%; padding:12px 14px; border-radius:10px; border:1px solid #374151; background:#0b1220; color:var(--text);
+    }
+    .swatches { display:flex; gap:10px; flex-wrap:wrap; }
+    .swatch { width:36px; height:36px; border-radius:999px; border:2px solid #0b1220; cursor:pointer; outline:2px solid transparent; }
+    .swatch.active { outline:2px solid white; }
+    .btns { display:flex; gap:10px; flex-wrap:wrap; }
+    button {
+      background:var(--btn); border:none; color:white; padding:12px 16px; border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    button.secondary{ background:#334155; }
+    code.block {
+      display:block; white-space:pre-wrap; background:#0b1220; border:1px solid #1f2937; padding:16px; border-radius:10px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .pill { display:inline-block; padding:6px 10px; background:var(--pill); border-radius:999px; font-size:12px; color:#cbd5e1; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .hint { font-size:12px; color:#94a3b8; }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <header class="hero">
-      <h1>Bienvenue, {{ cfg.full_name or 'Client' }}</h1>
-      <p class="lead">
-        <strong>Étapes simples :</strong> (1) Choisissez le métier, le caractère et l'avatar. (2) Cliquez "Enregistrer". (3) Copiez le <em>bloc d'intégration</em> à la fin et collez-le sur votre site.
-      </p>
-    </header>
+  <div class="wrap">
+    <h1>Bienvenue, vincent</h1>
+    <p class="muted">Étapes simples : (1) Choisissez le métier, la couleur et l’avatar. (2) Cliquez “Enregistrer”. (3) Copiez le bloc d’intégration et collez-le sur votre site.</p>
 
-    <section class="grid-2">
-      <!-- Colonne réglages (tiroirs) -->
-      <div>
-        <div class="accordion">
+    <!-- Étape 1 : Sélecteurs -->
+    <div class="card" id="setupCard">
+      <h2 style="margin:0 0 8px;">Configuration de votre bot</h2>
+      <span class="pill" id="tenantPill">tenant: vincentbastile100–gmail–com</span>
 
-          <!-- Métier -->
-          <div class="acc-item open" id="acc-metier">
-            <button class="acc-head" type="button">
-              <span>1) Choisir le <strong>métier</strong></span><span>▾</span>
-            </button>
-            <div class="acc-body">
-              <p class="hint">Sélectionnez le domaine d'activité. Le bot parlera avec les bons réflexes métier.</p>
-              <select id="prompt_profile" class="select">
-                {% for key, text in prompts.items() %}
-                  <option value="{{ key }}" {% if cfg.prompt_profile==key %}selected{% endif %}>{{ key|capitalize }}</option>
-                {% endfor %}
-              </select>
-              <label for="prompt_custom">Ajustement (optionnel)</label>
-              <textarea id="prompt_custom" class="textarea" rows="4" placeholder="Contraintes spécifiques, ton, mots à éviter…">{{ cfg.prompt_custom }}</textarea>
-            </div>
-          </div>
-
-          <!-- Comportement -->
-          <div class="acc-item" id="acc-comportement">
-            <button class="acc-head" type="button">
-              <span>2) Choisir le <strong>comportement</strong></span><span>▾</span>
-            </button>
-            <div class="acc-body">
-              <p class="hint">Style de réponse du bot. Vous pourrez affiner à tout moment.</p>
-              <div class="btn-row" id="tone-buttons">
-                <button class="btn" data-tone="Chaleureuse et bienveillante">Chaleureuse</button>
-                <button class="btn" data-tone="Professionnelle et concise">Professionnelle</button>
-                <button class="btn" data-tone="Dynamique et motivante">Dynamique</button>
-                <button class="btn" data-tone="Rassurante et simple">Rassurante</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Avatar -->
-          <div class="acc-item" id="acc-avatar">
-            <button class="acc-head" type="button">
-              <span>3) Choisir l'<strong>avatar</strong></span><span>▾</span>
-            </button>
-            <div class="acc-body">
-              <p class="hint">Collez une adresse d'image (ex : votre logo ou photo). Un aperçu s'affiche.</p>
-              <div class="row">
-                <input id="avatar_url" class="input" value="{{ cfg.avatar_url }}" placeholder="https://… (lien d'une image)"/>
-                <div class="avatar-preview">
-                  <img id="avatar_preview" src="{{ cfg.avatar_url or '' }}" alt="Avatar" onerror="this.style.display='none'" onload="this.style.display='block'"/>
-                  <span class="hint">Aperçu</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Couleur -->
-          <div class="acc-item" id="acc-couleur">
-            <button class="acc-head" type="button">
-              <span>4) Choisir la <strong>couleur</strong></span><span>▾</span>
-            </button>
-            <div class="acc-body">
-              <p class="hint">Couleur d'accent (boutons, bulles). Exemple : <code>#7aa2ff</code></p>
-              <input id="accent" class="input" type="text" value="{{ cfg.accent }}" placeholder="#7aa2ff" />
-            </div>
-          </div>
-
-          <!-- Message d'accueil -->
-          <div class="acc-item" id="acc-welcome">
-            <button class="acc-head" type="button">
-              <span>5) Message d'<strong>accueil</strong></span><span>▾</span>
-            </button>
-            <div class="acc-body">
-              <input id="welcome" class="input" value="{{ cfg.welcome }}" placeholder="👋 Bonjour, je suis Betty..." />
-              <p class="hint">Exemple : "👋 Bonjour, je suis Betty. Comment puis-je vous aider ?"</p>
-            </div>
-          </div>
-
-          <!-- Bouton Enregistrer -->
-          <div class="acc-item">
-            <div class="acc-body" style="display:block; border-top:0;">
-              <button id="save" class="btn" style="width:100%; justify-content:center;">Enregistrer</button>
-              <p class="hint" style="margin-top:8px; text-align:center;">Pensez à enregistrer avant de passer à l'étape suivante.</p>
-            </div>
-          </div>
-
+      <div class="row">
+        <label for="role">Métier</label>
+        <div>
+          <select id="role">
+            <option value="avocat">Avocat / Avocate</option>
+            <option value="agent-immobilier">Agent Immobilier</option>
+            <option value="psychologue">Psychologue</option>
+            <option value="comptable">Comptable</option>
+            <option value="medecin">Médecin</option>
+            <option value="danse">Danse (assistant·e)</option>
+          </select>
+          <p class="hint">La liste peut être enrichie plus tard sans changer ce tableau de bord.</p>
         </div>
       </div>
 
-      <!-- Colonne intégration -->
-      <div class="card">
-        <h2>Étape finale — Ajouter le bot sur votre site</h2>
-        <p class="hint">
-          Copiez-collez le <strong>bloc ci-dessous</strong> tel quel, à la fin de votre page (avant la fermeture).
-          Vous pouvez aussi <strong>télécharger le bloc</strong> en fichier à mettre sur votre site.
-        </p>
-
-        <!-- Bloc à copier -->
-        <pre class="code" id="embedCode">&lt;script src="{{ PUBLIC_BASE_URL }}/static/embed.js" data-tenant="{{ cfg.tenant_id }}"&gt;&lt;/script&gt;</pre>
-
-        <div class="btn-row">
-          <button id="copy" class="btn">Copier le bloc</button>
-          <button id="download" class="btn">Télécharger le bloc</button>
-          <a class="btn" href="{{ url_for('chat_ui', tenant_id=cfg.tenant_id) }}" target="_blank">Tester mon bot</a>
+      <div class="row">
+        <label>Couleur (thème)</label>
+        <div class="swatches" id="swatches">
+          <!-- couleurs “safe UI” -->
+          <div class="swatch" data-color="#2563eb" style="background:#2563eb"></div>
+          <div class="swatch" data-color="#16a34a" style="background:#16a34a"></div>
+          <div class="swatch" data-color="#9333ea" style="background:#9333ea"></div>
+          <div class="swatch" data-color="#ef4444" style="background:#ef4444"></div>
+          <div class="swatch" data-color="#f59e0b" style="background:#f59e0b"></div>
+          <div class="swatch" data-color="#0ea5e9" style="background:#0ea5e9"></div>
+          <div class="swatch" data-color="#111827" style="background:#111827"></div>
+          <div class="swatch" data-color="#e5e7eb" style="background:#e5e7eb"></div>
         </div>
-
-        <p class="hint" style="margin-top:10px">
-          💡 Si vous ne gérez pas votre site, envoyez ce bloc (ou le fichier téléchargé) à votre webmaster :  
-          "Merci d'ajouter ce bloc à la fin de la page d'accueil."
-        </p>
       </div>
-    </section>
+
+      <div class="row">
+        <label>Avatar</label>
+        <div class="grid2">
+          <input type="text" id="avatarUrl" placeholder="URL de l’avatar (PNG/JPG, 512×512 recommandé)" />
+          <input type="file" id="avatarFile" accept="image/*" />
+        </div>
+        <p class="hint" style="grid-column:2;">Optionnel. Si vous chargez un fichier, il sera converti en Data URL et intégré au script d’embed.</p>
+      </div>
+
+      <div class="btns">
+        <button id="saveBtn">Enregistrer</button>
+        <button class="secondary" id="resetBtn">Réinitialiser</button>
+      </div>
+      <p class="hint" id="saveStatus"></p>
+    </div>
+
+    <!-- Étape finale : Intégration -->
+    <div class="card" id="finalCard" style="display:none;">
+      <h2 style="margin:0 0 12px;">Étape finale — Ajouter le bot sur votre site</h2>
+      <p>Copiez-collez le bloc ci-dessous tel quel, à la fin de votre page (avant la fermeture <code>&lt;/body&gt;</code>).</p>
+
+      <code class="block" id="embedBlock"></code>
+
+      <div class="btns">
+        <button id="copyBtn">Copier le bloc</button>
+        <button class="secondary" id="downloadBtn">Télécharger le bloc</button>
+        <button class="secondary" id="testBtn">Tester mon bot</button>
+      </div>
+      <p class="hint">💡 Si vous ne gérez pas votre site, envoyez ce bloc (ou le fichier téléchargé) à votre webmaster.</p>
+    </div>
   </div>
 
   <script>
-    const TENANT = {{ cfg.tenant_id|tojson }};
-    const $ = (id) => document.getElementById(id);
+    // --- Constantes ---
+    const TENANT = "vincentbastile100–gmail–com"; // garde le même affichage que ton screenshot
+    const TENANT_ATTR = "vincentbastile100–gmail–com".replace(/[–]/g,'-').replace(/–/g,'-'); // fallback
+    const STORAGE_KEY = "bettyConfig:" + TENANT;
 
-    // Accordéons
-    document.querySelectorAll('.acc-head').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const item = btn.parentElement;
-        item.classList.toggle('open');
+    // --- Helpers ---
+    const $ = (sel)=>document.querySelector(sel);
+    function setActiveSwatch(hex) {
+      document.querySelectorAll('.swatch').forEach(s=>{
+        s.classList.toggle('active', s.dataset.color===hex);
       });
-    });
-
-    // Prévisualisation avatar
-    const avatarInput = $('avatar_url');
-    const avatarPrev = $('avatar_preview');
-    
-    function updatePreview() {
-      const url = avatarInput.value.trim();
-      if (url) {
-        avatarPrev.src = url;
-        avatarPrev.style.display = 'block';
-      } else {
-        avatarPrev.style.display = 'none';
-      }
     }
-    
-    avatarInput.addEventListener('input', updatePreview);
-    updatePreview();
-
-    // Comportement (ton) → on remplit prompt_custom en ajout
-    document.querySelectorAll('#tone-buttons .btn').forEach(b => {
-      b.addEventListener('click', () => {
-        const tone = b.getAttribute('data-tone');
-        const box = $('prompt_custom');
-        const line = `Ton souhaité : ${tone}.`;
-        box.value = box.value.trim() ? (box.value.trim() + "\n" + line) : line;
-        alert('Comportement ajouté au réglage ✅');
+    function b64Download(filename, text) {
+      const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+    function toDataUrl(file) {
+      return new Promise((resolve,reject)=>{
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
       });
-    });
-
-    // Sauvegarde
-    async function saveCfg() {
-      const payload = {
-        prompt_profile: $('prompt_profile').value,
-        prompt_custom: $('prompt_custom').value,
-        welcome: $('welcome').value,
-        avatar_url: $('avatar_url').value,
-        accent: $('accent').value
-      };
-      
-      try {
-        const res = await fetch(`/api/tenant/${TENANT}/update`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
-        });
-        
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        
-        const data = await res.json();
-        alert(data && data.ok ? '✅ Sauvegardé avec succès' : '❌ Erreur lors de la sauvegarde');
-      } catch (e) {
-        alert('❌ Erreur réseau : ' + e.message);
-        console.error('Erreur de sauvegarde:', e);
-      }
     }
-    
-    $('save').addEventListener('click', saveCfg);
 
-    // Copier le bloc d'intégration
-    $('copy').addEventListener('click', async () => {
-      const text = $('embedCode').textContent;
-      try {
-        await navigator.clipboard.writeText(text);
-        alert('✅ Bloc copié dans le presse-papiers');
-      } catch(e) {
-        // Fallback pour navigateurs plus anciens
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
+    // --- État en mémoire ---
+    let state = {
+      role: "avocat",
+      color: "#2563eb",
+      avatarUrl: ""
+    };
+
+    // --- Init UI ---
+    (function init(){
+      // Pill tenant affiché
+      $('#tenantPill').textContent = 'tenant: ' + TENANT;
+
+      // Restaure config si dispo
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
         try {
-          document.execCommand('copy');
-          alert('✅ Bloc copié');
-        } catch(err) {
-          alert('❌ Copie non autorisée : sélectionnez et copiez manuellement.');
-        }
-        document.body.removeChild(textarea);
+          state = JSON.parse(saved);
+        } catch {}
       }
-    });
+      // Applique UI
+      $('#role').value = state.role || 'avocat';
+      setActiveSwatch(state.color || '#2563eb');
+      $('#avatarUrl').value = state.avatarUrl || '';
 
-    // Télécharger le bloc d'intégration en fichier .html
-    $('download').addEventListener('click', () => {
-      const content = $('embedCode').textContent;
-      const blob = new Blob([content], {type: 'text/html'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'betty-integration.html';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
+      // Events swatches
+      document.querySelectorAll('.swatch').forEach(s=>{
+        s.addEventListener('click', ()=>{
+          state.color = s.dataset.color;
+          setActiveSwatch(state.color);
+        });
+      });
+
+      // Enregistrer
+      $('#saveBtn').addEventListener('click', async ()=>{
+        // Avatar file => DataURL prioritaire
+        const file = $('#avatarFile').files[0];
+        if (file) {
+          try {
+            state.avatarUrl = await toDataUrl(file);
+          } catch(e) {
+            console.warn('Avatar file read error', e);
+          }
+        } else {
+          state.avatarUrl = $('#avatarUrl').value.trim();
+        }
+        state.role = $('#role').value;
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        $('#saveStatus').textContent = '✅ Paramètres enregistrés pour ' + TENANT;
+
+        // Construit bloc d’embed
+        renderEmbed();
+        // Affiche la carte finale
+        $('#finalCard').style.display = 'block';
+        // Scroll
+        setTimeout(()=> document.getElementById('finalCard').scrollIntoView({behavior:'smooth'}), 50);
+      });
+
+      // Reset
+      $('#resetBtn').addEventListener('click', ()=>{
+        state = { role:'avocat', color:'#2563eb', avatarUrl:'' };
+        localStorage.removeItem(STORAGE_KEY);
+        $('#role').value = state.role;
+        $('#avatarUrl').value = '';
+        $('#avatarFile').value = '';
+        setActiveSwatch(state.color);
+        $('#saveStatus').textContent = 'Réinitialisé.';
+        $('#finalCard').style.display = 'none';
+      });
+
+      // Boutons intégration
+      $('#copyBtn')?.addEventListener('click', ()=>{
+        const txt = $('#embedBlock').textContent;
+        navigator.clipboard.writeText(txt).then(()=>{
+          alert('Bloc copié ✅');
+        });
+      });
+
+      $('#downloadBtn')?.addEventListener('click', ()=>{
+        const txt = $('#embedBlock').textContent;
+        b64Download('betty-embed.html', txt);
+      });
+
+      $('#testBtn')?.addEventListener('click', ()=>{
+        // Ouvre une page de test avec l’embed injecté
+        const embed = $('#embedBlock').textContent;
+        const testDoc = `
+<!doctype html><meta charset="utf-8">
+<title>Test — Betty</title>
+<body style="font-family:system-ui; margin:40px;">
+<h2>Prévisualisation</h2>
+<p>Cette page charge le même bloc d’intégration que vous collerez sur votre site.</p>
+${embed}
+</body>`;
+        const blob = new Blob([testDoc], {type: 'text/html;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      });
+
+      // Si une config existe déjà => afficher directement l’étape finale
+      if (saved) { renderEmbed(); $('#finalCard').style.display = 'block'; }
+    })();
+
+    function renderEmbed(){
+      // On passe les paramètres au script via data-* (facile côté embed.js)
+      // NOTE: garde ton URL de prod telle qu’en screenshot
+      const src = "https://bettybots-flote-abonement.onrender.com/static/embed.js";
+      const attrs = [
+        `src="${src}"`,
+        `data-tenant="${TENANT_ATTR}"`,
+        `data-role="${state.role}"`,
+        `data-color="${state.color}"`,
+        state.avatarUrl ? `data-avatar="${state.avatarUrl}"` : null
+      ].filter(Boolean).join(' ');
+      const snippet = `<script ${attrs}></script>`;
+      $('#embedBlock').textContent = snippet;
+    }
   </script>
 </body>
 </html>
