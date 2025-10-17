@@ -24,13 +24,8 @@
         </ul>
         <form action="/signup" method="post" class="signup">
           <input name="full_name" placeholder="Votre nom" required>
-          <input name="email" type="email" placeholder="Email" required>
-          <select name="profile">
-            {% for key in prompts %}
-              <option value="{{ key }}">{{ key|capitalize }}</option>
-            {% endfor %}
-          </select>
-          <button type="submit">Créer ma Betty</button>
+          <input name="email" type="email" placeholder="Email" required>          
+         <button type="submit">Créer ma Betty</button>
         </form>
       </div>
     </section>
