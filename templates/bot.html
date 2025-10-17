@@ -3,15 +3,16 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Betty — Intégration</title>
+  <title>Betty — Intégration de votre bot</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <style>
     :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb}
     *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
     body{margin:0;background:var(--bg);color:var(--text)}
     .wrap{max-width:980px;margin:40px auto;padding:0 16px}
     h1{font-size:32px;margin:0 0 12px}
-    .card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
     .muted{color:#9ca3af}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
     code.block{display:block;background:#0b1220;border:1px solid #1f2937;border-radius:10px;padding:16px;white-space:pre-wrap;word-break:break-word}
     .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
     button{background:var(--btn);border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
@@ -19,43 +20,64 @@
     .kv{display:grid;grid-template-columns:160px 1fr;gap:8px;margin-top:10px}
     .kv div{padding:6px 0;border-bottom:1px dashed #1f2937}
     .badge{display:inline-block;padding:6px 10px;background:#1f2937;border-radius:999px;font-size:12px;color:#cbd5e1}
+    .tips li{margin:6px 0}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Étape finale — Ajouter le bot sur votre site</h1>
-  <p class="muted">Copiez-collez ce bloc à la fin de votre page (avant <code>&lt;/body&gt;</code>), ou envoyez-le à votre webmaster.</p>
+  <h1>Étape finale — Intégrer votre bot sur votre site</h1>
+  <p class="muted">
+    Copiez-collez le bloc ci-dessous **tel quel** à la fin de votre page (avant <code>&lt;/body&gt;</code>).
+    Exemple : Wix, WordPress, Webflow, site HTML, etc.
+  </p>
 
   <div class="card">
-    <div class="badge">tenant: {{ tenant }}</div>
+    <div class="badge">tenant : {{ tenant }}</div>
+
     <div class="kv">
       <div>Métier</div><div>{{ role }}</div>
-      <div>Couleur</div><div><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:{{ color }};vertical-align:-2px;margin-right:6px;"></span>{{ color }}</div>
+      <div>Couleur</div>
+      <div>
+        <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:{{ color }};vertical-align:-2px;margin-right:6px;"></span>
+        {{ color }}
+      </div>
       <div>Avatar</div><div>{{ "fourni" if avatar else "par défaut" }}</div>
     </div>
 
-    <h3>Bloc d’intégration</h3>
+    <h3 style="margin-top:16px;">Bloc d’intégration</h3>
     <code class="block" id="embedBlock"></code>
 
     <div class="btns">
       <button id="copyBtn">Copier le bloc</button>
       <button class="secondary" id="testBtn">Tester dans un onglet</button>
     </div>
+
+    <ul class="tips muted" style="margin-top:12px;">
+      <li><strong>Wix</strong> → Paramètres de la page → <em>Intégrations personnalisées</em> → bloc <em>HTML</em> → collez le code.</li>
+      <li><strong>WordPress</strong> → Page/Article → éditeur Gutenberg → bloc <em>HTML personnalisé</em> → collez le code.</li>
+      <li><strong>Webflow</strong> → Page settings → <em>Before &lt;/body&gt;</em> → collez le code → Publish.</li>
+      <li>Après publication, la bulle “Betty” apparaît en bas à droite de votre site.</li>
+    </ul>
   </div>
 
   <div class="card">
-    <h3>Prévisualisation</h3>
+    <h3>Prévisualisation (live sur cette page)</h3>
     <div id="preview"></div>
   </div>
 </div>
 
 <script>
+  // Paramètres injectés par Flask/Jinja
   const TENANT = {{ tenant|tojson }};
   const ROLE   = {{ role|tojson }};
   const COLOR  = {{ color|tojson }};
   const AVATAR = {{ avatar|tojson }};
-  const EMBED_SRC = "https://bettybots-flote-abonement.onrender.com/static/embed.js";
 
+  // URL du script d’embed (ton instance Render)
+  const EMBED_SRC = "{{ ( (request.host_url.rstrip('/')) + url_for('static', filename='embed.js') ).replace('//', 'https://').replace('https:https://','https://') }}";
+  // Astuce ci-dessus : construit une URL absolue https://.../static/embed.js
+
+  // Construit le snippet <script ...>
   function buildSnippet() {
     const attrs = [
       `src="${EMBED_SRC}"`,
@@ -67,21 +89,30 @@
     return `<script ${attrs}></script>`;
   }
 
+  // Remplir le bloc code
   const block = document.getElementById("embedBlock");
   block.textContent = buildSnippet();
 
+  // Copier
   document.getElementById("copyBtn").addEventListener("click", ()=>{
-    navigator.clipboard.writeText(block.textContent).then(()=>alert("Bloc copié ✅"));
+    navigator.clipboard.writeText(block.textContent)
+      .then(()=>alert("Bloc copié ✅ — Collez-le avant </body> sur votre site."))
+      .catch(()=>alert("Impossible de copier automatiquement. Sélectionnez le bloc et copiez-le manuellement."));
   });
 
+  // Tester dans un onglet (HTML minimal avec le snippet)
   document.getElementById("testBtn").addEventListener("click", ()=>{
     const html = `<!doctype html><meta charset="utf-8"><title>Test Betty</title><body style="font-family:system-ui;margin:40px;">
-<h2>Test — Intégration Betty</h2><p>Ce document charge le même bloc d’intégration.</p>${block.textContent}</body>`;
+<h2>Test — Intégration Betty</h2>
+<p>Ce document charge le même bloc d’intégration que celui à copier.</p>
+${block.textContent}
+</body>`;
     const blob = new Blob([html], {type:"text/html;charset=utf-8"});
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
   });
 
+  // Prévisualisation live sur cette page
   (function injectPreview(){
     const s = document.createElement("script");
     s.src = EMBED_SRC;
