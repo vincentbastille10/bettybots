@@ -1,12 +1,5 @@
 # betty_rules/dialog_manager.py
-# ----------------------------------------------------------------------
-# Orchestrateur "rule-based" pour Betty.
-# - Charge le pack YAML selon le métier (via loader.load_pack)
-# - Détecte un intent simple (regex/mots-clés) via nlu_rules.detect_intent
-# - Cherche la meilleure FAQ via nlu_rules.best_match
-# - Priorise la QUALIFICATION DE LEAD (slots) avec une collecte progressive
-# ----------------------------------------------------------------------
-
+# Orchestrateur "rule-based" pour Betty
 from __future__ import annotations
 from typing import Dict, Any, List
 
@@ -28,9 +21,9 @@ LEAD_ASK = {
     "delai": "Quel est votre délai idéal ?",
 }
 
-# Petites heuristiques de capture à la volée
+# Heuristiques de capture à la volée
 def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
-    t = text.strip()
+    t = (text or "").strip()
     if "@" in t and not ses["slots"].get("email"):
         ses["slots"]["email"] = t
     if any(t.startswith(p) for p in ("06", "07")) and not ses["slots"].get("telephone"):
@@ -46,7 +39,6 @@ def _ask_for(slot: str) -> str:
     return LEAD_ASK.get(slot, "D’accord, j’ai besoin d’une information supplémentaire.")
 
 def _normalize_role(role: str) -> str:
-    """Rôle en minuscules, variantes simplifiées (cohérent avec loader)."""
     s = (role or "").strip().lower()
     s = s.replace(" / ", " ").replace("/", " ").replace("_", " ").replace("-", " ")
     s = s.replace("avocat avocate", "avocat")
@@ -70,16 +62,16 @@ def _continue_lead_flow(ses, text: str, slots_order: List[str]) -> str:
 
 def reply(tenant: str, role: str, text: str) -> str:
     """
-    Point d’entrée :
+    Entrée API :
       - tenant : identifiant client (mémoire session)
-      - role   : métier affiché dans le dashboard ("Avocat / Avocate", "médecin", etc.)
+      - role   : métier affiché ("Avocat / Avocate", "agent immobilier", "medecin", etc.)
       - text   : message utilisateur
-    Retourne une réponse texte.
+    Retour : réponse texte.
     """
     ses = get_session(tenant)
     role_norm = _normalize_role(role)
 
-    # Charge pack YAML (faqs, intents, lead_form)
+    # Charge pack YAML
     pack = load_pack(role_norm) or {}
     faqs = pack.get("faqs") or []
     intents = pack.get("intents") or []
@@ -87,26 +79,24 @@ def reply(tenant: str, role: str, text: str) -> str:
 
     user = (text or "").strip()
     if not user:
-        # Si l'utilisateur envoie une chaîne vide
         if not ses["slots"].get("email"):
             return "Je peux vous renseigner et vous mettre en relation. Souhaitez-vous me laisser un e-mail pour vous recontacter ?"
         return "Je vous écoute 🙂"
 
-    # Si on est déjà dans un flux de qualification → priorité absolue
+    # Si on est déjà en collecte → priorité
     if ses.get("state") == "lead":
         return _continue_lead_flow(ses, user, slots_order)
 
-    # Intent explicite (rdv/contact/estimation/…)
+    # Intent explicite (rdv/contact/…)
     intent = detect_intent(user, intents)
     if intent in {"start_lead", "rdv", "contact"}:
         return _start_lead(ses, slots_order)
 
-    # FAQ par similarité (meilleur match)
+    # FAQ par similarité (top 1)
     best = best_match(user, faqs, k=1)
     if best:
         top = best[0]
         answer = render(top.get("a", ""), {"role": role_norm})
-        # Petite relance lead si l'email n'est pas connu
         if not ses["slots"].get("email"):
             answer += "\n\nSouhaitez-vous être recontacté·e ? Je peux enregistrer vos coordonnées."
         return answer or "Je n’ai pas la réponse exacte, mais je peux vous mettre en relation rapidement."
