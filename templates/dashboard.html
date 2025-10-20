@@ -1,110 +1,122 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Betty — Configuration</title>
+  <meta charset="utf-8" />
+  <title>Configuration de votre bot</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <style>
-    :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb;--pill:#1f2937}
-    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
-    body{margin:0;background:var(--bg);color:var(--text)}
-    .wrap{max-width:980px;margin:40px auto;padding:0 16px}
-    h1{font-size:28px;margin:0 0 12px}
-    .muted{color:var(--muted)} .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
-    .row{display:grid;grid-template-columns:1fr 2fr;gap:16px;align-items:center;padding:12px 0;border-bottom:1px dashed #1f2937}
-    .row:last-child{border-bottom:0}
-    select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:var(--text)}
-    .swatches{display:flex;gap:10px;flex-wrap:wrap}
-    .swatch{width:36px;height:36px;border-radius:999px;border:2px solid #0b1220;cursor:pointer;outline:2px solid transparent}
-    .swatch.active{outline:2px solid #fff}
-    .avatars{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-    .avatar{border:2px solid #1f2937;border-radius:12px;overflow:hidden;background:#0b1220;cursor:pointer}
-    .avatar img{width:100%;height:180px;object-fit:cover}
-    .avatar.active{border-color:#fff;box-shadow:0 0 0 2px #fff inset}
-    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
-    button{background:var(--btn);border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
-    button.secondary{background:#334155}
-    .pill{display:inline-block;padding:6px 10px;background:var(--pill);border-radius:999px;font-size:12px;color:#cbd5e1}
+    body{background:#0d1117;color:#e5e7eb;font-family:Inter,system-ui,sans-serif;margin:0;padding:32px}
+    h1{margin:0 0 24px}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:20px;max-width:920px}
+    .row{margin-bottom:18px}
+    label{display:block;margin-bottom:8px;font-weight:600}
+    select, input[type=text], textarea{width:100%;background:#0b1220;border:1px solid #293041;color:#fff;border-radius:8px;padding:10px 12px}
+    .flex{display:flex;gap:16px;flex-wrap:wrap}
+    .color-dot{width:28px;height:28px;border-radius:50%;border:2px solid #1f2937;cursor:pointer}
+    .avatars{display:grid;grid-template-columns:repeat(3, 200px);gap:16px}
+    .avatar{border:2px solid transparent;border-radius:12px;overflow:hidden;cursor:pointer}
+    .avatar.selected{border-color:#2563eb}
+    .avatar img{width:100%;height:140px;object-fit:cover;display:block}
+    .btns{display:flex;gap:10px;margin-top:8px}
+    .btn{background:#1f2937;border:1px solid #374151;color:#e5e7eb;padding:10px 14px;border-radius:8px;cursor:pointer}
+    .btn.primary{background:#2563eb;border-color:#1d4ed8}
   </style>
 </head>
 <body>
-<div class="wrap">
   <h1>Configuration de votre bot</h1>
-  <div class="muted">Bienvenue {{ name }} ({{ email }}) — tenant: <span class="pill">{{ tenant }}</span></div>
+  <p>Bienvenue {{ name }} ({{ email }}) — <b>tenant:</b> {{ tenant }}</p>
 
-  <form id="cfgForm" method="post" action="/save">
-    <input type="hidden" name="tenant" value="{{ tenant }}"/>
+  <form method="POST" action="{{ url_for('save_settings') }}" class="card">
+    <input type="hidden" name="tenant" value="{{ tenant }}" />
+    <input type="hidden" id="avatar" name="avatar" value="{{ avatar or '' }}" />
+    <input type="hidden" id="color"  name="color"  value="{{ color or '#2563eb' }}" />
 
-    <div class="card">
-      <div class="row">
-        <label>Métier</label>
-        <div>
-          <select name="role" id="role">
-            <option value="psychologue">Psychologue</option>
-            <option value="agent-immobilier">Agent Immobilier</option>
-            <option value="avocat">Avocat / Avocate</option>
-            <option value="medecin">Médecin</option>
-            <option value="comptable">Comptable</option>
-            <option value="danse">Danse (assistant·e)</option>
-          </select>
-        </div>
+    <!-- Métier -->
+    <div class="row">
+      <label for="role">Métier</label>
+      <select id="role" name="role">
+        <option value="psychologue" {{ 'selected' if role=='psychologue' else '' }}>Psychologue</option>
+        <option value="agent immobilier" {{ 'selected' if role=='agent immobilier' else '' }}>Agent Immobilier</option>
+        <option value="avocat" {{ 'selected' if role=='avocat' else '' }}>Avocat / Avocate</option>
+        <option value="medecin" {{ 'selected' if role=='medecin' else '' }}>Médecin</option>
+        <option value="comptable" {{ 'selected' if role=='comptable' else '' }}>Comptable</option>
+        <option value="danse" {{ 'selected' if role=='danse' else '' }}>Danse (assistant·e)</option>
+      </select>
+    </div>
+
+    <!-- Couleur -->
+    <div class="row">
+      <label>Couleur (thème)</label>
+      <div class="flex" id="colorPicker">
+        {% for c in ['#2563eb','#22c55e','#8b5cf6','#ef4444','#f59e0b','#06b6d4','#111827','#f5f5f5'] %}
+          <div class="color-dot" data-color="{{ c }}" style="background:{{ c }}"></div>
+        {% endfor %}
       </div>
+    </div>
 
-      <div class="row">
-        <label>Couleur</label>
-        <div class="swatches" id="swatches">
-          <div class="swatch" data-color="#2563eb" style="background:#2563eb"></div>
-          <div class="swatch" data-color="#16a34a" style="background:#16a34a"></div>
-          <div class="swatch" data-color="#9333ea" style="background:#9333ea"></div>
-          <div class="swatch" data-color="#ef4444" style="background:#ef4444"></div>
-          <div class="swatch" data-color="#f59e0b" style="background:#f59e0b"></div>
-          <div class="swatch" data-color="#0ea5e9" style="background:#0ea5e9"></div>
-        </div>
-        <input type="hidden" name="color" id="color" value="#2563eb"/>
+    <!-- Avatar -->
+    <div class="row">
+      <label>Avatar</label>
+      <div class="avatars" id="avatarGrid">
+        <!-- Mets ici tes URLs d'avatars (3 exemples) -->
+        <div class="avatar"><img data-src="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg" alt=""></div>
+        <div class="avatar"><img data-src="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg" alt=""></div>
+        <div class="avatar"><img data-src="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg" alt=""></div>
       </div>
+    </div>
 
-      <div class="row">
-        <label>Avatar</label>
-        <div class="avatars" id="avatars">
-          <label class="avatar">
-            <input type="radio" name="avatar" value="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg" style="display:none">
-            <img src="https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg" alt="Betty Médecine">
-          </label>
-          <label class="avatar">
-            <input type="radio" name="avatar" value="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg" style="display:none">
-            <img src="https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg" alt="Betty Agent Immobilier">
-          </label>
-          <label class="avatar">
-            <input type="radio" name="avatar" value="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg" style="display:none">
-            <img src="https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg" alt="Betty Avocate">
-          </label>
-        </div>
-      </div>
+    <!-- Personnalité -->
+    <div class="row">
+      <label for="persona">Personnalité</label>
+      <select id="persona" name="persona">
+        <option value="neutre" {{ 'selected' if persona=='neutre' else '' }}>Neutre (clair, pro)</option>
+        <option value="bienveillante" {{ 'selected' if persona=='bienveillante' else '' }}>Bienveillante (chaleureuse)</option>
+        <option value="directe" {{ 'selected' if persona=='directe' else '' }}>Directe (rapide, concise)</option>
+        <option value="experte" {{ 'selected' if persona=='experte' else '' }}>Experte (détaillée)</option>
+      </select>
+    </div>
+
+    <!-- Message d’accueil -->
+    <div class="row">
+      <label for="welcome_message">Message d’accueil</label>
+      <textarea id="welcome_message" name="welcome_message" rows="3"
+        placeholder="👋 Bonjour ! Je suis Betty, l’assistante AI. Posez votre question…">{{ welcome_message or "👋 Bonjour ! Je suis Betty, l’assistante AI. Posez votre question…" }}</textarea>
+      <small>Le nom “Betty” reste fixe, tu personnalises le reste.</small>
     </div>
 
     <div class="btns">
-      <button type="submit">Enregistrer et prévisualiser</button>
-      <button type="button" class="secondary" onclick="window.location='/'">Retour accueil</button>
+      <button class="btn primary" type="submit">Enregistrer & prévisualiser</button>
+      <a class="btn" href="{{ url_for('welcome') }}">Retour accueil</a>
     </div>
   </form>
-</div>
 
-<script>
-  const sw = document.querySelectorAll('.swatch');
-  const colorHidden = document.getElementById('color');
-  sw.forEach(el=>{
-    el.addEventListener('click', ()=>{
-      sw.forEach(s=>s.classList.remove('active'));
-      el.classList.add('active');
-      colorHidden.value = el.dataset.color;
+  <script>
+    // Couleur
+    const colorInput = document.getElementById('color');
+    document.querySelectorAll('#colorPicker .color-dot').forEach(dot=>{
+      if (dot.dataset.color.toLowerCase() === (colorInput.value||'').toLowerCase()) {
+        dot.style.outline='3px solid #fff';
+      }
+      dot.addEventListener('click', ()=>{
+        colorInput.value = dot.dataset.color;
+        document.querySelectorAll('#colorPicker .color-dot').forEach(d=>d.style.outline='none');
+        dot.style.outline='3px solid #fff';
+      });
     });
-  });
-  const labels = document.querySelectorAll('.avatar');
-  labels.forEach(l=>{
-    l.addEventListener('click', ()=>{
-      labels.forEach(x=>x.classList.remove('active'));
-      l.classList.add('active');
+
+    // Avatar
+    const avatarInput = document.getElementById('avatar');
+    const current = avatarInput.value;
+    document.querySelectorAll('#avatarGrid .avatar').forEach(box=>{
+      const url = box.querySelector('img').dataset.src;
+      box.querySelector('img').src = url;
+      if (current && url === current) box.classList.add('selected');
+      box.addEventListener('click', ()=>{
+        avatarInput.value = url;
+        document.querySelectorAll('#avatarGrid .avatar').forEach(b=>b.classList.remove('selected'));
+        box.classList.add('selected');
+      });
     });
-  });
-</script>
+  </script>
 </body>
 </html>
