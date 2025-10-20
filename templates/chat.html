@@ -1,165 +1,164 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>{{ brand }} – Assistant {{ (cfg.prompt_profile or 'métier')|capitalize }}</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Betty — votre assistante</title>
   <style>
-    :root{
-      --bb-bg: #fff5f8;
-      --bb-card: #ffffff;
-      --bb-accent: {{ cfg.accent or '#ff66a1' }};
-      --bb-accent-soft: color-mix(in srgb, {{ cfg.accent or '#ff66a1' }} 20%, #fff);
-      --bb-text: #3a2a35;
-      --bb-muted: #7e5e70;
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff6fa;
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
     }
-    body { background: var(--bb-bg); color: var(--bb-text); font-family: "Poppins", sans-serif; }
-    .betty-wrap{ max-width: 960px; margin: 28px auto 40px; padding: 0 16px; }
-    .betty-top{ text-align:center; margin-bottom: 16px; }
-    .logo{ width: 70px; height: 70px; margin: 0 auto 12px; border-radius: 50%; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .logo img{ width:100%; height:100%; object-fit:cover; }
-    .hello{
-      display:inline-block;
-      padding:18px 22px;
-      border-radius:18px;
-      background: var(--bb-accent-soft);
-      color: var(--bb-text);
-      box-shadow: 0 10px 30px rgba(0,0,0,.05);
-      max-width: 880px;
-      line-height:1.4;
+
+    .header {
+      text-align: center;
+      margin-top: 40px;
     }
-    .hello b{ color:#2b1924 }
-    .recap{
-      background:#fff; border:1px solid #f4d6e4; border-radius:18px;
-      padding:16px 18px; margin:20px auto; max-width:900px;
+
+    .header img {
+      width: 100px;
+      height: 100px;
+      margin-bottom: 10px;
     }
-    .recap h3{ margin:0 0 10px; font-size:16px; color:#432b38 }
-    .recap ul{ margin:0; padding-left:18px; color:var(--bb-muted); line-height:1.5; }
-    .betty-chat{
-      background: var(--bb-card);
-      border-radius:24px;
-      padding:22px;
-      margin: 22px auto 12px;
+
+    .header h2 {
+      background: #f0c9e0;
+      color: #1a1a1a;
+      padding: 15px 25px;
+      border-radius: 20px;
+      display: inline-block;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .chat-box {
+      width: 80%;
       max-width: 900px;
-      box-shadow: 0 18px 50px rgba(0,0,0,.08);
+      height: 400px;
+      background: white;
+      border-radius: 30px;
+      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.1);
+      margin-top: 30px;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
     }
-    #messages{ height:min(48vh,480px); min-height:220px; overflow:auto; padding:10px 6px; display:flex; flex-direction:column; gap:12px; }
-    .bubble{ max-width:75%; padding:13px 16px; border-radius:16px; line-height:1.45; font-size:16px; }
-    .bubble.bot{ align-self:flex-start; background:#fff3fa; border:1px solid #ffd3e9; }
-    .bubble.user{ align-self:flex-end; background:#edf1ff; border:1px solid #cfd7ff; }
-    .betty-row{ display:flex; gap:10px; margin-top:12px; }
-    .betty-row input{ flex:1; font-size:16px; padding:14px 16px; border-radius:14px; border:1px solid #e6d8e1; background:#fff; outline:none; }
-    .betty-row button{ font-size:16px; padding:14px 18px; border-radius:14px; border:0; background: var(--bb-accent); color:#fff; cursor:pointer; transition:.2s ease; }
-    .betty-row button:hover{ filter:brightness(1.05); transform:scale(1.02); }
-    .tiny{ color: var(--bb-muted); text-align:center; margin-top:12px; font-size:13px; }
+
+    .message {
+      max-width: 70%;
+      margin-bottom: 15px;
+      padding: 12px 18px;
+      border-radius: 20px;
+      font-size: 16px;
+      line-height: 1.4;
+    }
+
+    .user {
+      align-self: flex-end;
+      background: #fdd0e8;
+    }
+
+    .bot {
+      align-self: flex-start;
+      background: #f4f4f8;
+    }
+
+    .input-zone {
+      width: 80%;
+      max-width: 900px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 20px;
+      background: white;
+      border-radius: 30px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      padding: 5px 10px;
+    }
+
+    .input-zone input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 16px;
+      padding: 15px;
+      border-radius: 30px;
+      background: transparent;
+    }
+
+    .input-zone button {
+      background: #ff5fa2;
+      border: none;
+      color: white;
+      font-weight: bold;
+      font-size: 16px;
+      border-radius: 25px;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .input-zone button:hover {
+      background: #ff3e91;
+    }
   </style>
 </head>
+
 <body>
-  <div class="betty-wrap">
-    <div class="betty-top">
-      {% if cfg.avatar_url %}
-        <div class="logo"><img src="{{ cfg.avatar_url }}" alt="Avatar"></div>
-      {% endif %}
-      <div class="hello">
-        <b>Bonjour ! Je suis Betty</b>, votre assistante IA.  
-        Je peux vous aider à comprendre vos besoins, vous conseiller, ou vous recontacter si vous le souhaitez 🌸  
-        Que puis-je faire pour vous aujourd’hui ?
-      </div>
-    </div>
+  <div class="header">
+    <img src="{{ avatar or 'https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg' }}" alt="Betty" />
+    <h2>Bonjour ! Je suis Betty,<br> l’assistante du Centre de Danse Delphine Letort 🩰<br>
+    Que puis-je faire pour vous ?</h2>
+  </div>
 
-    <div class="recap">
-      <h3>Récapitulatif</h3>
-      <ul>
-        <li><strong>Métier :</strong> {{ (cfg.prompt_profile or '—')|capitalize }}</li>
-        <li><strong>Personnalité :</strong> {% if cfg.prompt_custom %}{{ cfg.prompt_custom }}{% else %}—{% endif %}</li>
-        <li><strong>Avatar :</strong> {% if cfg.avatar_url %}défini{% else %}non défini{% endif %}</li>
-      </ul>
-    </div>
+  <div class="chat-box" id="chat-box">
+    <div class="message bot">Bonjour 👋 Je suis là pour vous aider !</div>
+  </div>
 
-    <div class="betty-chat">
-      <div id="messages">
-        <div class="bubble bot">
-          👋 Bonjour ! Je suis Betty, votre assistante IA.  
-          Pour mieux vous répondre, puis-je connaître votre prénom ? 😊
-        </div>
-      </div>
-
-      <div class="betty-row">
-        <input id="msg" placeholder="Écrivez votre message ici…" />
-        <button id="send">Envoyer</button>
-      </div>
-    </div>
-
-    <div class="tiny">Client : {{ cfg.full_name }} — {{ cfg.email }} — ID : {{ tenant_id }}</div>
+  <div class="input-zone">
+    <input type="text" id="userInput" placeholder="Écrivez votre message ici…" />
+    <button onclick="sendMessage()">Envoyer</button>
   </div>
 
   <script>
-    const tenantId = {{ tenant_id|tojson }};
-    const sendBtn  = document.getElementById('send');
-    const input    = document.getElementById('msg');
-    const messages = document.getElementById('messages');
-    const leadData = { nom: null, email: null, besoin: null };
+    const chatBox = document.getElementById('chat-box');
+    const userInput = document.getElementById('userInput');
 
-    function addBubble(text, who){
+    function addMessage(content, sender) {
       const div = document.createElement('div');
-      div.className = 'bubble ' + who;
-      div.textContent = text;
-      messages.appendChild(div);
-      messages.scrollTop = messages.scrollHeight;
+      div.className = 'message ' + sender;
+      div.innerText = content;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    async function sendMessage(){
-      const text = input.value.trim();
-      if(!text) return;
-      addBubble(text, 'user');
-      input.value = '';
+    async function sendMessage() {
+      const text = userInput.value.trim();
+      if (!text) return;
 
-      // Logique simple de collecte de lead
-      if(!leadData.nom){
-        leadData.nom = text;
-        addBubble(`Enchantée ${text} 🌸 ! Puis-je avoir votre email pour vous envoyer des infos ?`, 'bot');
-        return;
-      }
-      if(!leadData.email && text.includes('@')){
-        leadData.email = text;
-        addBubble(`Merci ${leadData.nom} 💌 ! Pouvez-vous me dire en deux mots votre besoin ou projet ?`, 'bot');
-        return;
-      }
-      if(!leadData.besoin){
-        leadData.besoin = text;
-        addBubble(`Merci pour ces précisions 🙏 ! Je vais transmettre votre demande à notre équipe.`, 'bot');
+      addMessage(text, 'user');
+      userInput.value = '';
 
-        // Envoi des données lead à l’API
-        try {
-          await fetch(`/api/lead/${tenantId}`, {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(leadData)
-          });
-        } catch(e){ console.error(e); }
+      // Simule la réponse de Betty (tu pourras connecter ton backend Flask ici)
+      addMessage('Je réfléchis...', 'bot');
+      await new Promise(r => setTimeout(r, 1200));
 
-        addBubble(`Souhaitez-vous continuer à discuter ou recevoir un devis personnalisé ? 💬`, 'bot');
-        return;
-      }
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
 
-      // Sinon, conversation normale
-      try {
-        const res = await fetch(`/api/chat/${tenantId}`, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({message:text})
-        });
-        const data = await res.json();
-        addBubble(data.reply || '[…]', 'bot');
-      } catch(e){
-        addBubble("Désolé, une erreur réseau est survenue.", "bot");
-        console.error(e);
-      }
+      const data = await res.json();
+      document.querySelector('.message.bot:last-child').innerText = data.reply || 'Désolée, je n’ai pas compris.';
     }
-
-    sendBtn.addEventListener('click', sendMessage);
-    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendMessage(); });
   </script>
 </body>
 </html>
