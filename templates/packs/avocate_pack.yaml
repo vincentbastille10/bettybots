@@ -5,6 +5,53 @@ meta:
     - "Information générale uniquement, pas un conseil juridique personnalisé."
 nlu:
   intents:
+  - name: start_lead
+    patterns: ["contact", "rappel", "être rappel", "prendre rendez", "rdv", "urgence"]
+  - name: tarif
+    patterns: ["tarif", "prix", "honoraires", "combien", "coût"]
+  - name: penal
+    patterns: ["garde à vue", "correctionnel", "assises", "plainte", "pénal"]
+  - name: famille
+    patterns: ["divorce", "garde", "pension alimentaire", "famille"]
+  - name: travail
+    patterns: ["licenciement", "prud'hommes", "rupture conventionnelle", "harcèlement"]
+  - name: immo
+    patterns: ["servitude", "vices cachés", "copropriété", "promesse de vente"]
+
+lead_form: [nom, email, telephone, besoin, budget, delai]
+
+faqs:
+  - q: "Quelle différence entre mandat ad litem et ad judicia ?"
+    a: "Ad litem : pouvoir spécial limité à une affaire. Ad judicia : pouvoir général pour représenter en justice. Nous vous conseillons selon le dossier."
+    tags: [procédure]
+  - q: "Pouvez-vous m’assister en garde à vue ?"
+    a: "Oui, intervention 24/7 selon disponibilité. Dites “urgence” et je recueille vos coordonnées pour un rappel immédiat."
+    tags: [pénal, urgence]
+  - q: "Combien coûtent vos honoraires ?"
+    a: "Forfait, temps passé ou convention de résultat selon la nature du dossier. Un devis clair est proposé dès le premier rendez-vous."
+    tags: [honoraires]
+  - q: "Divorce par consentement mutuel : délais ?"
+    a: "En moyenne 1 à 3 mois après la signature de la convention chez l’avocat et dépôt au notaire, selon la situation."
+    tags: [famille, divorce]
+  - q: "Rupture conventionnelle : que vérifiez-vous ?"
+    a: "Base de calcul, délais, vices du consentement, indemnités, clauses post-contractuelles. Nous sécurisons la procédure."
+    tags: [travail]
+  - q: "Vices cachés après achat immobilier"
+    a: "Analyse des preuves, expertise amiable, action en résolution/réduction de prix. Nous vous indiquons la stratégie."
+    tags: [immobilier]
+  - q: "Assistance devant le conseil de prud’hommes"
+    a: "Accompagnement complet : saisine, audience de conciliation, bureau de jugement, exécution."
+    tags: [travail]
+  - q: "Peut-on contester un PV d’assemblée générale de copropriété ?"
+    a: "Oui, dans les délais et pour des motifs précis (irrégularités de convocation/vote). Étude du dossier nécessaire."
+    tags: [copropriété]
+  - q: "Plainte simple ou plainte avec constitution de partie civile ?"
+    a: "La seconde déclenche l’instruction sous conditions (caution). Nous vous guidons sur l’option la plus adaptée."
+    tags: [pénal]
+  - q: "Puis-je obtenir l’aide juridictionnelle ?"
+    a: "Selon vos ressources et le type de procédure. Nous vous aidons à constituer le dossier."
+    tags: [aide juridictionnelle]
+intents:
     licenciement:
       synonyms: ["licenciement", "licencié", "prud'hommes", "rupture conventionnelle", "rupture co", "mise à pied"]
       slots: ["date_notification?", "motif?", "anciennete?", "salaire_ref?"]
