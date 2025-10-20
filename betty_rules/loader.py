@@ -1,40 +1,29 @@
 # betty_rules/loader.py
-# Charge les packs YAML en cherchant dans plusieurs emplacements possibles.
-# Priorité : ./templates/packs  -> ./packs  -> ./static/packs
-#
-# Utilisation :
-#   from betty_rules.loader import load_pack
-#   data = load_pack("agent immobilier")   # via mapping ROLE_TO_FILE
-#   data = load_pack("agent_immobilier")   # ou nom direct (sans extension)
+# Chargement tolérant des packs YAML (FAQ + intents) pour chaque métier.
 
+from __future__ import annotations
 import os
 import yaml
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 _cache: Dict[str, dict] = {}
 
-# Mapping "rôle normalisé" -> nom de fichier pack
-# (le rôle est normalisé par dialog_manager._normalize_role)
-ROLE_TO_FILE = {
-    "psychologue": "psychologue_pack.yaml",
-    "agent immobilier": "agent_immobilier_pack.yaml",
-    "avocat": "avocat_pack.yaml",
-    "medecin": "medecine_pack.yaml",
-    "comptable": "comptable_pack.yaml",
-    "danse": "danse_pack.yaml",
+# Rôle normalisé (dialog_manager._normalize_role) -> "base name" attendu
+# On ne met PAS l'extension ici; on génère plusieurs variantes ensuite.
+ROLE_TO_BASENAME = {
+    "psychologue": "psychologue",
+    "agent immobilier": "agent_immobilier",
+    "avocat": "avocat",
+    "medecin": "medecin",          # fichier préféré: medecin_pack.yaml
+    "comptable": "comptable",
+    "danse": "danse",
 }
 
 def _proj_root() -> str:
-    """
-    betty_rules/loader.py -> parent (racine du projet).
-    """
     here = os.path.dirname(__file__)
     return os.path.abspath(os.path.join(here, ".."))
 
-def _candidate_dirs() -> list:
-    """
-    Emplacements possibles des packs (dans cet ordre de priorité).
-    """
+def _candidate_dirs() -> List[str]:
     root = _proj_root()
     return [
         os.path.join(root, "templates", "packs"),
@@ -42,24 +31,49 @@ def _candidate_dirs() -> list:
         os.path.join(root, "static", "packs"),
     ]
 
-def _resolve_filename(name_or_role: str) -> list:
+def _candidate_filenames(key: str) -> List[str]:
     """
-    Produit une liste de noms de fichiers possibles pour un rôle/nom donné.
-    - Si c'est un rôle connu: utilise ROLE_TO_FILE[rôle]
-    - Sinon, essaie plusieurs variantes: xxx_pack.yaml, xxx.yaml
+    key peut être un rôle normalisé ('agent immobilier') ou un nom de pack ('agent_immobilier').
+    On renvoie une liste de noms de fichiers candidats (ordre de préférence).
     """
-    # 1) role -> fichier
-    mapped = ROLE_TO_FILE.get(name_or_role)
-    if mapped:
-        return [mapped]
+    key = (key or "").strip().lower()
 
-    base = name_or_role.strip()
-    # retirer éventuelle extension déjà fournie
-    if base.endswith(".yaml"):
-        return [base]
+    names: List[str] = []
+    # 1) si c'est un rôle connu, partir de son "basename"
+    base = ROLE_TO_BASENAME.get(key)
+    if base:
+        names += [f"{base}_pack.yaml", f"{base}.yaml"]
+        # variantes tolérées
+        if base == "medecin":
+            names += ["medecine_pack.yaml", "medecine.yaml"]
+        return names
 
-    # variantes tolérantes
-    return [f"{base}_pack.yaml", f"{base}.yaml"]
+    # 2) sinon: le key est probablement déjà un "basename" ou un nom de fichier
+    #    enlever extension si fournie
+    if key.endswith(".yaml"):
+        names.append(key)
+    else:
+        names += [f"{key}_pack.yaml", f"{key}.yaml"]
+
+    # si l'utilisateur écrit "médecin/medecine" directement
+    if "medecine" in key and "medecine.yaml" not in names:
+        names += ["medecine_pack.yaml", "medecine.yaml"]
+    if "medecin" in key and "medecin.yaml" not in names:
+        names += ["medecin_pack.yaml", "medecin.yaml"]
+
+    # déduire éventuellement version underscore <-> espace
+    if " " in key:
+        names += [f"{key.replace(' ', '_')}_pack.yaml", f"{key.replace(' ', '_')}.yaml"]
+    if "_" in key:
+        names += [f"{key.replace('_', ' ')}_pack.yaml", f"{key.replace('_', ' ')}.yaml"]
+
+    # supprimer doublons en préservant l'ordre
+    seen = set()
+    uniq: List[str] = []
+    for n in names:
+        if n not in seen:
+            uniq.append(n); seen.add(n)
+    return uniq
 
 def _try_open(path: str) -> Optional[dict]:
     try:
@@ -80,25 +94,28 @@ def load_pack(name_or_role: str) -> dict:
       - ./templates/packs
       - ./packs
       - ./static/packs
-    Le paramètre peut être un rôle ("agent immobilier") ou un nom de pack ("agent_immobilier").
+    Paramètre:
+      - rôle normalisé (ex: "agent immobilier"), ou
+      - nom de pack (ex: "agent_immobilier" / "agent_immobilier_pack.yaml")
     """
-    key = name_or_role.strip().lower()
+    key = (name_or_role or "").strip().lower()
     if key in _cache:
         return _cache[key]
 
-    candidates = _resolve_filename(key)
-    for folder in _candidate_dirs():
-        for fname in candidates:
+    files = _candidate_filenames(key)
+    dirs  = _candidate_dirs()
+
+    for folder in dirs:
+        for fname in files:
             path = os.path.join(folder, fname)
             if os.path.isfile(path):
                 data = _try_open(path)
                 _cache[key] = data or {}
                 return _cache[key]
 
-    # rien trouvé -> log utile
     print("[packs] introuvable pour:", key)
-    print("        cherché fichiers:", ", ".join(candidates))
-    print("        dans dossiers   :", " | ".join(_candidate_dirs()))
+    print("        cherché fichiers:", ", ".join(files))
+    print("        dans dossiers   :", " | ".join(dirs))
     _cache[key] = {}
     return _cache[key]
 
