@@ -15,7 +15,10 @@ from .templates_engine import render
 # ------------------------------------------------------------
 EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 PHONE_RE = re.compile(r"(?:(?:\+|00)33|0)\s*[1-9](?:[\s\.\-]*\d{2}){4}")
-NAME_RE  = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}\s+[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}$")
+# Nom stricte (2 mots ou plus, lettres/accents/apostrophes/traits)
+NAME_STRICT_RE  = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}\s+[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}$")
+# Fallback : tokenise tous mots alphabétiques (au moins 2 lettres)
+NAME_TOKEN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ'-]{2,}")
 
 def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
     """Tente de remplir email / téléphone / nom à partir du texte libre."""
@@ -35,11 +38,17 @@ def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
         if m:
             ses["slots"]["telephone"] = m.group(0)
 
-    # nom / prénom : 2+ mots alphabétiques (tolère accents/apostrophes/traits)
+    # nom / prénom
     if not ses["slots"].get("nom"):
         line = " ".join(t.split())
-        if NAME_RE.match(line):
+        # 1) essai strict
+        if NAME_STRICT_RE.match(line):
             ses["slots"]["nom"] = line
+        else:
+            # 2) fallback tolérant : prends les 2 premiers tokens alphabétiques
+            tokens = NAME_TOKEN_RE.findall(line)
+            if len(tokens) >= 2:
+                ses["slots"]["nom"] = f"{tokens[0]} {tokens[1]}"
 
 # ------------------------------------------------------------
 # Paramètres par défaut
