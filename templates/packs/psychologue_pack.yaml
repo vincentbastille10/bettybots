@@ -1,1 +1,44 @@
+intents:
+  - name: start_lead
+    patterns: ["rdv", "prendre rendez", "contact", "rappel"]
+  - name: tarifs
+    patterns: ["tarif", "prix", "combien", "coût"]
+  - name: publics
+    patterns: ["enfant", "ado", "adolescent", "couple", "famille"]
+  - name: méthodes
+    patterns: ["TCC", "EMDR", "approche", "méthode", "thérapie"]
+
+lead_form: [nom, email, telephone, besoin, delai]
+
+faqs:
+  - q: "Comment se déroule une première séance ?"
+    a: "Entretien d’environ 45–60 minutes pour comprendre votre situation et définir un cadre. Vous décidez ensuite de la suite."
+    tags: [séance]
+  - q: "Accompagnez-vous les enfants et adolescents ?"
+    a: "Oui, avec des approches adaptées (entretien, jeux thérapeutiques, guidance parentale)."
+    tags: [enfant, ado]
+  - q: "Proposez-vous des thérapies de couple ?"
+    a: "Oui, travail axé sur la communication, les objectifs communs et la résolution de conflits."
+    tags: [couple]
+  - q: "Quelles méthodes utilisez-vous ?"
+    a: "Approches intégratives : TCC, pleine conscience, schémas précoces, outils EMDR selon indication."
+    tags: [méthodes]
+  - q: "Tarifs et prise en charge"
+    a: "Tarif communiqué avant la séance. Certaines mutuelles remboursent partiellement."
+    tags: [tarifs]
+  - q: "Support burn-out et anxiété"
+    a: "Évaluation, psycho-éducation, outils concrets (respiration, exposition graduée), suivi régulier."
+    tags: [burnout, anxiété]
+  - q: "Suivi en visio possible ?"
+    a: "Oui, selon le motif. Les modalités vous sont précisées avant la prise de rendez-vous."
+    tags: [téléconsultation]
+  - q: "Combien de séances faut-il ?"
+    a: "Cela dépend du motif et du rythme choisi. Nous fixons ensemble des objectifs évaluables."
+    tags: [séances]
+  - q: "Confidentialité"
+    a: "Le secret professionnel s’applique, dans le respect du code de déontologie."
+    tags: [déontologie]
+  - q: "Puis-je obtenir un créneau rapidement ?"
+    a: "Oui selon disponibilités. Dites “rdv” et je collecte vos coordonnées."
+    tags: [rdv]
 
