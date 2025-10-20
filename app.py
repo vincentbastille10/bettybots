@@ -11,8 +11,14 @@ import stripe
 from flask import Flask, render_template, request, redirect, jsonify, url_for
 from dotenv import load_dotenv
 
-# moteur de règles (packs YAML)
+# Moteur de règles (packs YAML)
 from betty_rules.dialog_manager import reply as rule_reply
+
+# Préchargement optionnel des packs si disponible
+try:
+    from betty_rules import loader as _packs_loader  # facultatif
+except Exception:
+    _packs_loader = None
 
 load_dotenv()
 
@@ -54,6 +60,61 @@ BRAND_NAME = os.environ.get("BRAND_NAME", "Betty Bots")
 
 # SQLite
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "payments.sqlite3"))
+
+# -----------------------------------------------------------------------------
+# RÔLES / PACKS — Normalisation & affichage (aucune techno en UI)
+# -----------------------------------------------------------------------------
+# Libellé UI -> clé pack YAML (interne)
+ROLE_ALIAS = {
+    # Santé
+    "medecin": "medecine_pack",
+    "médecin": "medecine_pack",
+    "psy": "psychologue_pack",
+    "psychologue": "psychologue_pack",
+
+    # Droit / chiffre
+    "avocat": "avocat_pack",
+    "comptable": "comptable_pack",
+
+    # Immobilier
+    "immobilier": "agent_immobilierbier",
+    "agent_immobilier": "agent_immobilierbier",
+
+    # ajoute ici tes 20 métiers (libellé UI -> clé pack)
+}
+
+DEFAULT_ROLE = "psychologue_pack"
+
+# Clé pack -> Libellé humain (pour l’UI seulement)
+DISPLAY_LABELS = {
+    "psychologue_pack": "Psychologue",
+    "medecine_pack": "Médecin",
+    "avocat_pack": "Avocat",
+    "comptable_pack": "Comptable",
+    "agent_immobilierbier": "Agent immobilier",
+    # complète selon tes packs
+}
+
+def canonical_role(role_label: str) -> str:
+    """
+    Transforme un choix UI humain (ex: 'médecin') en clé pack canonique (ex: 'medecine_pack').
+    Jamais exposé côté UI.
+    """
+    if not role_label:
+        return DEFAULT_ROLE
+    key = role_label.strip().lower()
+    return ROLE_ALIAS.get(key, DEFAULT_ROLE)
+
+def role_to_label(role: str) -> str:
+    """Transforme une clé pack en libellé humain (pour affichage UI/email)."""
+    return DISPLAY_LABELS.get(role, "Assistant")
+
+# Précharge gentiment les packs si l’API existe (no-op sinon)
+try:
+    if _packs_loader and hasattr(_packs_loader, "preload"):
+        _packs_loader.preload(set(DISPLAY_LABELS.keys()) | {DEFAULT_ROLE})
+except Exception as _e:
+    print("[packs] preload skipped:", _e)
 
 # -----------------------------------------------------------------------------
 # DB helpers
@@ -101,7 +162,7 @@ def upsert_user(tenant, name, email, role=None, color=None, avatar=None):
         c.execute("""
             INSERT INTO users(tenant, name, email, role, color, avatar, updated_at)
             VALUES(?,?,?,?,?,?,?)
-        """, (tenant, name, email, role or "psychologue", color or "#2563eb", avatar or "", now))
+        """, (tenant, name, email, role or DEFAULT_ROLE, color or "#2563eb", avatar or "", now))
     c.commit(); c.close()
 
 def get_user(tenant):
@@ -135,16 +196,12 @@ def get_sub(tenant: str):
 # Utils
 # -----------------------------------------------------------------------------
 def build_snippet(tenant, role, color, avatar):
+    """
+    ⚠️ Aucune techno dans l’UI : le snippet n’expose que le tenant.
+    Le widget côté client appellera /api/widget-config pour récupérer sa config.
+    """
     embed_src = f"{BASE_URL.rstrip('/')}/static/embed.js"
-    attrs = [
-        f'src="{embed_src}"',
-        f'data-tenant="{tenant}"',
-        f'data-role="{role}"',
-        f'data-color="{color}"',
-    ]
-    if avatar:
-        attrs.append(f'data-avatar="{avatar}"')
-    return f"<script {' '.join(attrs)}></script>"
+    return f'<script src="{embed_src}" data-tenant="{tenant}"></script>'
 
 def send_email(to_email: str, subject: str, html_body: str):
     if not (SMTP_USER and SMTP_PASS and to_email):
@@ -188,15 +245,19 @@ def dashboard():
     u = get_user(tenant)
     name = u[1] if u else ""
     email = u[2] if u else ""
-    # la page permet de choisir métier, couleur, avatar…
+    # la page permet de choisir métier (libellés humains), couleur, avatar…
     return render_template("dashboard.html", tenant=tenant, name=name, email=email)
 
 @app.route("/save", methods=["POST"])
 def save_settings():
     tenant = (request.form.get("tenant") or "").strip()
-    role   = request.form.get("role") or "psychologue"
+    role_label = request.form.get("role") or "psychologue"   # libellé UI humain
     color  = request.form.get("color") or "#2563eb"
     avatar = request.form.get("avatar") or ""
+
+    # ⚠️ Normalisation ici : on stocke TOUJOURS la clé de pack canonique
+    role = canonical_role(role_label)
+
     u = get_user(tenant)
     if not u:
         return redirect(url_for("welcome"))
@@ -210,7 +271,11 @@ def preview():
     if not u:
         return redirect(url_for("welcome"))
     _, name, email, role, color, avatar, _ = u
-    return render_template("preview.html", tenant=tenant, name=name, email=email, role=role, color=color, avatar=avatar)
+    role_label = role_to_label(role)  # UI friendly
+    # On n’affiche pas la clé tech, uniquement le label humain
+    return render_template("preview.html",
+                           tenant=tenant, name=name, email=email,
+                           role_label=role_label, color=color, avatar=avatar)
 
 # petite page de chat plein écran (utilisée par la preview)
 @app.route("/chat")
@@ -220,7 +285,9 @@ def chat_page():
     if not u:
         return redirect(url_for("welcome"))
     _, _, _, role, color, avatar, _ = u
-    return render_template("chat.html", tenant=tenant, role=role, color=color, avatar=avatar)
+    role_label = role_to_label(role)
+    return render_template("chat.html",
+                           tenant=tenant, role_label=role_label, color=color, avatar=avatar)
 
 @app.route("/pay")
 def pay():
@@ -229,9 +296,10 @@ def pay():
     if not u:
         return redirect(url_for("welcome"))
     _, name, email, role, color, avatar, _ = u
+    role_label = role_to_label(role)
     return render_template(
         "pay.html",
-        tenant=tenant, role=role, color=color, avatar=avatar,
+        tenant=tenant, role_label=role_label, color=color, avatar=avatar,
         paypal_env=PAYPAL_ENV, paypal_client_id=PAYPAL_CLIENT_ID, paypal_plan_id=PAYPAL_PLAN_ID
     )
 
@@ -249,18 +317,45 @@ def bot_page():
     if not u:
         return redirect(url_for("welcome"))
     _, name, email, role, color, avatar, _ = u
+    role_label = role_to_label(role)
 
     # Affiche "merci…" si ?paid=1
     paid_flag = request.args.get("paid") == "1"
 
     return render_template("bot.html",
-                           tenant=tenant, role=role, color=color, avatar=avatar, paid=paid_flag)
+                           tenant=tenant, role_label=role_label, color=color, avatar=avatar, paid=paid_flag)
 
 # -----------------------------------------------------------------------------
-# API CHAT (utilise toujours le rôle stocké en base pour charger le bon pack)
+# API — Widget (config & chat) sans techno visible
 # -----------------------------------------------------------------------------
+@app.route("/api/widget-config", methods=["GET"])
+def widget_config():
+    """
+    Le JS embarqué lit data-tenant, appelle cet endpoint, et reçoit UNIQUEMENT
+    des infos UI-friendly (label humain), plus des infos de style.
+    Aucune clé pack n’est exposée au client.
+    """
+    tenant = (request.args.get("tenant") or "").strip()
+    u = get_user(tenant)
+    if not u:
+        return jsonify({"ok": False, "reason": "unknown-tenant"}), 404
+    _, name, email, role, color, avatar, _ = u
+    return jsonify({
+        "ok": True,
+        "tenant": tenant,
+        "name": name,
+        "role_label": role_to_label(role),  # lisible
+        "color": color,
+        "avatar": avatar or ""
+    })
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
+    """
+    Chat API: le front envoie tenant + message.
+    On lit le rôle canonique depuis la DB, on appelle rule_reply(tenant, role, text),
+    et on renvoie une réponse texte. Aucune clé pack n’est renvoyée au client.
+    """
     data = request.get_json(force=True, silent=True) or {}
     tenant = (data.get("tenant") or "").strip()
     text   = (data.get("text") or "").strip()
@@ -269,14 +364,15 @@ def api_chat():
         return jsonify({"reply": "Missing tenant."}), 400
 
     u = get_user(tenant)
-    # rôle lu 100% depuis la DB (jamais un rôle passé par le client)
-    role = (u[3] if u else "psychologue")
+    if not u:
+        return jsonify({"reply": "Unknown tenant."}), 404
 
-    # (optionnel) log de debug
+    role = u[3] or DEFAULT_ROLE  # clé pack interne (non envoyée au client)
+    # (debug serveur)
     print(f"[chat] tenant={tenant} -> role={role}")
 
     msg = rule_reply(tenant, role, text)
-    return jsonify({"reply": msg, "role": role})
+    return jsonify({"reply": msg})
 
 # -----------------------------------------------------------------------------
 # Stripe API
@@ -335,7 +431,7 @@ def stripe_webhook():
                 email_from_stripe = obj["customer_details"].get("email") or ""
             if tenant:
                 upsert_sub(tenant, provider="stripe", status="active", email=email_from_stripe, plan_id=STRIPE_PRICE_ID)
-                # Email de confirmation avec snippet
+                # Email de confirmation avec snippet (sans techno)
                 u = get_user(tenant)
                 if u:
                     _, name, email, role, color, avatar, _ = u
@@ -396,7 +492,7 @@ def paypal_verify():
 
         if status == "ACTIVE":
             upsert_sub(tenant, provider="paypal", status="active", email=email_pp, plan_id=PAYPAL_PLAN_ID)
-            # Email de confirmation
+            # Email de confirmation (snippet sans techno)
             u = get_user(tenant)
             if u:
                 _, name, email, role, color, avatar, _ = u
