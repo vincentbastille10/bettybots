@@ -1,1 +1,44 @@
+intents:
+  - name: start_lead
+    patterns: ["prendre rendez", "rdv", "contact", "rappel", "urgence"]
+  - name: horaires
+    patterns: ["horaire", "ouverture", "fermeture", "planning"]
+  - name: remboursement
+    patterns: ["remboursement", "sécurité sociale", "mutuelle", "tiers payant"]
+  - name: certificat
+    patterns: ["certificat", "sport", "aptitude", "arrêt de travail"]
+
+lead_form: [nom, email, telephone, besoin, delai]
+
+faqs:
+  - q: "Quels sont vos horaires de consultation ?"
+    a: "Du lundi au vendredi, 9h–12h / 14h–19h. Samedi matin sur créneau réduit."
+    tags: [horaires]
+  - q: "Acceptez-vous la carte Vitale et le tiers payant ?"
+    a: "Oui. Le tiers payant est appliqué selon la situation. Munissez-vous de votre carte Vitale à jour."
+    tags: [remboursement]
+  - q: "Puis-je obtenir un certificat médical pour le sport ?"
+    a: "Oui sur rendez-vous. Amenez tout document exigé par votre club ou fédération."
+    tags: [certificat]
+  - q: "Délai pour un rendez-vous en urgence ?"
+    a: "Des créneaux d’urgence sont ouverts chaque jour. Dites “rdv” et je transmets vos coordonnées."
+    tags: [urgence]
+  - q: "Vaccinations proposées"
+    a: "Vaccins usuels adultes/enfants, rappel DTP, grippe saisonnière, recommandations selon voyage."
+    tags: [vaccin]
+  - q: "Téléconsultation possible ?"
+    a: "Oui pour certains motifs (renouvellements, conseils). Un créneau vidéo peut être proposé."
+    tags: [téléconsultation]
+  - q: "Prise de sang et analyses"
+    a: "Ordonnance fournie si nécessaire. Réalisation en laboratoire partenaire."
+    tags: [examens]
+  - q: "Suivi ALD / maladies chroniques"
+    a: "Coordination avec spécialistes, bilans réguliers, adaptation du traitement."
+    tags: [ALD]
+  - q: "Arrêt de travail : délivrance et durée"
+    a: "Selon examen clinique et contexte professionnel. Respect des règles d’arrêt (horaires de sortie, prolongations)."
+    tags: [certificat, travail]
+  - q: "Tarifs des consultations"
+    a: "Secteur conventionné. Dépassements éventuels annoncés avant l’acte."
+    tags: [tarifs]
 
