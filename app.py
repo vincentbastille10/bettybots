@@ -11,6 +11,9 @@ import stripe
 from flask import Flask, render_template, request, redirect, jsonify, url_for
 from dotenv import load_dotenv
 
+# moteur de chat (règles)
+from betty_rules.dialog_manager import reply as rule_reply
+
 load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -52,6 +55,9 @@ BRAND_NAME = os.environ.get("BRAND_NAME", "Betty Bots")
 # SQLite
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "payments.sqlite3"))
 
+DEFAULT_WELCOME = "👋 Bonjour ! Je suis Betty, l’assistante AI. Posez votre question…"
+DEFAULT_PERSONA = "neutre"
+
 # -----------------------------------------------------------------------------
 # DB helpers
 # -----------------------------------------------------------------------------
@@ -65,6 +71,8 @@ def _db_conn():
             role   TEXT,
             color  TEXT,
             avatar TEXT,
+            persona TEXT,
+            welcome_message TEXT,
             updated_at INTEGER
         )
     """)
@@ -78,32 +86,56 @@ def _db_conn():
             created_at INTEGER
         )
     """)
+    # migrations (si ancienne table sans colonnes)
+    cur = c.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "persona" not in cols:
+        c.execute("ALTER TABLE users ADD COLUMN persona TEXT DEFAULT ?", (DEFAULT_PERSONA,))
+    if "welcome_message" not in cols:
+        c.execute("ALTER TABLE users ADD COLUMN welcome_message TEXT DEFAULT ?", (DEFAULT_WELCOME,))
+    c.commit()
     return c
 
 def slug_email(email: str) -> str:
     return (email or "").lower().replace("@", "-").replace(".", "-").replace("+", "-").strip("-")
 
-def upsert_user(tenant, name, email, role=None, color=None, avatar=None):
+def upsert_user(tenant, name, email, role=None, color=None, avatar=None,
+                persona=None, welcome_message=None):
     c = _db_conn()
     now = int(time.time())
     row = c.execute("SELECT tenant FROM users WHERE tenant=?", (tenant,)).fetchone()
     if row:
         c.execute("""
-            UPDATE users SET name=?, email=?, role=COALESCE(?, role),
-                             color=COALESCE(?, color), avatar=COALESCE(?, avatar),
-                             updated_at=?
+            UPDATE users SET
+                name=?,
+                email=?,
+                role=COALESCE(?, role),
+                color=COALESCE(?, color),
+                avatar=COALESCE(?, avatar),
+                persona=COALESCE(?, persona),
+                welcome_message=COALESCE(?, welcome_message),
+                updated_at=?
             WHERE tenant=?
-        """, (name, email, role, color, avatar, now, tenant))
+        """, (name, email, role, color, avatar, persona, welcome_message, now, tenant))
     else:
         c.execute("""
-            INSERT INTO users(tenant, name, email, role, color, avatar, updated_at)
-            VALUES(?,?,?,?,?,?,?)
-        """, (tenant, name, email, role or "psychologue", color or "#2563eb", avatar or "", now))
+            INSERT INTO users(tenant, name, email, role, color, avatar, persona, welcome_message, updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?)
+        """, (
+            tenant, name, email,
+            role or "psychologue",
+            color or "#2563eb",
+            avatar or "",
+            persona or DEFAULT_PERSONA,
+            welcome_message or DEFAULT_WELCOME,
+            now
+        ))
     c.commit(); c.close()
 
 def get_user(tenant):
     c = _db_conn()
-    row = c.execute("SELECT tenant,name,email,role,color,avatar,updated_at FROM users WHERE tenant=?", (tenant,)).fetchone()
+    row = c.execute("""SELECT tenant,name,email,role,color,avatar,persona,welcome_message,updated_at
+                       FROM users WHERE tenant=?""", (tenant,)).fetchone()
     c.close()
     return row
 
@@ -183,9 +215,16 @@ def dashboard():
     if not tenant:
         return redirect(url_for("welcome"))
     u = get_user(tenant)
-    name = u[1] if u else ""
-    email = u[2] if u else ""
-    return render_template("dashboard.html", tenant=tenant, name=name, email=email)
+    if not u:
+        return redirect(url_for("welcome"))
+    _, name, email, role, color, avatar, persona, welcome_message, _ = u
+    return render_template(
+        "dashboard.html",
+        tenant=tenant, name=name, email=email,
+        role=role, color=color, avatar=avatar,
+        persona=persona or DEFAULT_PERSONA,
+        welcome_message=welcome_message or DEFAULT_WELCOME
+    )
 
 @app.route("/save", methods=["POST"])
 def save_settings():
@@ -193,10 +232,14 @@ def save_settings():
     role   = request.form.get("role") or "psychologue"
     color  = request.form.get("color") or "#2563eb"
     avatar = request.form.get("avatar") or ""
+    persona = (request.form.get("persona") or DEFAULT_PERSONA).strip()
+    welcome_message = (request.form.get("welcome_message") or DEFAULT_WELCOME).strip()
+
     u = get_user(tenant)
     if not u:
         return redirect(url_for("welcome"))
-    upsert_user(tenant, u[1], u[2], role=role, color=color, avatar=avatar)
+    upsert_user(tenant, u[1], u[2], role=role, color=color, avatar=avatar,
+                persona=persona, welcome_message=welcome_message)
     return redirect(url_for("preview", tenant=tenant))
 
 @app.route("/preview")
@@ -205,8 +248,30 @@ def preview():
     u = get_user(tenant)
     if not u:
         return redirect(url_for("welcome"))
-    _, name, email, role, color, avatar, _ = u
-    return render_template("preview.html", tenant=tenant, name=name, email=email, role=role, color=color, avatar=avatar)
+    _, name, email, role, color, avatar, persona, welcome_message, _ = u
+    # IMPORTANT : on affiche la vraie fenêtre via /chat
+    return render_template(
+        "preview.html",
+        tenant=tenant, name=name, email=email, role=role, color=color, avatar=avatar,
+        persona=persona or DEFAULT_PERSONA,
+        welcome_message=welcome_message or DEFAULT_WELCOME
+    )
+
+@app.route("/chat")
+def chat_page():
+    tenant = (request.args.get("tenant") or "").strip()
+    if not tenant:
+        return redirect(url_for("welcome"))
+    u = get_user(tenant)
+    if not u:
+        return redirect(url_for("welcome"))
+    _, name, email, role, color, avatar, persona, welcome_message, _ = u
+    return render_template(
+        "chat.html",
+        tenant=tenant, role=role, avatar_url=avatar,
+        persona=persona or DEFAULT_PERSONA,
+        welcome_message=welcome_message or DEFAULT_WELCOME
+    )
 
 @app.route("/pay")
 def pay():
@@ -214,7 +279,7 @@ def pay():
     u = get_user(tenant)
     if not u:
         return redirect(url_for("welcome"))
-    _, name, email, role, color, avatar, _ = u
+    _, name, email, role, color, avatar, persona, welcome_message, _ = u
     return render_template(
         "pay.html",
         tenant=tenant, role=role, color=color, avatar=avatar,
@@ -234,13 +299,30 @@ def bot_page():
     u = get_user(tenant)
     if not u:
         return redirect(url_for("welcome"))
-    _, name, email, role, color, avatar, _ = u
+    _, name, email, role, color, avatar, persona, welcome_message, _ = u
 
     # Affiche "merci…" si ?paid=1
     paid_flag = request.args.get("paid") == "1"
 
     return render_template("bot.html",
                            tenant=tenant, role=role, color=color, avatar=avatar, paid=paid_flag)
+
+# -----------------------------------------------------------------------------
+# API Chat (règles)
+# -----------------------------------------------------------------------------
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    data = request.get_json(force=True, silent=True) or {}
+    tenant = (data.get("tenant") or "").strip()
+    role = (data.get("role") or "").strip()
+    text = (data.get("text") or "").strip()
+    if not (tenant and role):
+        return jsonify({"reply": "Configuration incomplète. Réessayez depuis la prévisualisation."}), 400
+    try:
+        ans = rule_reply(tenant=tenant, role=role, text=text)
+        return jsonify({"reply": ans})
+    except Exception as e:
+        return jsonify({"reply": f"Désolé, une erreur est survenue : {e}"}), 500
 
 # -----------------------------------------------------------------------------
 # Stripe API
@@ -258,7 +340,7 @@ def stripe_checkout():
     u = get_user(tenant)
     if not u:
         return jsonify({"error": "utilisateur introuvable"}), 400
-    _, name, email, role, color, avatar, _ = u
+    _, name, email, role, color, avatar, persona, welcome_message, _ = u
 
     success_url = f"{BASE_URL}/bot?" + qstr({"tenant": tenant, "paid": 1})
     cancel_url  = f"{BASE_URL}/pay?tenant={quote(tenant)}"
@@ -302,7 +384,7 @@ def stripe_webhook():
                 # Email de confirmation avec snippet
                 u = get_user(tenant)
                 if u:
-                    _, name, email, role, color, avatar, _ = u
+                    _, name, email, role, color, avatar, persona, welcome_message, _ = u
                     to = email or email_from_stripe
                     snippet = build_snippet(tenant, role, color, avatar)
                     html = f"""
@@ -363,7 +445,7 @@ def paypal_verify():
             # Email de confirmation
             u = get_user(tenant)
             if u:
-                _, name, email, role, color, avatar, _ = u
+                _, name, email, role, color, avatar, persona, welcome_message, _ = u
                 to = email or email_pp
                 snippet = build_snippet(tenant, role, color, avatar)
                 html = f"""
