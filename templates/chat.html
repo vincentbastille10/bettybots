@@ -3,181 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Betty — Assistant conversationnel</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <title>Betty — Chat</title>
   <style>
-    body {
-      background: #0d1117;
-      color: #fff;
-      font-family: "Inter", system-ui, sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-    }
-
-    .chat-container {
-      background: #111827;
-      width: 420px;
-      height: 580px;
-      border-radius: 18px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      box-shadow: 0 0 25px rgba(0,0,0,0.4);
-      border: 1px solid #1f2937;
-    }
-
-    .chat-header {
-      background: #1f2937;
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      border-bottom: 1px solid #374151;
-    }
-
-    .chat-header img {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      margin-right: 10px;
-      border: 2px solid #ef4444;
-    }
-
-    .chat-header h3 {
-      margin: 0;
-      font-size: 16px;
-      color: #f9fafb;
-      font-weight: 600;
-    }
-
-    .chat-header span {
-      font-size: 13px;
-      color: #9ca3af;
-    }
-
-    .chat-messages {
-      flex: 1;
-      padding: 14px;
-      overflow-y: auto;
-      background: #111827;
-    }
-
-    .message {
-      max-width: 80%;
-      margin-bottom: 12px;
-      padding: 10px 14px;
-      border-radius: 12px;
-      line-height: 1.4;
-      font-size: 15px;
-    }
-
-    .user {
-      background: #2563eb;
-      color: white;
-      align-self: flex-end;
-      margin-left: auto;
-    }
-
-    .bot {
-      background: #272f3d;
-      color: #f3f4f6;
-      align-self: flex-start;
-    }
-
-    .chat-input {
-      display: flex;
-      padding: 10px;
-      background: #1f2937;
-      border-top: 1px solid #374151;
-    }
-
-    .chat-input input {
-      flex: 1;
-      background: #111827;
-      border: 1px solid #374151;
-      border-radius: 8px;
-      padding: 10px 14px;
-      color: #fff;
-      font-size: 14px;
-    }
-
-    .chat-input button {
-      background: #ef4444;
-      border: none;
-      color: white;
-      font-weight: 600;
-      border-radius: 8px;
-      padding: 10px 16px;
-      margin-left: 8px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .chat-input button:hover {
-      background: #dc2626;
-    }
+    body{background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+    .chat{width:420px;height:580px;background:#111827;border:1px solid #1f2937;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}
+    .head{display:flex;align-items:center;gap:10px;background:#1f2937;padding:12px 16px;border-bottom:1px solid #374151}
+    .head img{width:38px;height:38px;border-radius:50%;border:2px solid #ef4444}
+    .head h3{margin:0;font-size:16px}
+    .head span{font-size:13px;color:#9ca3af}
+    .msgs{flex:1;padding:14px;overflow:auto;background:#111827}
+    .m{max-width:80%;margin:0 0 12px;padding:10px 14px;border-radius:12px;font-size:15px;line-height:1.4}
+    .bot{background:#272f3d;color:#f3f4f6}
+    .you{background:#2563eb;color:#fff;margin-left:auto}
+    .bar{display:flex;gap:8px;background:#1f2937;padding:10px;border-top:1px solid #374151}
+    .bar input{flex:1;background:#111827;border:1px solid #374151;border-radius:8px;color:#fff;padding:10px 14px}
+    .bar button{background:#ef4444;border:none;color:#fff;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer}
   </style>
 </head>
-
 <body>
-  <div class="chat-container">
-    <div class="chat-header">
-      <img src="{{ avatar_url }}" alt="Betty Avatar">
-      <div>
-        <h3>Betty</h3>
-        <span>Votre assistante {{ role|lower }}</span>
-      </div>
+  <div class="chat">
+    <div class="head">
+      <img src="{{ avatar_url or 'https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg' }}" alt="avatar">
+      <div><h3>Betty</h3><span>Votre assistante {{ role|lower }}</span></div>
     </div>
 
-    <div class="chat-messages" id="chatMessages">
-      <div class="message bot">👋 Bonjour ! Je suis Betty, l’assistante {{ role|lower }}.<br>Comment puis-je vous aider ?</div>
+    <div id="msgs" class="msgs">
+      <div class="m bot">{{ welcome_message }}</div>
     </div>
 
-    <div class="chat-input">
-      <input id="userInput" type="text" placeholder="Écrivez votre message ici..." autocomplete="off">
-      <button id="sendBtn">Envoyer</button>
+    <div class="bar">
+      <input id="q" placeholder="Écrivez votre message ici…" autocomplete="off">
+      <button id="send">Envoyer</button>
     </div>
   </div>
 
-  <script>
-    const sendBtn = document.getElementById("sendBtn");
-    const userInput = document.getElementById("userInput");
-    const chatMessages = document.getElementById("chatMessages");
-
-    async function sendMessage() {
-      const text = userInput.value.trim();
-      if (!text) return;
-
-      appendMessage("user", text);
-      userInput.value = "";
-
-      const resp = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tenant: "{{ tenant }}",
-          role: "{{ role }}",
-          text
-        })
-      });
-      const data = await resp.json();
-      appendMessage("bot", data.reply);
-    }
-
-    function appendMessage(sender, text) {
-      const msg = document.createElement("div");
-      msg.className = "message " + sender;
-      msg.textContent = text;
-      chatMessages.appendChild(msg);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    sendBtn.addEventListener("click", sendMessage);
-    userInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") sendMessage();
-    });
-  </script>
+<script>
+const msgs=document.getElementById('msgs'), q=document.getElementById('q');
+document.getElementById('send').onclick=send; q.addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+function add(text,who){const d=document.createElement('div');d.className='m '+who;d.textContent=text;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
+async function send(){
+  const text=q.value.trim(); if(!text) return; add(text,'you'); q.value='';
+  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tenant:"{{ tenant }}", role:"{{ role }}", text})});
+  const j=await r.json(); add((j&&j.reply)||'Désolé, je n’ai pas compris.', 'bot');
+}
+</script>
 </body>
 </html>
