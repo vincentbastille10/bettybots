@@ -76,9 +76,9 @@ ROLE_ALIAS = {
     "avocat": "avocat_pack",
     "comptable": "comptable_pack",
     # Immobilier
-    "immobilier": "agent_immobilierbier",
-    "agent immobilier": "agent_immobilierbier",
-    "agent_immobilier": "agent_immobilierbier",
+    "immobilier": "agent_immobilier_pack",
+    "agent immobilier": "agent_immobilier_pack",
+    "agent_immobilier": "agent_immobilier_pack",
     # → complète ici la liste des 20 métiers si besoin
 }
 DEFAULT_ROLE = "psychologue_pack"
@@ -88,7 +88,7 @@ DISPLAY_LABELS = {
     "medecine_pack": "Médecin",
     "avocat_pack": "Avocat",
     "comptable_pack": "Comptable",
-    "agent_immobilierbier": "Agent immobilier",
+    "agent_immobilier_pack": "Agent immobilier",
 }
 
 def canonical_role(role_label: str) -> str:
@@ -415,7 +415,7 @@ def api_chat():
 
     # ------------------ Flows par métier ------------------
     # IMMOBILIER
-    if role == "agent_immobilierbier":
+    if role == "agent_immobilier_pack":
         if stage == "start":
             return reply("Bonjour 👋 Je vous aide pour votre projet immobilier. Pour commencer, quel est votre nom et prénom ?", "ask_name")
         if stage == "ask_name":
