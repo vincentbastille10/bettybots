@@ -1,0 +1,44 @@
+
+meta:
+  domaine: "Comptabilité TPE/Indépendants"
+  disclaimers:
+    - "Information générale. Pour un conseil adapté, un échange est recommandé."
+nlu:
+  intents:
+    tva:
+      synonyms: ["tva", "déclaration tva", "taux tva", "exonération tva"]
+    bilan:
+      synonyms: ["bilan", "liasse", "clôture", "comptes annuels"]
+    creation:
+      synonyms: ["créer entreprise", "statuts", "micro", "sasu", "eurl"]
+dialogue:
+  flows:
+    tva:
+      - ask: "Quel est votre régime actuel (micro, réel simplifié, réel normal) ?"
+        slot: "regime"
+      - ask: "Votre chiffre d'affaires mensuel moyen ? (estimation)"
+        slot: "ca_mensuel"
+      - say_template: "recap_tva"
+      - next: "offer_meeting"
+    bilan:
+      - ask: "Quelle est la date de clôture de votre exercice ? (JJ/MM)"
+        slot: "date_cloture"
+      - ask: "Volume de pièces/an (factures) approximatif ?"
+        slot: "volume_pieces"
+      - say_template: "recap_bilan"
+      - next: "offer_meeting"
+    creation:
+      - ask: "Avez-vous déjà un statut privilégié ? (micro/IS/BNC...)"
+        slot: "souhait_statut"
+      - ask: "CA attendu la 1ère année (ordre de grandeur) ?"
+        slot: "ca_attendu"
+      - say_template: "recap_creation"
+      - next: "offer_meeting"
+templates:
+  say:
+    recap_tva: "Ok, régime {{regime}}, CA mensuel ~{{ca_mensuel}}. Je peux vous donner l'échéancier et voir l'optimisation."
+    recap_bilan: "Clôture au {{date_cloture}}, volume ~{{volume_pieces}} pièces/an. Je peux estimer l'effort et le devis."
+    recap_creation: "Statut visé: {{souhait_statut}}, CA attendu: {{ca_attendu}}. Je peux cadrer l'immatriculation et la fiscalité."
+handoff:
+  offer_meeting:
+    message: "Souhaitez-vous un appel de 10–15 min pour cadrer ? Donnez-moi 2–3 créneaux."
