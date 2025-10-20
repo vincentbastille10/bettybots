@@ -1,94 +1,115 @@
+# betty_rules/dialog_manager.py
+# ----------------------------------------------------------------------
+# Orchestrateur "rule-based" pour Betty.
+# - Charge le pack YAML selon le métier (via loader.load_pack)
+# - Détecte un intent simple (regex/mots-clés) via nlu_rules.detect_intent
+# - Cherche la meilleure FAQ via nlu_rules.best_match
+# - Priorise la QUALIFICATION DE LEAD (slots) avec une collecte progressive
+# ----------------------------------------------------------------------
 
-from .templates_engine import render_template
+from __future__ import annotations
+from typing import Dict, Any, List
 
-class DialogManager:
-    def __init__(self, memory, pack):
-        self.mem = memory
-        self.pack = pack
+from .memory import get_session
+from .loader import load_pack
+from .nlu_rules import best_match, detect_intent
+from .templates_engine import render
 
-    def _current_flow(self, session_id):
-        return self.mem.get_state(session_id)
+# Slots par défaut si le pack n'en définit pas
+DEFAULT_LEAD_SLOTS: List[str] = ["nom", "email", "telephone", "besoin", "budget", "delai"]
 
-    def _start_flow_for_intent(self, intent):
-        flows = self.pack.get("dialogue", {}).get("flows", {})
-        # choose flow with same name or a default mapping table
-        if intent in flows:
-            return intent
-        # otherwise pick the first flow
-        return next(iter(flows.keys()), None)
+# Prompts de collecte pour chaque slot
+LEAD_ASK = {
+    "nom": "Pour commencer, quel est votre nom et prénom ?",
+    "email": "Merci. Quelle est votre adresse e-mail pour vous recontacter ?",
+    "telephone": "Souhaitez-vous laisser un numéro de téléphone pour un rappel ?",
+    "besoin": "Pouvez-vous résumer votre besoin en quelques mots ?",
+    "budget": "Avez-vous un budget indicatif ?",
+    "delai": "Quel est votre délai idéal ?",
+}
 
-    def step(self, session_id: str, user_text: str):
-        meta = self.pack.get("meta", {})
-        disclaimers = meta.get("disclaimers", [])
-        state = self._current_flow(session_id)
-        context = self.mem.get(session_id)
-        ctx = {"**": "", **context["slots"]}
+# Petites heuristiques de capture à la volée
+def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
+    t = text.strip()
+    if "@" in t and not ses["slots"].get("email"):
+        ses["slots"]["email"] = t
+    if any(t.startswith(p) for p in ("06", "07")) and not ses["slots"].get("telephone"):
+        ses["slots"]["telephone"] = t
 
-        if not state:
-            # detect intent
-            from .nlu_rules import match_intent
-            intent, slots, conf = match_intent(user_text, self.pack)
-            if not intent or conf < 0.2:
-                return {"reply": "Je veux être sûr·e de bien comprendre. Pouvez-vous préciser votre demande en quelques mots ?",
-                        "done": False}
-            # seed slots
-            for k,v in slots.items():
-                self.mem.set_slot(session_id, k, v)
-            flow = self._start_flow_for_intent(intent)
-            self.mem.set_state(session_id, flow)
-            state = flow
+def _next_missing(slots: Dict[str, Any], order: List[str]) -> str | None:
+    for k in order:
+        if not slots.get(k):
+            return k
+    return None
 
-        # run flow
-        node_list = self.pack.get("dialogue", {}).get("flows", {}).get(state, [])
-        # find first unmet ask/check
-        for node in node_list:
-            if "ask" in node and "slot" in node:
-                slot = node["slot"]
-                if not self.mem.get_slot(session_id, slot, None):
-                    # ask question
-                    return {"reply": node["ask"], "expecting_slot": slot, "done": False}
-            if "check" in node:
-                # very small rule language: "slot!=empty" / "slot==empty" only
-                check = node["check"]
-                then = node.get("then")
-                slot = check.split(">")[0].split("<")[0].split("==")[0].split("!=")[0].strip()
-                val = self.mem.get_slot(session_id, slot, "")
-                cond_true = False
-                if "== empty" in check or "==empty" in check:
-                    cond_true = (val == "" or val is None)
-                elif "!= empty" in check or "!=empty" in check:
-                    cond_true = (val not in ("", None))
-                # simplistic numeric comparison
-                elif ">" in check:
-                    try:
-                        threshold = int(check.split(">")[1].replace("?", "").strip())
-                        cond_true = int(val or 0) > threshold
-                    except Exception:
-                        cond_true = False
-                if cond_true and then:
-                    # look for a label node name to jump — here we just return a warning template
-                    tmpl = self.pack.get("templates", {}).get("say", {}).get(then, None)
-                    if tmpl:
-                        msg = render_template(tmpl, ctx)
-                        return {"reply": msg, "done": False}
+def _ask_for(slot: str) -> str:
+    return LEAD_ASK.get(slot, "D’accord, j’ai besoin d’une information supplémentaire.")
 
-            if "say_template" in node:
-                tmpl_name = node["say_template"]
-                tmpl = self.pack.get("templates", {}).get("say", {}).get(tmpl_name, "")
-                msg = render_template(tmpl, ctx)
-                return {"reply": msg, "done": False}
+def _normalize_role(role: str) -> str:
+    """Rôle en minuscules, variantes simplifiées (cohérent avec loader)."""
+    s = (role or "").strip().lower()
+    s = s.replace(" / ", " ").replace("/", " ").replace("_", " ").replace("-", " ")
+    s = s.replace("avocat avocate", "avocat")
+    s = s.replace("agent immo", "agent immobilier")
+    s = s.replace("médecin", "medecin")
+    return " ".join(s.split())
 
-            if "next" in node and node["next"] == "offer_meeting":
-                txt = self.pack.get("handoff", {}).get("offer_meeting", {}).get("message",
-                    "Je peux organiser un échange. Quels créneaux vous conviennent ?")
-                return {"reply": txt, "handoff": True, "done": True}
+def _start_lead(ses, slots_order) -> str:
+    ses["state"] = "lead"
+    slot = _next_missing(ses["slots"], slots_order)
+    return _ask_for(slot) if slot else "Merci, j’ai noté vos coordonnées ✅"
 
-        # if flow consumed
-        self.mem.set_state(session_id, None)
-        final = "Je vous envoie un récapitulatif par email si vous le souhaitez."
-        if disclaimers:
-            final += " " + " ".join(disclaimers[:1])
-        return {"reply": final, "done": True}
+def _continue_lead_flow(ses, text: str, slots_order: List[str]) -> str:
+    _autocapture_slots(ses, text)
+    slot = _next_missing(ses["slots"], slots_order)
+    if slot:
+        ses["state"] = "lead"
+        return _ask_for(slot)
+    ses["state"] = "idle"
+    return "Merci, j’ai bien noté vos coordonnées. Un conseiller vous recontacte très vite ✅"
 
-    def inject_slot(self, session_id: str, slot: str, value: str):
-        self.mem.set_slot(session_id, slot, value)
+def reply(tenant: str, role: str, text: str) -> str:
+    """
+    Point d’entrée :
+      - tenant : identifiant client (mémoire session)
+      - role   : métier affiché dans le dashboard ("Avocat / Avocate", "médecin", etc.)
+      - text   : message utilisateur
+    Retourne une réponse texte.
+    """
+    ses = get_session(tenant)
+    role_norm = _normalize_role(role)
+
+    # Charge pack YAML (faqs, intents, lead_form)
+    pack = load_pack(role_norm) or {}
+    faqs = pack.get("faqs") or []
+    intents = pack.get("intents") or []
+    slots_order = pack.get("lead_form") or DEFAULT_LEAD_SLOTS
+
+    user = (text or "").strip()
+    if not user:
+        # Si l'utilisateur envoie une chaîne vide
+        if not ses["slots"].get("email"):
+            return "Je peux vous renseigner et vous mettre en relation. Souhaitez-vous me laisser un e-mail pour vous recontacter ?"
+        return "Je vous écoute 🙂"
+
+    # Si on est déjà dans un flux de qualification → priorité absolue
+    if ses.get("state") == "lead":
+        return _continue_lead_flow(ses, user, slots_order)
+
+    # Intent explicite (rdv/contact/estimation/…)
+    intent = detect_intent(user, intents)
+    if intent in {"start_lead", "rdv", "contact"}:
+        return _start_lead(ses, slots_order)
+
+    # FAQ par similarité (meilleur match)
+    best = best_match(user, faqs, k=1)
+    if best:
+        top = best[0]
+        answer = render(top.get("a", ""), {"role": role_norm})
+        # Petite relance lead si l'email n'est pas connu
+        if not ses["slots"].get("email"):
+            answer += "\n\nSouhaitez-vous être recontacté·e ? Je peux enregistrer vos coordonnées."
+        return answer or "Je n’ai pas la réponse exacte, mais je peux vous mettre en relation rapidement."
+
+    # Pas de match → proposer la mise en relation
+    return _start_lead(ses, slots_order)
