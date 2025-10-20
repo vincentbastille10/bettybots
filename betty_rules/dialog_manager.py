@@ -18,6 +18,8 @@ PHONE_RE = re.compile(r"(?:(?:\+|00)33|0)\s*[1-9](?:[\s\.\-]*\d{2}){4}")
 NAME_STRICT_RE = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}\s+[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}$")
 NAME_TOKEN_RE  = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ'-]{2,}")
 
+AFFIRM = {"oui", "ok", "daccord", "d'accord", "yes", "bien", "parfait", "je veux", "je suis daccord", "je suis d'accord"}
+
 # ------------------------------------------------------------
 # Capture automatique (nom, email, téléphone)
 # ------------------------------------------------------------
@@ -143,11 +145,29 @@ def reply(tenant: str, role: str, text: str) -> str:
             return "Je peux vous renseigner ou vous mettre en relation. Souhaitez-vous me laisser un e-mail pour vous recontacter ?"
         return "Je vous écoute 🙂"
 
-    # Si on est en cours de collecte
+    # PRIORITÉ : si on est déjà en collecte → continuer
     if ses.get("state") == "lead":
         return _continue_lead_flow(tenant, ses, user, slots_order)
 
-    # Intent explicite de démarrage
+    # Auto-capture AVANT toute décision (nom/mail/tel)
+    _autocapture_slots(ses, user)
+
+    # Si des slots manquent encore, on enclenche la collecte si :
+    #  - l'utilisateur fournit une info (email/tel/nom capturé), OU
+    #  - le message n'est pas une question, OU
+    #  - c'est une affirmation (ok/oui/d'accord)
+    missing_slot = _next_missing(ses["slots"], slots_order)
+    user_clean = " ".join(user.lower().split())
+    if missing_slot:
+        gave_info = bool(
+            EMAIL_RE.search(user) or PHONE_RE.search(user) or NAME_STRICT_RE.search(user) or len(NAME_TOKEN_RE.findall(user)) >= 2
+        )
+        is_question = "?" in user
+        is_affirm = user_clean in AFFIRM
+        if gave_info or not is_question or is_affirm:
+            return _start_lead(tenant, ses, slots_order)
+
+    # Intent explicite de démarrage (rdv, contact, visite, etc.)
     intent = detect_intent(user, intents)
     if intent in {"start_lead", "rdv", "contact", "devis", "visite"}:
         return _start_lead(tenant, ses, slots_order)
