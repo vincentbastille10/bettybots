@@ -1,20 +1,20 @@
+# betty_rules/memory.py
+# Mémoire en RAM par tenant (remplaçable par Redis plus tard)
 
-from collections import defaultdict
+import time
+from typing import Dict, Any
 
-class Memory:
-    """Very simple in-process memory keyed by session_id."""
-    def __init__(self):
-        self.sessions = defaultdict(lambda: {"slots": {}, "state": None, "history": []})
-    def get(self, session_id: str):
-        return self.sessions[session_id]
-    def set_slot(self, session_id: str, key: str, value):
-        s = self.get(session_id)
-        s["slots"][key] = value
-    def get_slot(self, session_id: str, key: str, default=None):
-        return self.get(session_id)["slots"].get(key, default)
-    def set_state(self, session_id: str, state: str | None):
-        self.get(session_id)["state"] = state
-    def get_state(self, session_id: str):
-        return self.get(session_id)["state"]
-    def add_history(self, session_id: str, who: str, text: str):
-        self.get(session_id)["history"].append({"who": who, "text": text})
+MEM: Dict[str, Dict[str, Any]] = {}
+TTL = 3600  # 1h
+
+def get_session(tenant: str) -> Dict[str, Any]:
+    """Retourne (et rafraîchit) la session pour un tenant."""
+    now = time.time()
+    ses = MEM.get(tenant) or {"slots": {}, "state": "idle", "last": now}
+    ses["last"] = now
+    MEM[tenant] = ses
+    # garbage collect très simple
+    for k, v in list(MEM.items()):
+        if now - v.get("last", now) > TTL:
+            MEM.pop(k, None)
+    return ses
