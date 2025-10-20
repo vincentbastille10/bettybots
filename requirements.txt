@@ -1,5 +1,6 @@
-Flask>=3.0
-stripe>=10.0.0
-requests>=2.31.0
-python-dotenv>=1.0.1
-gunicorn>=21.2.0
+Flask==3.1.2
+gunicorn==23.0.0
+python-dotenv==1.1.1
+requests==2.32.5
+stripe==13.0.1
+PyYAML==6.0.2
