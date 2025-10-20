@@ -1,5 +1,5 @@
 # betty_rules/dialog_manager.py
-# Orchestrateur "rule-based" pour Betty (sans LLM), avec mémoire persistante.
+# Orchestrateur rule-based pour Betty : détection d'intentions, gestion de lead, et persistance.
 
 from __future__ import annotations
 from typing import Dict, Any, List
@@ -11,15 +11,18 @@ from .nlu_rules import best_match, detect_intent
 from .templates_engine import render
 
 # ------------------------------------------------------------
-# Détection coordonnées & nom (tolérante)
+# Regex utilitaires
 # ------------------------------------------------------------
 EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 PHONE_RE = re.compile(r"(?:(?:\+|00)33|0)\s*[1-9](?:[\s\.\-]*\d{2}){4}")
 NAME_STRICT_RE = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}\s+[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}$")
 NAME_TOKEN_RE  = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ'-]{2,}")
 
+# ------------------------------------------------------------
+# Capture automatique (nom, email, téléphone)
+# ------------------------------------------------------------
 def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
-    """Remplit email / téléphone / nom si possible à partir du texte libre."""
+    """Essaie d'extraire automatiquement les coordonnées depuis le texte utilisateur."""
     t = (text or "").strip()
 
     # email
@@ -28,14 +31,14 @@ def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
         if m:
             ses["slots"]["email"] = m.group(0)
 
-    # téléphone FR (tolérant aux espaces fins)
+    # téléphone (espaces tolérés)
     if not ses["slots"].get("telephone"):
         flat = t.replace("\u202f", " ").strip()
         m = PHONE_RE.search(flat)
         if m:
             ses["slots"]["telephone"] = m.group(0)
 
-    # nom : strict puis fallback tokenisé
+    # nom
     if not ses["slots"].get("nom"):
         line = " ".join(t.split())
         if NAME_STRICT_RE.match(line):
@@ -46,23 +49,24 @@ def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
                 ses["slots"]["nom"] = f"{tokens[0]} {tokens[1]}"
 
 # ------------------------------------------------------------
-# Paramètres & prompts collecte lead
+# Structure du formulaire de lead
 # ------------------------------------------------------------
-DEFAULT_LEAD_SLOTS: List[str] = ["nom", "email", "telephone", "besoin", "budget", "delai"]
+DEFAULT_LEAD_SLOTS = ["nom", "email", "telephone", "besoin", "budget", "delai"]
 
 LEAD_ASK = {
     "nom": "Pour commencer, quel est votre nom et prénom ?",
     "email": "Merci. Quelle est votre adresse e-mail pour vous recontacter ?",
     "telephone": "Souhaitez-vous laisser un numéro de téléphone pour un rappel ?",
-    "besoin": "Pouvez-vous résumer votre besoin en quelques mots ?",
+    "besoin": "Pouvez-vous préciser votre besoin ? (achat, vente, estimation...)",
     "budget": "Avez-vous un budget indicatif ?",
     "delai": "Quel est votre délai idéal ?",
 }
 
 def _ask_for(slot: str) -> str:
-    return LEAD_ASK.get(slot, "D’accord, j’ai besoin d’une information supplémentaire.")
+    return LEAD_ASK.get(slot, "Pouvez-vous me préciser ce point ?")
 
 def _next_missing(slots: Dict[str, Any], order: List[str]) -> str | None:
+    """Renvoie le prochain champ manquant dans l'ordre défini."""
     for k in order:
         v = slots.get(k)
         if v is None or (isinstance(v, str) and not v.strip()):
@@ -70,12 +74,12 @@ def _next_missing(slots: Dict[str, Any], order: List[str]) -> str | None:
     return None
 
 # ------------------------------------------------------------
-# Normalisation du rôle (mapping exact, pas de replace global)
+# Normalisation du rôle (corrigée)
 # ------------------------------------------------------------
 def _normalize_role(role: str) -> str:
-    """Normalise le rôle pour mapper vers les packs sans artefacts."""
+    """Normalise le rôle pour éviter les artefacts ('immobilierbilier')."""
     s = (role or "").strip().lower()
-    s = " ".join(s.split())  # collapse espaces
+    s = " ".join(s.split())  # supprime espaces multiples
 
     synonyms = {
         "agent immo": "agent immobilier",
@@ -93,7 +97,7 @@ def _normalize_role(role: str) -> str:
     return synonyms.get(s, s)
 
 # ------------------------------------------------------------
-# Flux de collecte lead
+# Logique principale de collecte de lead
 # ------------------------------------------------------------
 def _start_lead(tenant: str, ses: Dict[str, Any], slots_order) -> str:
     ses["state"] = "lead"
@@ -110,16 +114,16 @@ def _continue_lead_flow(tenant: str, ses: Dict[str, Any], text: str, slots_order
         return _ask_for(slot)
     ses["state"] = "idle"
     save_session(tenant, ses)
-    return "Merci, j’ai bien noté vos coordonnées. Un conseiller vous recontacte très vite ✅"
+    return "Merci, j’ai bien noté vos coordonnées. Un conseiller vous recontactera très vite ✅"
 
 # ------------------------------------------------------------
-# Réponse principale
+# Fonction principale de réponse
 # ------------------------------------------------------------
 def reply(tenant: str, role: str, text: str) -> str:
     """
-    - tenant : identifiant client (sert de clé session)
-    - role   : métier choisi (affiché)
-    - text   : message utilisateur
+    tenant : identifiant client (clé session)
+    role   : profil de bot (affiché)
+    text   : message utilisateur
     """
     ses = get_session(tenant)
     ses.setdefault("slots", {})
@@ -127,7 +131,7 @@ def reply(tenant: str, role: str, text: str) -> str:
 
     role_norm = _normalize_role(role)
 
-    # pack YAML du rôle
+    # Charger le pack YAML
     pack = load_pack(role_norm) or {}
     faqs = pack.get("faqs") or []
     intents = pack.get("intents") or []
@@ -136,14 +140,14 @@ def reply(tenant: str, role: str, text: str) -> str:
     user = (text or "").strip()
     if not user:
         if not ses["slots"].get("email"):
-            return "Je peux vous renseigner et vous mettre en relation. Souhaitez-vous me laisser un e-mail pour vous recontacter ?"
+            return "Je peux vous renseigner ou vous mettre en relation. Souhaitez-vous me laisser un e-mail pour vous recontacter ?"
         return "Je vous écoute 🙂"
 
-    # Si on est en collecte → priorité
+    # Si on est en cours de collecte
     if ses.get("state") == "lead":
         return _continue_lead_flow(tenant, ses, user, slots_order)
 
-    # Intent explicite qui déclenche la collecte
+    # Intent explicite de démarrage
     intent = detect_intent(user, intents)
     if intent in {"start_lead", "rdv", "contact", "devis", "visite"}:
         return _start_lead(tenant, ses, slots_order)
@@ -156,7 +160,7 @@ def reply(tenant: str, role: str, text: str) -> str:
         if not (ses["slots"].get("email") or ses["slots"].get("telephone")):
             answer += "\n\nSouhaitez-vous être recontacté·e ? Je peux enregistrer vos coordonnées."
         save_session(tenant, ses)
-        return answer or "Je n’ai pas la réponse exacte, mais je peux vous mettre en relation rapidement."
+        return answer or "Je n’ai pas la réponse exacte, mais je peux vous mettre en relation."
 
-    # Sinon → on propose la mise en relation (et on commence la collecte)
+    # Sinon, on démarre la collecte
     return _start_lead(tenant, ses, slots_order)
