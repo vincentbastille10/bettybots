@@ -1,1 +1,2243 @@
 
+intents:
+  - name: start_lead
+    patterns: ["visite", "rdv", "contact", "rappel", "prise de rendez", "prendre rendez"]
+  - name: estimation
+    patterns: ["estimation", "prix m2", "combien vaut", "évaluer mon bien", "avis de valeur"]
+  - name: location
+    patterns: ["location", "louer", "bail", "garant", "gestion locative"]
+  - name: achat
+    patterns: ["acheter", "acquérir", "proposition d'achat", "compromis"]
+  - name: vente
+    patterns: ["vendre", "mandat", "photos pro", "mise en vente"]
+  - name: financement
+    patterns: ["crédit", "taux", "PTZ", "apport"]
+  - name: copro
+    patterns: ["copropriété", "charges", "AG", "PV d'AG"]
+  - name: fiscalité
+    patterns: ["taxe foncière", "impôt", "plus-value", "LMNP"]
+  - name: diagnostics
+    patterns: ["diagnostic", "DPE", "amiante", "plomb", "gaz", "électricité"]
+  - name: gestion
+    patterns: ["gestion locative", "état des lieux", "loyer", "assurances loyers impayés"]
+
+lead_form: [nom, email, telephone, besoin, budget, delai]
+
+faqs:
+- q: "Faites-vous des estimations gratuites ?"
+  a: "Oui, une estimation gratuite et sans engagement est possible. Nous combinons méthode comparative, historique des ventes et spécificités du bien pour établir un avis de valeur précis. Dites “rappel” pour convenir d’un créneau."
+  tags: [estimation]
+- q: "Comment calculez-vous le prix au m² ?"
+  a: "Nous croisons les références de ventes récentes, les données notariales et les caractéristiques (surface Carrez, étage, état, extérieurs, luminosité) pour ajuster le prix au m²."
+  tags: [estimation]
+- q: "Quelle est la différence entre estimation en ligne et sur place ?"
+  a: "L'estimation en ligne donne une fourchette indicative. La visite sur place tient compte des atouts et des travaux, ce qui affine le prix et la stratégie de mise en vente."
+  tags: [estimation]
+- q: "Quelle différence entre mandat simple et mandat exclusif ?"
+  a: "Le mandat exclusif confie la vente à une seule agence, avec une mise en valeur renforcée et une diffusion contrôlée. Le mandat simple permet de multiplier les diffuseurs, mais peut diluer la stratégie."
+  tags: [mandats]
+- q: "Quelle est la durée d’un mandat ?"
+  a: "La durée légale minimale est de 3 mois, renouvelable par tacite reconduction ou avenant. Nous conseillons 3 à 6 mois pour mener une commercialisation efficace."
+  tags: [mandats]
+- q: "Quels diagnostics sont obligatoires pour vendre ?"
+  a: "Le dossier de diagnostics techniques comprend selon les cas : DPE, amiante, plomb, électricité, gaz, termites, ERP, métrage Carrez (en copropriété). Nous pouvons organiser leur réalisation."
+  tags: [diagnostics]
+- q: "Le DPE est-il obligatoire ?"
+  a: "Oui, le DPE est obligatoire dès la mise en annonce. Il informe sur la performance énergétique et peut influencer la valeur et les délais de vente."
+  tags: [diagnostics]
+- q: "Comment valorisez-vous mon bien ?"
+  a: "Photos professionnelles HDR, home staging léger, plans cotés, visite virtuelle et rédaction d’annonce optimisée. Diffusion ciblée sur les portails majeurs et notre base d’acheteurs qualifiés."
+  tags: [vente]
+- q: "Combien de temps pour vendre en moyenne ?"
+  a: "Selon le marché local et le positionnement prix, le délai médian varie entre 30 et 90 jours. Nous adaptons la stratégie toutes les 2 à 3 semaines selon les retours."
+  tags: [vente]
+- q: "Comment formuler une offre d’achat ?"
+  a: "Rédigez une proposition écrite mentionnant prix, conditions suspensives (crédit…), délai de rétractation et date cible. Nous vous assistons pour sécuriser la rédaction."
+  tags: [achat]
+- q: "Quelle est la différence entre compromis et promesse ?"
+  a: "Le compromis engage les deux parties ; la promesse unilatérale engage surtout le vendeur. Les deux actes prévoient un dépôt de garantie et des délais encadrés."
+  tags: [achat]
+- q: "Quelles pièces faut-il pour un dossier locatif ?"
+  a: "Pièce d’identité, justificatif de domicile, 3 dernières fiches de paie ou justificatifs de revenus, dernier avis d’imposition, contrat de travail. Garant éventuel si nécessaire."
+  tags: [location]
+- q: "Caution et dépôt de garantie, quelle différence ?"
+  a: "La caution (garant) s’engage à payer le loyer en cas de défaut. Le dépôt de garantie est une somme versée à l’entrée pour couvrir d’éventuelles dégradations."
+  tags: [location]
+- q: "Proposez-vous la gestion locative ?"
+  a: "Oui, nous gérons la mise en location, les quittances, l’ajustement de loyer, l’assistance technique et l’assurance loyers impayés en option."
+  tags: [gestion]
+- q: "Comment se passe l’état des lieux ?"
+  a: "Un état contradictoire avec photos datées est réalisé à l’entrée et à la sortie. Il sert de référence pour la restitution du dépôt de garantie."
+  tags: [gestion]
+- q: "Quelles charges de copropriété prévoir ?"
+  a: "Elles couvrent les dépenses communes (entretien, syndic, eau/énergie des parties communes). Consultez les 3 derniers PV d’AG pour anticiper les travaux à venir."
+  tags: [copro]
+- q: "Qu’est-ce que le métrage Carrez ?"
+  a: "Pour les lots en copropriété, la loi Carrez impose d’indiquer la surface privative. Les surfaces sous 1,80 m de hauteur ne sont pas comptées."
+  tags: [copro]
+- q: "Comment fonctionne la plus-value immobilière ?"
+  a: "En résidence principale, la vente est exonérée. Pour une résidence secondaire/investissement, des abattements s’appliquent selon la durée de détention."
+  tags: [fiscalite]
+- q: "LMNP, c’est quoi ?"
+  a: "Le statut Loueur Meublé Non Professionnel permet d’amortir le bien et le mobilier, optimisant la fiscalité des revenus locatifs meublés."
+  tags: [fiscalite]
+- q: "Combien vaut un appartement à Paris avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Paris après visite."
+  tags: [estimation, paris, appartement]
+- q: "Combien vaut un maison à Paris avec balcon ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (balcon). Nous réalisons un avis de valeur précis sur Paris après visite."
+  tags: [estimation, paris, maison]
+- q: "Combien vaut un studio à Paris avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Paris après visite."
+  tags: [estimation, paris, studio]
+- q: "Combien vaut un duplex à Paris avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Paris après visite."
+  tags: [estimation, paris, duplex]
+- q: "Combien vaut un loft à Paris avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Paris après visite."
+  tags: [estimation, paris, loft]
+- q: "Combien vaut un terrain à Paris avec jardin ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (jardin). Nous réalisons un avis de valeur précis sur Paris après visite."
+  tags: [estimation, paris, terrain]
+- q: "Combien vaut un appartement à Lyon avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Lyon après visite."
+  tags: [estimation, lyon, appartement]
+- q: "Combien vaut un maison à Lyon avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Lyon après visite."
+  tags: [estimation, lyon, maison]
+- q: "Combien vaut un studio à Lyon avec travaux à prévoir ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (travaux à prévoir). Nous réalisons un avis de valeur précis sur Lyon après visite."
+  tags: [estimation, lyon, studio]
+- q: "Combien vaut un duplex à Lyon avec balcon ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (balcon). Nous réalisons un avis de valeur précis sur Lyon après visite."
+  tags: [estimation, lyon, duplex]
+- q: "Combien vaut un loft à Lyon avec balcon ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (balcon). Nous réalisons un avis de valeur précis sur Lyon après visite."
+  tags: [estimation, lyon, loft]
+- q: "Combien vaut un terrain à Lyon avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Lyon après visite."
+  tags: [estimation, lyon, terrain]
+- q: "Combien vaut un appartement à Marseille avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Marseille après visite."
+  tags: [estimation, marseille, appartement]
+- q: "Combien vaut un maison à Marseille avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Marseille après visite."
+  tags: [estimation, marseille, maison]
+- q: "Combien vaut un studio à Marseille avec balcon ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (balcon). Nous réalisons un avis de valeur précis sur Marseille après visite."
+  tags: [estimation, marseille, studio]
+- q: "Combien vaut un duplex à Marseille avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Marseille après visite."
+  tags: [estimation, marseille, duplex]
+- q: "Combien vaut un loft à Marseille avec travaux à prévoir ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (travaux à prévoir). Nous réalisons un avis de valeur précis sur Marseille après visite."
+  tags: [estimation, marseille, loft]
+- q: "Combien vaut un terrain à Marseille avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Marseille après visite."
+  tags: [estimation, marseille, terrain]
+- q: "Combien vaut un appartement à Lille avec rénové ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (rénové). Nous réalisons un avis de valeur précis sur Lille après visite."
+  tags: [estimation, lille, appartement]
+- q: "Combien vaut un maison à Lille avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Lille après visite."
+  tags: [estimation, lille, maison]
+- q: "Combien vaut un studio à Lille avec balcon ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (balcon). Nous réalisons un avis de valeur précis sur Lille après visite."
+  tags: [estimation, lille, studio]
+- q: "Combien vaut un duplex à Lille avec jardin ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (jardin). Nous réalisons un avis de valeur précis sur Lille après visite."
+  tags: [estimation, lille, duplex]
+- q: "Combien vaut un loft à Lille avec travaux à prévoir ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (travaux à prévoir). Nous réalisons un avis de valeur précis sur Lille après visite."
+  tags: [estimation, lille, loft]
+- q: "Combien vaut un terrain à Lille avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Lille après visite."
+  tags: [estimation, lille, terrain]
+- q: "Combien vaut un appartement à Bordeaux avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Bordeaux après visite."
+  tags: [estimation, bordeaux, appartement]
+- q: "Combien vaut un maison à Bordeaux avec jardin ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (jardin). Nous réalisons un avis de valeur précis sur Bordeaux après visite."
+  tags: [estimation, bordeaux, maison]
+- q: "Combien vaut un studio à Bordeaux avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Bordeaux après visite."
+  tags: [estimation, bordeaux, studio]
+- q: "Combien vaut un duplex à Bordeaux avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Bordeaux après visite."
+  tags: [estimation, bordeaux, duplex]
+- q: "Combien vaut un loft à Bordeaux avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Bordeaux après visite."
+  tags: [estimation, bordeaux, loft]
+- q: "Combien vaut un terrain à Bordeaux avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Bordeaux après visite."
+  tags: [estimation, bordeaux, terrain]
+- q: "Combien vaut un appartement à Nantes avec travaux à prévoir ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (travaux à prévoir). Nous réalisons un avis de valeur précis sur Nantes après visite."
+  tags: [estimation, nantes, appartement]
+- q: "Combien vaut un maison à Nantes avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Nantes après visite."
+  tags: [estimation, nantes, maison]
+- q: "Combien vaut un studio à Nantes avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Nantes après visite."
+  tags: [estimation, nantes, studio]
+- q: "Combien vaut un duplex à Nantes avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Nantes après visite."
+  tags: [estimation, nantes, duplex]
+- q: "Combien vaut un loft à Nantes avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Nantes après visite."
+  tags: [estimation, nantes, loft]
+- q: "Combien vaut un terrain à Nantes avec balcon ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (balcon). Nous réalisons un avis de valeur précis sur Nantes après visite."
+  tags: [estimation, nantes, terrain]
+- q: "Combien vaut un appartement à Toulouse avec rénové ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (rénové). Nous réalisons un avis de valeur précis sur Toulouse après visite."
+  tags: [estimation, toulouse, appartement]
+- q: "Combien vaut un maison à Toulouse avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Toulouse après visite."
+  tags: [estimation, toulouse, maison]
+- q: "Combien vaut un studio à Toulouse avec travaux à prévoir ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (travaux à prévoir). Nous réalisons un avis de valeur précis sur Toulouse après visite."
+  tags: [estimation, toulouse, studio]
+- q: "Combien vaut un duplex à Toulouse avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Toulouse après visite."
+  tags: [estimation, toulouse, duplex]
+- q: "Combien vaut un loft à Toulouse avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Toulouse après visite."
+  tags: [estimation, toulouse, loft]
+- q: "Combien vaut un terrain à Toulouse avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Toulouse après visite."
+  tags: [estimation, toulouse, terrain]
+- q: "Combien vaut un appartement à Nice avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Nice après visite."
+  tags: [estimation, nice, appartement]
+- q: "Combien vaut un maison à Nice avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Nice après visite."
+  tags: [estimation, nice, maison]
+- q: "Combien vaut un studio à Nice avec balcon ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (balcon). Nous réalisons un avis de valeur précis sur Nice après visite."
+  tags: [estimation, nice, studio]
+- q: "Combien vaut un duplex à Nice avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Nice après visite."
+  tags: [estimation, nice, duplex]
+- q: "Combien vaut un loft à Nice avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Nice après visite."
+  tags: [estimation, nice, loft]
+- q: "Combien vaut un terrain à Nice avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Nice après visite."
+  tags: [estimation, nice, terrain]
+- q: "Combien vaut un appartement à Rennes avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Rennes après visite."
+  tags: [estimation, rennes, appartement]
+- q: "Combien vaut un maison à Rennes avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Rennes après visite."
+  tags: [estimation, rennes, maison]
+- q: "Combien vaut un studio à Rennes avec travaux à prévoir ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (travaux à prévoir). Nous réalisons un avis de valeur précis sur Rennes après visite."
+  tags: [estimation, rennes, studio]
+- q: "Combien vaut un duplex à Rennes avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Rennes après visite."
+  tags: [estimation, rennes, duplex]
+- q: "Combien vaut un loft à Rennes avec rénové ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (rénové). Nous réalisons un avis de valeur précis sur Rennes après visite."
+  tags: [estimation, rennes, loft]
+- q: "Combien vaut un terrain à Rennes avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Rennes après visite."
+  tags: [estimation, rennes, terrain]
+- q: "Combien vaut un appartement à Montpellier avec jardin ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (jardin). Nous réalisons un avis de valeur précis sur Montpellier après visite."
+  tags: [estimation, montpellier, appartement]
+- q: "Combien vaut un maison à Montpellier avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Montpellier après visite."
+  tags: [estimation, montpellier, maison]
+- q: "Combien vaut un studio à Montpellier avec calme ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (calme). Nous réalisons un avis de valeur précis sur Montpellier après visite."
+  tags: [estimation, montpellier, studio]
+- q: "Combien vaut un duplex à Montpellier avec vue dégagée ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (vue dégagée). Nous réalisons un avis de valeur précis sur Montpellier après visite."
+  tags: [estimation, montpellier, duplex]
+- q: "Combien vaut un loft à Montpellier avec lumineux ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (lumineux). Nous réalisons un avis de valeur précis sur Montpellier après visite."
+  tags: [estimation, montpellier, loft]
+- q: "Combien vaut un terrain à Montpellier avec terrasse ?"
+  a: "La valeur dépend du quartier, de l’état et des atouts (terrasse). Nous réalisons un avis de valeur précis sur Montpellier après visite."
+  tags: [estimation, montpellier, terrain]
+- q: "Peut-on estimer à distance un appartement à Paris ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, paris, appartement]
+- q: "Peut-on estimer à distance un maison à Paris ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, paris, maison]
+- q: "Peut-on estimer à distance un studio à Paris ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, paris, studio]
+- q: "Peut-on estimer à distance un duplex à Paris ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, paris, duplex]
+- q: "Peut-on estimer à distance un loft à Paris ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, paris, loft]
+- q: "Peut-on estimer à distance un terrain à Paris ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, paris, terrain]
+- q: "Peut-on estimer à distance un appartement à Lyon ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lyon, appartement]
+- q: "Peut-on estimer à distance un maison à Lyon ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lyon, maison]
+- q: "Peut-on estimer à distance un studio à Lyon ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lyon, studio]
+- q: "Peut-on estimer à distance un duplex à Lyon ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lyon, duplex]
+- q: "Peut-on estimer à distance un loft à Lyon ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lyon, loft]
+- q: "Peut-on estimer à distance un terrain à Lyon ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lyon, terrain]
+- q: "Peut-on estimer à distance un appartement à Marseille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, marseille, appartement]
+- q: "Peut-on estimer à distance un maison à Marseille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, marseille, maison]
+- q: "Peut-on estimer à distance un studio à Marseille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, marseille, studio]
+- q: "Peut-on estimer à distance un duplex à Marseille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, marseille, duplex]
+- q: "Peut-on estimer à distance un loft à Marseille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, marseille, loft]
+- q: "Peut-on estimer à distance un terrain à Marseille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, marseille, terrain]
+- q: "Peut-on estimer à distance un appartement à Lille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lille, appartement]
+- q: "Peut-on estimer à distance un maison à Lille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lille, maison]
+- q: "Peut-on estimer à distance un studio à Lille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lille, studio]
+- q: "Peut-on estimer à distance un duplex à Lille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lille, duplex]
+- q: "Peut-on estimer à distance un loft à Lille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lille, loft]
+- q: "Peut-on estimer à distance un terrain à Lille ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, lille, terrain]
+- q: "Peut-on estimer à distance un appartement à Bordeaux ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, bordeaux, appartement]
+- q: "Peut-on estimer à distance un maison à Bordeaux ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, bordeaux, maison]
+- q: "Peut-on estimer à distance un studio à Bordeaux ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, bordeaux, studio]
+- q: "Peut-on estimer à distance un duplex à Bordeaux ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, bordeaux, duplex]
+- q: "Peut-on estimer à distance un loft à Bordeaux ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, bordeaux, loft]
+- q: "Peut-on estimer à distance un terrain à Bordeaux ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, bordeaux, terrain]
+- q: "Peut-on estimer à distance un appartement à Nantes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nantes, appartement]
+- q: "Peut-on estimer à distance un maison à Nantes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nantes, maison]
+- q: "Peut-on estimer à distance un studio à Nantes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nantes, studio]
+- q: "Peut-on estimer à distance un duplex à Nantes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nantes, duplex]
+- q: "Peut-on estimer à distance un loft à Nantes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nantes, loft]
+- q: "Peut-on estimer à distance un terrain à Nantes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nantes, terrain]
+- q: "Peut-on estimer à distance un appartement à Toulouse ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, toulouse, appartement]
+- q: "Peut-on estimer à distance un maison à Toulouse ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, toulouse, maison]
+- q: "Peut-on estimer à distance un studio à Toulouse ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, toulouse, studio]
+- q: "Peut-on estimer à distance un duplex à Toulouse ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, toulouse, duplex]
+- q: "Peut-on estimer à distance un loft à Toulouse ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, toulouse, loft]
+- q: "Peut-on estimer à distance un terrain à Toulouse ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, toulouse, terrain]
+- q: "Peut-on estimer à distance un appartement à Nice ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nice, appartement]
+- q: "Peut-on estimer à distance un maison à Nice ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nice, maison]
+- q: "Peut-on estimer à distance un studio à Nice ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nice, studio]
+- q: "Peut-on estimer à distance un duplex à Nice ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nice, duplex]
+- q: "Peut-on estimer à distance un loft à Nice ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nice, loft]
+- q: "Peut-on estimer à distance un terrain à Nice ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, nice, terrain]
+- q: "Peut-on estimer à distance un appartement à Rennes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, rennes, appartement]
+- q: "Peut-on estimer à distance un maison à Rennes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, rennes, maison]
+- q: "Peut-on estimer à distance un studio à Rennes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, rennes, studio]
+- q: "Peut-on estimer à distance un duplex à Rennes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, rennes, duplex]
+- q: "Peut-on estimer à distance un loft à Rennes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, rennes, loft]
+- q: "Peut-on estimer à distance un terrain à Rennes ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, rennes, terrain]
+- q: "Peut-on estimer à distance un appartement à Montpellier ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, montpellier, appartement]
+- q: "Peut-on estimer à distance un maison à Montpellier ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, montpellier, maison]
+- q: "Peut-on estimer à distance un studio à Montpellier ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, montpellier, studio]
+- q: "Peut-on estimer à distance un duplex à Montpellier ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, montpellier, duplex]
+- q: "Peut-on estimer à distance un loft à Montpellier ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, montpellier, loft]
+- q: "Peut-on estimer à distance un terrain à Montpellier ?"
+  a: "Nous fournissons une fourchette indicative en ligne, mais la visite nous permet d’affiner et d’adapter la stratégie de prix."
+  tags: [estimation, montpellier, terrain]
+- q: "Quel délai pour vendre un appartement à Paris ?"
+  a: "Sur Paris, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, paris, appartement]
+- q: "Quel délai pour vendre un maison à Paris ?"
+  a: "Sur Paris, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, paris, maison]
+- q: "Quel délai pour vendre un studio à Paris ?"
+  a: "Sur Paris, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, paris, studio]
+- q: "Quel délai pour vendre un duplex à Paris ?"
+  a: "Sur Paris, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, paris, duplex]
+- q: "Quel délai pour vendre un loft à Paris ?"
+  a: "Sur Paris, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, paris, loft]
+- q: "Quel délai pour vendre un terrain à Paris ?"
+  a: "Sur Paris, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, paris, terrain]
+- q: "Quel délai pour vendre un appartement à Lyon ?"
+  a: "Sur Lyon, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lyon, appartement]
+- q: "Quel délai pour vendre un maison à Lyon ?"
+  a: "Sur Lyon, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lyon, maison]
+- q: "Quel délai pour vendre un studio à Lyon ?"
+  a: "Sur Lyon, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lyon, studio]
+- q: "Quel délai pour vendre un duplex à Lyon ?"
+  a: "Sur Lyon, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lyon, duplex]
+- q: "Quel délai pour vendre un loft à Lyon ?"
+  a: "Sur Lyon, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lyon, loft]
+- q: "Quel délai pour vendre un terrain à Lyon ?"
+  a: "Sur Lyon, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lyon, terrain]
+- q: "Quel délai pour vendre un appartement à Marseille ?"
+  a: "Sur Marseille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, marseille, appartement]
+- q: "Quel délai pour vendre un maison à Marseille ?"
+  a: "Sur Marseille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, marseille, maison]
+- q: "Quel délai pour vendre un studio à Marseille ?"
+  a: "Sur Marseille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, marseille, studio]
+- q: "Quel délai pour vendre un duplex à Marseille ?"
+  a: "Sur Marseille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, marseille, duplex]
+- q: "Quel délai pour vendre un loft à Marseille ?"
+  a: "Sur Marseille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, marseille, loft]
+- q: "Quel délai pour vendre un terrain à Marseille ?"
+  a: "Sur Marseille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, marseille, terrain]
+- q: "Quel délai pour vendre un appartement à Lille ?"
+  a: "Sur Lille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lille, appartement]
+- q: "Quel délai pour vendre un maison à Lille ?"
+  a: "Sur Lille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lille, maison]
+- q: "Quel délai pour vendre un studio à Lille ?"
+  a: "Sur Lille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lille, studio]
+- q: "Quel délai pour vendre un duplex à Lille ?"
+  a: "Sur Lille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lille, duplex]
+- q: "Quel délai pour vendre un loft à Lille ?"
+  a: "Sur Lille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lille, loft]
+- q: "Quel délai pour vendre un terrain à Lille ?"
+  a: "Sur Lille, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, lille, terrain]
+- q: "Quel délai pour vendre un appartement à Bordeaux ?"
+  a: "Sur Bordeaux, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, bordeaux, appartement]
+- q: "Quel délai pour vendre un maison à Bordeaux ?"
+  a: "Sur Bordeaux, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, bordeaux, maison]
+- q: "Quel délai pour vendre un studio à Bordeaux ?"
+  a: "Sur Bordeaux, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, bordeaux, studio]
+- q: "Quel délai pour vendre un duplex à Bordeaux ?"
+  a: "Sur Bordeaux, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, bordeaux, duplex]
+- q: "Quel délai pour vendre un loft à Bordeaux ?"
+  a: "Sur Bordeaux, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, bordeaux, loft]
+- q: "Quel délai pour vendre un terrain à Bordeaux ?"
+  a: "Sur Bordeaux, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, bordeaux, terrain]
+- q: "Quel délai pour vendre un appartement à Nantes ?"
+  a: "Sur Nantes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nantes, appartement]
+- q: "Quel délai pour vendre un maison à Nantes ?"
+  a: "Sur Nantes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nantes, maison]
+- q: "Quel délai pour vendre un studio à Nantes ?"
+  a: "Sur Nantes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nantes, studio]
+- q: "Quel délai pour vendre un duplex à Nantes ?"
+  a: "Sur Nantes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nantes, duplex]
+- q: "Quel délai pour vendre un loft à Nantes ?"
+  a: "Sur Nantes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nantes, loft]
+- q: "Quel délai pour vendre un terrain à Nantes ?"
+  a: "Sur Nantes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nantes, terrain]
+- q: "Quel délai pour vendre un appartement à Toulouse ?"
+  a: "Sur Toulouse, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, toulouse, appartement]
+- q: "Quel délai pour vendre un maison à Toulouse ?"
+  a: "Sur Toulouse, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, toulouse, maison]
+- q: "Quel délai pour vendre un studio à Toulouse ?"
+  a: "Sur Toulouse, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, toulouse, studio]
+- q: "Quel délai pour vendre un duplex à Toulouse ?"
+  a: "Sur Toulouse, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, toulouse, duplex]
+- q: "Quel délai pour vendre un loft à Toulouse ?"
+  a: "Sur Toulouse, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, toulouse, loft]
+- q: "Quel délai pour vendre un terrain à Toulouse ?"
+  a: "Sur Toulouse, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, toulouse, terrain]
+- q: "Quel délai pour vendre un appartement à Nice ?"
+  a: "Sur Nice, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nice, appartement]
+- q: "Quel délai pour vendre un maison à Nice ?"
+  a: "Sur Nice, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nice, maison]
+- q: "Quel délai pour vendre un studio à Nice ?"
+  a: "Sur Nice, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nice, studio]
+- q: "Quel délai pour vendre un duplex à Nice ?"
+  a: "Sur Nice, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nice, duplex]
+- q: "Quel délai pour vendre un loft à Nice ?"
+  a: "Sur Nice, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nice, loft]
+- q: "Quel délai pour vendre un terrain à Nice ?"
+  a: "Sur Nice, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, nice, terrain]
+- q: "Quel délai pour vendre un appartement à Rennes ?"
+  a: "Sur Rennes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, rennes, appartement]
+- q: "Quel délai pour vendre un maison à Rennes ?"
+  a: "Sur Rennes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, rennes, maison]
+- q: "Quel délai pour vendre un studio à Rennes ?"
+  a: "Sur Rennes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, rennes, studio]
+- q: "Quel délai pour vendre un duplex à Rennes ?"
+  a: "Sur Rennes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, rennes, duplex]
+- q: "Quel délai pour vendre un loft à Rennes ?"
+  a: "Sur Rennes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, rennes, loft]
+- q: "Quel délai pour vendre un terrain à Rennes ?"
+  a: "Sur Rennes, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, rennes, terrain]
+- q: "Quel délai pour vendre un appartement à Montpellier ?"
+  a: "Sur Montpellier, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, montpellier, appartement]
+- q: "Quel délai pour vendre un maison à Montpellier ?"
+  a: "Sur Montpellier, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, montpellier, maison]
+- q: "Quel délai pour vendre un studio à Montpellier ?"
+  a: "Sur Montpellier, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, montpellier, studio]
+- q: "Quel délai pour vendre un duplex à Montpellier ?"
+  a: "Sur Montpellier, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, montpellier, duplex]
+- q: "Quel délai pour vendre un loft à Montpellier ?"
+  a: "Sur Montpellier, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, montpellier, loft]
+- q: "Quel délai pour vendre un terrain à Montpellier ?"
+  a: "Sur Montpellier, le délai médian dépend du positionnement prix et de la demande locale. Comptez 30–90 jours en moyenne."
+  tags: [vente, montpellier, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, paris, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, paris, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, paris, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, paris, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, paris, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, paris, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lyon, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lyon, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lyon, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lyon, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lyon, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lyon, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, marseille, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, marseille, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, marseille, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, marseille, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, marseille, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, marseille, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lille, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lille, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lille, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lille, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lille, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, lille, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, bordeaux, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, bordeaux, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, bordeaux, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, bordeaux, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, bordeaux, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, bordeaux, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nantes, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nantes, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nantes, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nantes, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nantes, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nantes, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, toulouse, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, toulouse, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, toulouse, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, toulouse, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, toulouse, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, toulouse, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nice, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nice, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nice, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nice, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nice, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, nice, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, rennes, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, rennes, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, rennes, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, rennes, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, rennes, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, rennes, terrain]
+- q: "Faut-il faire des travaux avant de vendre un appartement ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, montpellier, appartement]
+- q: "Faut-il faire des travaux avant de vendre un maison ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, montpellier, maison]
+- q: "Faut-il faire des travaux avant de vendre un studio ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, montpellier, studio]
+- q: "Faut-il faire des travaux avant de vendre un duplex ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, montpellier, duplex]
+- q: "Faut-il faire des travaux avant de vendre un loft ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, montpellier, loft]
+- q: "Faut-il faire des travaux avant de vendre un terrain ?"
+  a: "De petits travaux (peinture, luminaires) et un home staging léger améliorent la perception sans engager de gros budgets."
+  tags: [vente, montpellier, terrain]
+- q: "Comment négocier le prix d’un appartement à Paris ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, paris, appartement]
+- q: "Comment négocier le prix d’un maison à Paris ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, paris, maison]
+- q: "Comment négocier le prix d’un studio à Paris ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, paris, studio]
+- q: "Comment négocier le prix d’un duplex à Paris ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, paris, duplex]
+- q: "Comment négocier le prix d’un loft à Paris ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, paris, loft]
+- q: "Comment négocier le prix d’un terrain à Paris ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, paris, terrain]
+- q: "Comment négocier le prix d’un appartement à Lyon ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lyon, appartement]
+- q: "Comment négocier le prix d’un maison à Lyon ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lyon, maison]
+- q: "Comment négocier le prix d’un studio à Lyon ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lyon, studio]
+- q: "Comment négocier le prix d’un duplex à Lyon ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lyon, duplex]
+- q: "Comment négocier le prix d’un loft à Lyon ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lyon, loft]
+- q: "Comment négocier le prix d’un terrain à Lyon ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lyon, terrain]
+- q: "Comment négocier le prix d’un appartement à Marseille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, marseille, appartement]
+- q: "Comment négocier le prix d’un maison à Marseille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, marseille, maison]
+- q: "Comment négocier le prix d’un studio à Marseille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, marseille, studio]
+- q: "Comment négocier le prix d’un duplex à Marseille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, marseille, duplex]
+- q: "Comment négocier le prix d’un loft à Marseille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, marseille, loft]
+- q: "Comment négocier le prix d’un terrain à Marseille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, marseille, terrain]
+- q: "Comment négocier le prix d’un appartement à Lille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lille, appartement]
+- q: "Comment négocier le prix d’un maison à Lille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lille, maison]
+- q: "Comment négocier le prix d’un studio à Lille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lille, studio]
+- q: "Comment négocier le prix d’un duplex à Lille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lille, duplex]
+- q: "Comment négocier le prix d’un loft à Lille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lille, loft]
+- q: "Comment négocier le prix d’un terrain à Lille ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, lille, terrain]
+- q: "Comment négocier le prix d’un appartement à Bordeaux ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, bordeaux, appartement]
+- q: "Comment négocier le prix d’un maison à Bordeaux ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, bordeaux, maison]
+- q: "Comment négocier le prix d’un studio à Bordeaux ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, bordeaux, studio]
+- q: "Comment négocier le prix d’un duplex à Bordeaux ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, bordeaux, duplex]
+- q: "Comment négocier le prix d’un loft à Bordeaux ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, bordeaux, loft]
+- q: "Comment négocier le prix d’un terrain à Bordeaux ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, bordeaux, terrain]
+- q: "Comment négocier le prix d’un appartement à Nantes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nantes, appartement]
+- q: "Comment négocier le prix d’un maison à Nantes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nantes, maison]
+- q: "Comment négocier le prix d’un studio à Nantes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nantes, studio]
+- q: "Comment négocier le prix d’un duplex à Nantes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nantes, duplex]
+- q: "Comment négocier le prix d’un loft à Nantes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nantes, loft]
+- q: "Comment négocier le prix d’un terrain à Nantes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nantes, terrain]
+- q: "Comment négocier le prix d’un appartement à Toulouse ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, toulouse, appartement]
+- q: "Comment négocier le prix d’un maison à Toulouse ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, toulouse, maison]
+- q: "Comment négocier le prix d’un studio à Toulouse ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, toulouse, studio]
+- q: "Comment négocier le prix d’un duplex à Toulouse ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, toulouse, duplex]
+- q: "Comment négocier le prix d’un loft à Toulouse ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, toulouse, loft]
+- q: "Comment négocier le prix d’un terrain à Toulouse ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, toulouse, terrain]
+- q: "Comment négocier le prix d’un appartement à Nice ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nice, appartement]
+- q: "Comment négocier le prix d’un maison à Nice ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nice, maison]
+- q: "Comment négocier le prix d’un studio à Nice ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nice, studio]
+- q: "Comment négocier le prix d’un duplex à Nice ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nice, duplex]
+- q: "Comment négocier le prix d’un loft à Nice ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nice, loft]
+- q: "Comment négocier le prix d’un terrain à Nice ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, nice, terrain]
+- q: "Comment négocier le prix d’un appartement à Rennes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, rennes, appartement]
+- q: "Comment négocier le prix d’un maison à Rennes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, rennes, maison]
+- q: "Comment négocier le prix d’un studio à Rennes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, rennes, studio]
+- q: "Comment négocier le prix d’un duplex à Rennes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, rennes, duplex]
+- q: "Comment négocier le prix d’un loft à Rennes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, rennes, loft]
+- q: "Comment négocier le prix d’un terrain à Rennes ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, rennes, terrain]
+- q: "Comment négocier le prix d’un appartement à Montpellier ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, montpellier, appartement]
+- q: "Comment négocier le prix d’un maison à Montpellier ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, montpellier, maison]
+- q: "Comment négocier le prix d’un studio à Montpellier ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, montpellier, studio]
+- q: "Comment négocier le prix d’un duplex à Montpellier ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, montpellier, duplex]
+- q: "Comment négocier le prix d’un loft à Montpellier ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, montpellier, loft]
+- q: "Comment négocier le prix d’un terrain à Montpellier ?"
+  a: "Nous analysons les références du secteur, l’historique du bien et l’état général pour argumenter une offre réaliste."
+  tags: [achat, montpellier, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, paris, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, paris, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, paris, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, paris, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, paris, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, paris, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lyon, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lyon, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lyon, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lyon, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lyon, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lyon, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, marseille, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, marseille, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, marseille, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, marseille, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, marseille, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, marseille, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lille, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lille, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lille, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lille, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lille, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, lille, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, bordeaux, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, bordeaux, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, bordeaux, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, bordeaux, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, bordeaux, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, bordeaux, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nantes, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nantes, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nantes, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nantes, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nantes, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nantes, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, toulouse, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, toulouse, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, toulouse, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, toulouse, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, toulouse, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, toulouse, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nice, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nice, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nice, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nice, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nice, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, nice, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, rennes, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, rennes, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, rennes, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, rennes, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, rennes, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, rennes, terrain]
+- q: "Quels frais de notaire pour un appartement ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, montpellier, appartement]
+- q: "Quels frais de notaire pour un maison ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, montpellier, maison]
+- q: "Quels frais de notaire pour un studio ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, montpellier, studio]
+- q: "Quels frais de notaire pour un duplex ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, montpellier, duplex]
+- q: "Quels frais de notaire pour un loft ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, montpellier, loft]
+- q: "Quels frais de notaire pour un terrain ?"
+  a: "Les frais de notaire varient : ancien ~7–8 %, neuf ~2–3 %. Nous pouvons vous adresser une simulation."
+  tags: [achat, montpellier, terrain]
+- q: "Quel loyer viser pour un appartement à Paris ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Paris et l’Observatoire des loyers."
+  tags: [location, paris, appartement]
+- q: "Quel loyer viser pour un maison à Paris ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Paris et l’Observatoire des loyers."
+  tags: [location, paris, maison]
+- q: "Quel loyer viser pour un studio à Paris ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Paris et l’Observatoire des loyers."
+  tags: [location, paris, studio]
+- q: "Quel loyer viser pour un duplex à Paris ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Paris et l’Observatoire des loyers."
+  tags: [location, paris, duplex]
+- q: "Quel loyer viser pour un loft à Paris ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Paris et l’Observatoire des loyers."
+  tags: [location, paris, loft]
+- q: "Quel loyer viser pour un terrain à Paris ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Paris et l’Observatoire des loyers."
+  tags: [location, paris, terrain]
+- q: "Quel loyer viser pour un appartement à Lyon ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lyon et l’Observatoire des loyers."
+  tags: [location, lyon, appartement]
+- q: "Quel loyer viser pour un maison à Lyon ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lyon et l’Observatoire des loyers."
+  tags: [location, lyon, maison]
+- q: "Quel loyer viser pour un studio à Lyon ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lyon et l’Observatoire des loyers."
+  tags: [location, lyon, studio]
+- q: "Quel loyer viser pour un duplex à Lyon ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lyon et l’Observatoire des loyers."
+  tags: [location, lyon, duplex]
+- q: "Quel loyer viser pour un loft à Lyon ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lyon et l’Observatoire des loyers."
+  tags: [location, lyon, loft]
+- q: "Quel loyer viser pour un terrain à Lyon ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lyon et l’Observatoire des loyers."
+  tags: [location, lyon, terrain]
+- q: "Quel loyer viser pour un appartement à Marseille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Marseille et l’Observatoire des loyers."
+  tags: [location, marseille, appartement]
+- q: "Quel loyer viser pour un maison à Marseille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Marseille et l’Observatoire des loyers."
+  tags: [location, marseille, maison]
+- q: "Quel loyer viser pour un studio à Marseille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Marseille et l’Observatoire des loyers."
+  tags: [location, marseille, studio]
+- q: "Quel loyer viser pour un duplex à Marseille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Marseille et l’Observatoire des loyers."
+  tags: [location, marseille, duplex]
+- q: "Quel loyer viser pour un loft à Marseille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Marseille et l’Observatoire des loyers."
+  tags: [location, marseille, loft]
+- q: "Quel loyer viser pour un terrain à Marseille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Marseille et l’Observatoire des loyers."
+  tags: [location, marseille, terrain]
+- q: "Quel loyer viser pour un appartement à Lille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lille et l’Observatoire des loyers."
+  tags: [location, lille, appartement]
+- q: "Quel loyer viser pour un maison à Lille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lille et l’Observatoire des loyers."
+  tags: [location, lille, maison]
+- q: "Quel loyer viser pour un studio à Lille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lille et l’Observatoire des loyers."
+  tags: [location, lille, studio]
+- q: "Quel loyer viser pour un duplex à Lille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lille et l’Observatoire des loyers."
+  tags: [location, lille, duplex]
+- q: "Quel loyer viser pour un loft à Lille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lille et l’Observatoire des loyers."
+  tags: [location, lille, loft]
+- q: "Quel loyer viser pour un terrain à Lille ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Lille et l’Observatoire des loyers."
+  tags: [location, lille, terrain]
+- q: "Quel loyer viser pour un appartement à Bordeaux ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Bordeaux et l’Observatoire des loyers."
+  tags: [location, bordeaux, appartement]
+- q: "Quel loyer viser pour un maison à Bordeaux ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Bordeaux et l’Observatoire des loyers."
+  tags: [location, bordeaux, maison]
+- q: "Quel loyer viser pour un studio à Bordeaux ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Bordeaux et l’Observatoire des loyers."
+  tags: [location, bordeaux, studio]
+- q: "Quel loyer viser pour un duplex à Bordeaux ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Bordeaux et l’Observatoire des loyers."
+  tags: [location, bordeaux, duplex]
+- q: "Quel loyer viser pour un loft à Bordeaux ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Bordeaux et l’Observatoire des loyers."
+  tags: [location, bordeaux, loft]
+- q: "Quel loyer viser pour un terrain à Bordeaux ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Bordeaux et l’Observatoire des loyers."
+  tags: [location, bordeaux, terrain]
+- q: "Quel loyer viser pour un appartement à Nantes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nantes et l’Observatoire des loyers."
+  tags: [location, nantes, appartement]
+- q: "Quel loyer viser pour un maison à Nantes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nantes et l’Observatoire des loyers."
+  tags: [location, nantes, maison]
+- q: "Quel loyer viser pour un studio à Nantes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nantes et l’Observatoire des loyers."
+  tags: [location, nantes, studio]
+- q: "Quel loyer viser pour un duplex à Nantes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nantes et l’Observatoire des loyers."
+  tags: [location, nantes, duplex]
+- q: "Quel loyer viser pour un loft à Nantes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nantes et l’Observatoire des loyers."
+  tags: [location, nantes, loft]
+- q: "Quel loyer viser pour un terrain à Nantes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nantes et l’Observatoire des loyers."
+  tags: [location, nantes, terrain]
+- q: "Quel loyer viser pour un appartement à Toulouse ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Toulouse et l’Observatoire des loyers."
+  tags: [location, toulouse, appartement]
+- q: "Quel loyer viser pour un maison à Toulouse ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Toulouse et l’Observatoire des loyers."
+  tags: [location, toulouse, maison]
+- q: "Quel loyer viser pour un studio à Toulouse ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Toulouse et l’Observatoire des loyers."
+  tags: [location, toulouse, studio]
+- q: "Quel loyer viser pour un duplex à Toulouse ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Toulouse et l’Observatoire des loyers."
+  tags: [location, toulouse, duplex]
+- q: "Quel loyer viser pour un loft à Toulouse ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Toulouse et l’Observatoire des loyers."
+  tags: [location, toulouse, loft]
+- q: "Quel loyer viser pour un terrain à Toulouse ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Toulouse et l’Observatoire des loyers."
+  tags: [location, toulouse, terrain]
+- q: "Quel loyer viser pour un appartement à Nice ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nice et l’Observatoire des loyers."
+  tags: [location, nice, appartement]
+- q: "Quel loyer viser pour un maison à Nice ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nice et l’Observatoire des loyers."
+  tags: [location, nice, maison]
+- q: "Quel loyer viser pour un studio à Nice ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nice et l’Observatoire des loyers."
+  tags: [location, nice, studio]
+- q: "Quel loyer viser pour un duplex à Nice ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nice et l’Observatoire des loyers."
+  tags: [location, nice, duplex]
+- q: "Quel loyer viser pour un loft à Nice ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nice et l’Observatoire des loyers."
+  tags: [location, nice, loft]
+- q: "Quel loyer viser pour un terrain à Nice ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Nice et l’Observatoire des loyers."
+  tags: [location, nice, terrain]
+- q: "Quel loyer viser pour un appartement à Rennes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Rennes et l’Observatoire des loyers."
+  tags: [location, rennes, appartement]
+- q: "Quel loyer viser pour un maison à Rennes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Rennes et l’Observatoire des loyers."
+  tags: [location, rennes, maison]
+- q: "Quel loyer viser pour un studio à Rennes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Rennes et l’Observatoire des loyers."
+  tags: [location, rennes, studio]
+- q: "Quel loyer viser pour un duplex à Rennes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Rennes et l’Observatoire des loyers."
+  tags: [location, rennes, duplex]
+- q: "Quel loyer viser pour un loft à Rennes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Rennes et l’Observatoire des loyers."
+  tags: [location, rennes, loft]
+- q: "Quel loyer viser pour un terrain à Rennes ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Rennes et l’Observatoire des loyers."
+  tags: [location, rennes, terrain]
+- q: "Quel loyer viser pour un appartement à Montpellier ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Montpellier et l’Observatoire des loyers."
+  tags: [location, montpellier, appartement]
+- q: "Quel loyer viser pour un maison à Montpellier ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Montpellier et l’Observatoire des loyers."
+  tags: [location, montpellier, maison]
+- q: "Quel loyer viser pour un studio à Montpellier ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Montpellier et l’Observatoire des loyers."
+  tags: [location, montpellier, studio]
+- q: "Quel loyer viser pour un duplex à Montpellier ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Montpellier et l’Observatoire des loyers."
+  tags: [location, montpellier, duplex]
+- q: "Quel loyer viser pour un loft à Montpellier ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Montpellier et l’Observatoire des loyers."
+  tags: [location, montpellier, loft]
+- q: "Quel loyer viser pour un terrain à Montpellier ?"
+  a: "Nous nous basons sur les biens comparables loués récemment à Montpellier et l’Observatoire des loyers."
+  tags: [location, montpellier, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, paris, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, paris, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, paris, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, paris, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, paris, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, paris, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lyon, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lyon, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lyon, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lyon, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lyon, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lyon, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, marseille, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, marseille, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, marseille, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, marseille, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, marseille, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, marseille, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lille, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lille, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lille, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lille, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lille, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, lille, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, bordeaux, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, bordeaux, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, bordeaux, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, bordeaux, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, bordeaux, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, bordeaux, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nantes, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nantes, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nantes, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nantes, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nantes, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nantes, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, toulouse, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, toulouse, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, toulouse, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, toulouse, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, toulouse, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, toulouse, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nice, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nice, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nice, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nice, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nice, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, nice, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, rennes, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, rennes, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, rennes, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, rennes, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, rennes, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, rennes, terrain]
+- q: "Puis-je louer en meublé mon appartement ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, montpellier, appartement]
+- q: "Puis-je louer en meublé mon maison ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, montpellier, maison]
+- q: "Puis-je louer en meublé mon studio ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, montpellier, studio]
+- q: "Puis-je louer en meublé mon duplex ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, montpellier, duplex]
+- q: "Puis-je louer en meublé mon loft ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, montpellier, loft]
+- q: "Puis-je louer en meublé mon terrain ?"
+  a: "Oui, avec l’équipement réglementaire. Le meublé est souvent plus rentable mais implique un turn-over plus fréquent."
+  tags: [location, montpellier, terrain]
+- q: "Que comprend votre offre de gestion à Paris ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, paris, appartement]
+- q: "Que comprend votre offre de gestion à Paris ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, paris, maison]
+- q: "Que comprend votre offre de gestion à Paris ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, paris, studio]
+- q: "Que comprend votre offre de gestion à Paris ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, paris, duplex]
+- q: "Que comprend votre offre de gestion à Paris ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, paris, loft]
+- q: "Que comprend votre offre de gestion à Paris ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, paris, terrain]
+- q: "Que comprend votre offre de gestion à Lyon ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lyon, appartement]
+- q: "Que comprend votre offre de gestion à Lyon ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lyon, maison]
+- q: "Que comprend votre offre de gestion à Lyon ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lyon, studio]
+- q: "Que comprend votre offre de gestion à Lyon ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lyon, duplex]
+- q: "Que comprend votre offre de gestion à Lyon ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lyon, loft]
+- q: "Que comprend votre offre de gestion à Lyon ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lyon, terrain]
+- q: "Que comprend votre offre de gestion à Marseille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, marseille, appartement]
+- q: "Que comprend votre offre de gestion à Marseille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, marseille, maison]
+- q: "Que comprend votre offre de gestion à Marseille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, marseille, studio]
+- q: "Que comprend votre offre de gestion à Marseille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, marseille, duplex]
+- q: "Que comprend votre offre de gestion à Marseille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, marseille, loft]
+- q: "Que comprend votre offre de gestion à Marseille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, marseille, terrain]
+- q: "Que comprend votre offre de gestion à Lille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lille, appartement]
+- q: "Que comprend votre offre de gestion à Lille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lille, maison]
+- q: "Que comprend votre offre de gestion à Lille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lille, studio]
+- q: "Que comprend votre offre de gestion à Lille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lille, duplex]
+- q: "Que comprend votre offre de gestion à Lille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lille, loft]
+- q: "Que comprend votre offre de gestion à Lille ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, lille, terrain]
+- q: "Que comprend votre offre de gestion à Bordeaux ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, bordeaux, appartement]
+- q: "Que comprend votre offre de gestion à Bordeaux ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, bordeaux, maison]
+- q: "Que comprend votre offre de gestion à Bordeaux ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, bordeaux, studio]
+- q: "Que comprend votre offre de gestion à Bordeaux ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, bordeaux, duplex]
+- q: "Que comprend votre offre de gestion à Bordeaux ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, bordeaux, loft]
+- q: "Que comprend votre offre de gestion à Bordeaux ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, bordeaux, terrain]
+- q: "Que comprend votre offre de gestion à Nantes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nantes, appartement]
+- q: "Que comprend votre offre de gestion à Nantes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nantes, maison]
+- q: "Que comprend votre offre de gestion à Nantes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nantes, studio]
+- q: "Que comprend votre offre de gestion à Nantes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nantes, duplex]
+- q: "Que comprend votre offre de gestion à Nantes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nantes, loft]
+- q: "Que comprend votre offre de gestion à Nantes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nantes, terrain]
+- q: "Que comprend votre offre de gestion à Toulouse ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, toulouse, appartement]
+- q: "Que comprend votre offre de gestion à Toulouse ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, toulouse, maison]
+- q: "Que comprend votre offre de gestion à Toulouse ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, toulouse, studio]
+- q: "Que comprend votre offre de gestion à Toulouse ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, toulouse, duplex]
+- q: "Que comprend votre offre de gestion à Toulouse ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, toulouse, loft]
+- q: "Que comprend votre offre de gestion à Toulouse ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, toulouse, terrain]
+- q: "Que comprend votre offre de gestion à Nice ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nice, appartement]
+- q: "Que comprend votre offre de gestion à Nice ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nice, maison]
+- q: "Que comprend votre offre de gestion à Nice ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nice, studio]
+- q: "Que comprend votre offre de gestion à Nice ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nice, duplex]
+- q: "Que comprend votre offre de gestion à Nice ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nice, loft]
+- q: "Que comprend votre offre de gestion à Nice ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, nice, terrain]
+- q: "Que comprend votre offre de gestion à Rennes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, rennes, appartement]
+- q: "Que comprend votre offre de gestion à Rennes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, rennes, maison]
+- q: "Que comprend votre offre de gestion à Rennes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, rennes, studio]
+- q: "Que comprend votre offre de gestion à Rennes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, rennes, duplex]
+- q: "Que comprend votre offre de gestion à Rennes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, rennes, loft]
+- q: "Que comprend votre offre de gestion à Rennes ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, rennes, terrain]
+- q: "Que comprend votre offre de gestion à Montpellier ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, montpellier, appartement]
+- q: "Que comprend votre offre de gestion à Montpellier ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, montpellier, maison]
+- q: "Que comprend votre offre de gestion à Montpellier ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, montpellier, studio]
+- q: "Que comprend votre offre de gestion à Montpellier ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, montpellier, duplex]
+- q: "Que comprend votre offre de gestion à Montpellier ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, montpellier, loft]
+- q: "Que comprend votre offre de gestion à Montpellier ?"
+  a: "Sélection des locataires, encaissement des loyers, indexation, suivi technique, interface avec assurances et prestataires."
+  tags: [gestion, montpellier, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, paris, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, paris, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, paris, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, paris, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, paris, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, paris, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lyon, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lyon, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lyon, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lyon, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lyon, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lyon, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, marseille, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, marseille, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, marseille, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, marseille, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, marseille, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, marseille, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lille, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lille, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lille, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lille, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lille, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, lille, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, bordeaux, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, bordeaux, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, bordeaux, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, bordeaux, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, bordeaux, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, bordeaux, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nantes, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nantes, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nantes, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nantes, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nantes, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nantes, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, toulouse, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, toulouse, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, toulouse, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, toulouse, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, toulouse, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, toulouse, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nice, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nice, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nice, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nice, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nice, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, nice, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, rennes, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, rennes, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, rennes, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, rennes, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, rennes, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, rennes, terrain]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, montpellier, appartement]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, montpellier, maison]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, montpellier, studio]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, montpellier, duplex]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, montpellier, loft]
+- q: "DPE F ou G : quelles conséquences pour la location ?"
+  a: "Les passoires énergétiques sont encadrées (gel d’augmentation, interdiction progressive). Nous proposons des pistes d’amélioration."
+  tags: [diagnostics, montpellier, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, paris, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, paris, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, paris, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, paris, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, paris, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, paris, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lyon, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lyon, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lyon, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lyon, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lyon, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lyon, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, marseille, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, marseille, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, marseille, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, marseille, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, marseille, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, marseille, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lille, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lille, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lille, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lille, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lille, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, lille, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, bordeaux, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, bordeaux, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, bordeaux, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, bordeaux, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, bordeaux, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, bordeaux, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nantes, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nantes, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nantes, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nantes, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nantes, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nantes, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, toulouse, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, toulouse, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, toulouse, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, toulouse, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, toulouse, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, toulouse, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nice, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nice, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nice, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nice, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nice, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, nice, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, rennes, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, rennes, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, rennes, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, rennes, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, rennes, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, rennes, terrain]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, montpellier, appartement]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, montpellier, maison]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, montpellier, studio]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, montpellier, duplex]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, montpellier, loft]
+- q: "Comment lire les PV d’AG avant d’acheter ?"
+  a: "Nous analysons résolutions (travaux votés, sinistres, contentieux) et fonds travaux pour anticiper les charges."
+  tags: [copro, montpellier, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, paris, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, paris, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, paris, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, paris, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, paris, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, paris, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lyon, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lyon, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lyon, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lyon, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lyon, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lyon, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, marseille, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, marseille, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, marseille, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, marseille, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, marseille, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, marseille, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lille, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lille, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lille, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lille, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lille, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, lille, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, bordeaux, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, bordeaux, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, bordeaux, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, bordeaux, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, bordeaux, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, bordeaux, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nantes, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nantes, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nantes, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nantes, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nantes, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nantes, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, toulouse, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, toulouse, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, toulouse, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, toulouse, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, toulouse, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, toulouse, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nice, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nice, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nice, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nice, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nice, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, nice, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, rennes, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, rennes, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, rennes, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, rennes, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, rennes, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, rennes, terrain]
+- q: "Puis-je bénéficier du PTZ pour un appartement ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, montpellier, appartement]
+- q: "Puis-je bénéficier du PTZ pour un maison ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, montpellier, maison]
+- q: "Puis-je bénéficier du PTZ pour un studio ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, montpellier, studio]
+- q: "Puis-je bénéficier du PTZ pour un duplex ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, montpellier, duplex]
+- q: "Puis-je bénéficier du PTZ pour un loft ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, montpellier, loft]
+- q: "Puis-je bénéficier du PTZ pour un terrain ?"
+  a: "Le PTZ est réservé au neuf ou à l’ancien avec travaux, sous conditions de ressources et de localisation."
+  tags: [fiscalite, montpellier, terrain]
