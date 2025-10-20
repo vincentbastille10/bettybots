@@ -1,17 +1,51 @@
 # betty_rules/dialog_manager.py
-# Orchestrateur "rule-based" pour Betty
+# Orchestrateur "rule-based" pour Betty (sans LLM)
 from __future__ import annotations
+
 from typing import Dict, Any, List
+import re
 
 from .memory import get_session
 from .loader import load_pack
 from .nlu_rules import best_match, detect_intent
 from .templates_engine import render
 
-# Slots par défaut si le pack n'en définit pas
+# ------------------------------------------------------------
+# Détection simple des coordonnées / nom
+# ------------------------------------------------------------
+EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
+PHONE_RE = re.compile(r"(?:(?:\+|00)33|0)\s*[1-9](?:[\s\.\-]*\d{2}){4}")
+NAME_RE  = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}\s+[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}$")
+
+def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
+    """Tente de remplir email / téléphone / nom à partir du texte libre."""
+    t = (text or "").strip()
+
+    # email
+    if not ses["slots"].get("email"):
+        m = EMAIL_RE.search(t)
+        if m:
+            ses["slots"]["email"] = m.group(0)
+
+    # téléphone FR basique
+    if not ses["slots"].get("telephone"):
+        # remplace les espaces "fins" éventuels avant matching
+        flat = t.replace("\u202f", " ").strip()
+        m = PHONE_RE.search(flat)
+        if m:
+            ses["slots"]["telephone"] = m.group(0)
+
+    # nom / prénom : 2+ mots alphabétiques (tolère accents/apostrophes/traits)
+    if not ses["slots"].get("nom"):
+        line = " ".join(t.split())
+        if NAME_RE.match(line):
+            ses["slots"]["nom"] = line
+
+# ------------------------------------------------------------
+# Paramètres par défaut
+# ------------------------------------------------------------
 DEFAULT_LEAD_SLOTS: List[str] = ["nom", "email", "telephone", "besoin", "budget", "delai"]
 
-# Prompts de collecte pour chaque slot
 LEAD_ASK = {
     "nom": "Pour commencer, quel est votre nom et prénom ?",
     "email": "Merci. Quelle est votre adresse e-mail pour vous recontacter ?",
@@ -21,31 +55,28 @@ LEAD_ASK = {
     "delai": "Quel est votre délai idéal ?",
 }
 
-# Heuristiques de capture à la volée
-def _autocapture_slots(ses: Dict[str, Any], text: str) -> None:
-    t = (text or "").strip()
-    if "@" in t and not ses["slots"].get("email"):
-        ses["slots"]["email"] = t
-    if any(t.startswith(p) for p in ("06", "07")) and not ses["slots"].get("telephone"):
-        ses["slots"]["telephone"] = t
-
-def _next_missing(slots: Dict[str, Any], order: List[str]) -> str | None:
-    for k in order:
-        if not slots.get(k):
-            return k
-    return None
-
 def _ask_for(slot: str) -> str:
     return LEAD_ASK.get(slot, "D’accord, j’ai besoin d’une information supplémentaire.")
 
+def _next_missing(slots: Dict[str, Any], order: List[str]) -> str | None:
+    for k in order:
+        v = slots.get(k)
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return k
+    return None
+
 def _normalize_role(role: str) -> str:
+    """Normalise les variantes pour mapper sur les fichiers YAML (voir loader)."""
     s = (role or "").strip().lower()
     s = s.replace(" / ", " ").replace("/", " ").replace("_", " ").replace("-", " ")
-    s = s.replace("avocat avocate", "avocat")
-    s = s.replace("agent immo", "agent immobilier")
     s = s.replace("médecin", "medecin")
+    s = s.replace("avocat / avocate", "avocat")
+    s = s.replace("agent immo", "agent immobilier")
     return " ".join(s.split())
 
+# ------------------------------------------------------------
+# Flux lead
+# ------------------------------------------------------------
 def _start_lead(ses, slots_order) -> str:
     ses["state"] = "lead"
     slot = _next_missing(ses["slots"], slots_order)
@@ -60,18 +91,24 @@ def _continue_lead_flow(ses, text: str, slots_order: List[str]) -> str:
     ses["state"] = "idle"
     return "Merci, j’ai bien noté vos coordonnées. Un conseiller vous recontacte très vite ✅"
 
+# ------------------------------------------------------------
+# Réponse principale
+# ------------------------------------------------------------
 def reply(tenant: str, role: str, text: str) -> str:
     """
     Entrée API :
       - tenant : identifiant client (mémoire session)
-      - role   : métier affiché ("Avocat / Avocate", "agent immobilier", "medecin", etc.)
+      - role   : métier affiché (ex: 'Agent immobilier', 'Avocat / Avocate', 'Medecin', …)
       - text   : message utilisateur
     Retour : réponse texte.
     """
     ses = get_session(tenant)
+    ses.setdefault("slots", {})
+    ses.setdefault("state", "idle")
+
     role_norm = _normalize_role(role)
 
-    # Charge pack YAML
+    # Charge le pack YAML du rôle
     pack = load_pack(role_norm) or {}
     faqs = pack.get("faqs") or []
     intents = pack.get("intents") or []
@@ -79,27 +116,29 @@ def reply(tenant: str, role: str, text: str) -> str:
 
     user = (text or "").strip()
     if not user:
+        # Pas de texte => message neutre (sans boucler)
         if not ses["slots"].get("email"):
             return "Je peux vous renseigner et vous mettre en relation. Souhaitez-vous me laisser un e-mail pour vous recontacter ?"
         return "Je vous écoute 🙂"
 
-    # Si on est déjà en collecte → priorité
+    # Si on est déjà en collecte de lead → priorité
     if ses.get("state") == "lead":
         return _continue_lead_flow(ses, user, slots_order)
 
-    # Intent explicite (rdv/contact/…)
+    # Intent explicite (rdv / rappel / contact / devis / visite…)
     intent = detect_intent(user, intents)
-    if intent in {"start_lead", "rdv", "contact"}:
+    if intent in {"start_lead", "rdv", "contact", "devis", "visite"}:
         return _start_lead(ses, slots_order)
 
-    # FAQ par similarité (top 1)
+    # FAQ : meilleure correspondance
     best = best_match(user, faqs, k=1)
     if best:
         top = best[0]
         answer = render(top.get("a", ""), {"role": role_norm})
-        if not ses["slots"].get("email"):
+        # incitation douce à laisser des coordonnées si on n'a rien
+        if not (ses["slots"].get("email") or ses["slots"].get("telephone")):
             answer += "\n\nSouhaitez-vous être recontacté·e ? Je peux enregistrer vos coordonnées."
         return answer or "Je n’ai pas la réponse exacte, mais je peux vous mettre en relation rapidement."
 
-    # Pas de match → proposer la mise en relation
+    # Sinon → proposer la mise en relation (déclenche la collecte)
     return _start_lead(ses, slots_order)
