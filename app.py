@@ -650,44 +650,8 @@ def save_dashboard() -> Response:
 @login_required
 def test_page() -> Response:
     bot = get_default_bot(int(current_user.id))
-<<<<<<< HEAD
-    warning = None if current_user.is_active_subscription else \
-        "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
-    template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
-    
-    cfg = {
-        "avatar_url": (bot.get("avatar_url") if isinstance(bot, dict) else getattr(bot, "avatar_url", None)),
-        "name":       (bot.get("name")       if isinstance(bot, dict) else getattr(bot, "name", None)) or "Mon Betty Bot",
-        "color_hex":  (bot.get("color_hex")  if isinstance(bot, dict) else getattr(bot, "color_hex", None)) or "#4F46E5",
-        "shape":      (bot.get("shape")      if isinstance(bot, dict) else getattr(bot, "shape", None)) or "square",
-        "persona":    (bot.get("persona")    if isinstance(bot, dict) else getattr(bot, "persona", None)) or "Assistant",
-        "welcome":    (bot.get("welcome_text") if isinstance(bot, dict) else getattr(bot, "welcome_text", None)) or "Bonjour 👋",
-    }
 
-return render_with_fallback(template_name, bot=bot, user=current_user, warning=warning)
-
-# ---------------------------------------------------------------------------
-# Stripe payment flow
-# ---------------------------------------------------------------------------
-
-@app.route("/pay")
-@login_required
-def pay() -> Response:
-    return render_with_fallback("pay.html",
-                                price="10 €", price_id=STRIPE_PRICE_ID,
-                                subscription_status=current_user.subscription_status)
-
-@app.route("/create-checkout-session", methods=["POST"])
-@login_required
-def create_checkout_session() -> Response:
-    if not stripe.api_key or not STRIPE_PRICE_ID:
-        flash("Le paiement n’est pas configuré pour le moment.", "error")
-        return redirect(url_for("pay"))
-    success_url = request.host_url.rstrip("/") + url_for("snippet")
-    cancel_url = request.host_url.rstrip("/") + url_for("pay")
-=======
-    # Avertissement si l'abonnement n'est pas actif
->>>>>>> 605dc4a (fix(test): réindentation et passage de 'cfg' au template + garde-fou)
+    # Avertissement si l’abonnement n’est pas actif
     try:
         is_active = bool(getattr(current_user, "is_active_subscription", False))
     except Exception:
@@ -698,15 +662,16 @@ def create_checkout_session() -> Response:
     template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
 
     # Construit un dict 'cfg' attendu par le template, avec valeurs par défaut
-    def get(d, k): 
-        return (d.get(k) if isinstance(d, dict) else getattr(d, k, None))
+    def getv(obj, key):
+        return (obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None))
+
     cfg = {
-        "avatar_url": get(bot, "avatar_url"),
-        "name":       get(bot, "name")        or "Mon Betty Bot",
-        "color_hex":  get(bot, "color_hex")   or "#4F46E5",
-        "shape":      get(bot, "shape")       or "square",
-        "persona":    get(bot, "persona")     or "Assistant",
-        "welcome":    get(bot, "welcome_text") or "Bonjour 👋",
+        "avatar_url": getv(bot, "avatar_url"),
+        "name":       getv(bot, "name")         or "Mon Betty Bot",
+        "color_hex":  getv(bot, "color_hex")    or "#4F46E5",
+        "shape":      getv(bot, "shape")        or "square",
+        "persona":    getv(bot, "persona")      or "Assistant",
+        "welcome":    getv(bot, "welcome_text") or "Bonjour 👋",
     }
 
     return render_with_fallback(
@@ -714,7 +679,7 @@ def create_checkout_session() -> Response:
         bot=bot,
         user=current_user,
         warning=warning,
-        cfg=cfg,  # <- essentiel pour chat.html
+        cfg=cfg,  # indispensable pour chat.html
     )
 
 @app.route("/snippet")
