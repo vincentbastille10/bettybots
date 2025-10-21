@@ -26,7 +26,7 @@
   <h1>Configuration de votre bot</h1>
   <p>Bienvenue {{ name }} ({{ email }}) — <b>tenant:</b> {{ tenant }}</p>
 
-  <form method="POST" action="{{ url_for('save_settings') }}" class="card">
+  <form method="POST" action="{{ url_for('save_dashboard') }}" class="card">
     <input type="hidden" name="tenant" value="{{ tenant }}" />
     <input type="hidden" id="avatar" name="avatar" value="{{ avatar or '' }}" />
     <input type="hidden" id="color"  name="color"  value="{{ color or '#2563eb' }}" />
