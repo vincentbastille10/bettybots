@@ -1,833 +1,484 @@
-"""Main Flask application for Betty Bots subscription service."""
+# app.py
 from __future__ import annotations
-
-import json
-import logging
 import os
-import secrets
+import json
 import smtplib
 import sqlite3
-from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import logging
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional, Tuple, List
+from email.mime.text import MIMEText
 
-import stripe
-import yaml
-from dotenv import load_dotenv
 from flask import (
-    Flask,
-    Response,
-    flash,
-    g,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    url_for,
+    Flask, request, redirect, url_for, render_template,
+    flash, jsonify, Response
 )
 from flask_login import (
-    LoginManager,
-    UserMixin,
-    current_user,
-    login_required,
-    login_user,
-    logout_user,
+    LoginManager, UserMixin, login_user, current_user,
+    login_required, logout_user
 )
-from werkzeug.security import check_password_hash, generate_password_hash
+from dotenv import load_dotenv
+import yaml
+import stripe
 
-try:
-    from authlib.integrations.flask_client import OAuth
-except Exception:  # optional
-    OAuth = None
-
-# ---------------------------------------------------------------------------
-# Configuration & application setup
-# ---------------------------------------------------------------------------
-
-BASE_DIR = Path(__file__).resolve().parent
+# -----------------------------------------------------------------------------
+# Configuration
+# -----------------------------------------------------------------------------
+BASE_DIR = Path(__file__).parent.resolve()
 load_dotenv(BASE_DIR / ".env")
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", secrets.token_hex(32))
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
-DATABASE_PATH = os.getenv("DATABASE_URL", "sqlite:///data.db")
-DB_FILE = DATABASE_PATH.replace("sqlite:///", "") if DATABASE_PATH.startswith("sqlite:///") else "data.db"
-DB_PATH = BASE_DIR / DB_FILE
+# Base/public URL (ne change pas les noms)
+BASE_URL = os.getenv("BASE_URL") or os.getenv("PUBLIC_BASE_URL") or ""
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or BASE_URL
 
-login_manager = LoginManager(app)
-login_manager.login_view = "login"
+# SMTP (optionnel)
+SMTP_USER = os.getenv("SMTP_USER") or ""
+SMTP_PASS = os.getenv("SMTP_PASS") or ""
+SMTP_FROM = SMTP_USER or "noreply@bettybots.local"
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Stripe (CB abonnement)
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY") or ""
+STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID") or ""  # price mensuel
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET") or ""
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
-# Stripe
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY") or None
-STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID_10_EUR")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+# -----------------------------------------------------------------------------
+# DB helpers (SQLite)
+# -----------------------------------------------------------------------------
+DB_PATH = BASE_DIR / "app.db"
 
-# Google OAuth (optionnel)
-oauth: Optional[OAuth] = None
-if OAuth is not None:
-    oauth = OAuth(app)
-    google_client_id = os.getenv("OAUTH_GOOGLE_CLIENT_ID")
-    google_client_secret = os.getenv("OAUTH_GOOGLE_CLIENT_SECRET")
-    google_redirect_uri = os.getenv("OAUTH_GOOGLE_REDIRECT_URI")
-    if google_client_id and google_client_secret:
-        oauth.register(
-            name="google",
-            client_id=google_client_id,
-            client_secret=google_client_secret,
-            access_token_url="https://oauth2.googleapis.com/token",
-            access_token_params={"prompt": "consent"},
-            authorize_url="https://accounts.google.com/o/oauth2/auth",
-            authorize_params={
-                "access_type": "offline",
-                "prompt": "consent",
-                "response_type": "code",
-                "scope": "openid email profile",
-            },
-            api_base_url="https://www.googleapis.com/oauth2/v1/",
-            userinfo_endpoint="https://openidconnect.googleapis.com/v1/userinfo",
-            client_kwargs={"scope": "openid email profile"},
-        )
-        app.config["GOOGLE_REDIRECT_URI"] = google_redirect_uri
-    else:
-        logger.info("Google OAuth credentials missing; Google signup disabled.")
-else:
-    logger.info("authlib not installed; Google signup disabled.")
+def _db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# ---------------------------------------------------------------------------
-# DB helpers
-# ---------------------------------------------------------------------------
+def db_exec(sql: str, params: Tuple[Any, ...] = ()) -> None:
+    with _db() as c:
+        c.execute(sql, params)
+        c.commit()
 
-def get_db() -> sqlite3.Connection:
-    if "db" not in g:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        g.db = conn
-    return g.db  # type: ignore[return-value]
+def db_query(sql: str, params: Tuple[Any, ...] = ()) -> List[sqlite3.Row]:
+    with _db() as c:
+        cur = c.execute(sql, params)
+        return cur.fetchall()
 
-@app.teardown_appcontext
-def close_db(_: Optional[BaseException]) -> None:
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
+def db_one(sql: str, params: Tuple[Any, ...] = ()) -> Optional[sqlite3.Row]:
+    rows = db_query(sql, params)
+    return rows[0] if rows else None
 
 def init_db() -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON")
-    cur = conn.cursor()
-    cur.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT,
-            name TEXT,
-            auth_provider TEXT,
-            google_sub TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            subscription_status TEXT DEFAULT 'inactive',
-            embed_token TEXT UNIQUE
-        );
-        CREATE TABLE IF NOT EXISTS bots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            name TEXT,
-            metier TEXT,
-            yaml_file TEXT,
-            persona TEXT,
-            color_hex TEXT,
-            shape TEXT DEFAULT 'square',
-            welcome_text TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            is_default INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS chats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bot_id INTEGER NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            stripe_customer_id TEXT,
-            stripe_subscription_id TEXT,
-            status TEXT,
-            current_period_end TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        );
-        """
-    )
-    conn.commit()
-    conn.close()
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS users(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_name TEXT, last_name TEXT,
+      email TEXT UNIQUE NOT NULL,
+      is_active_subscription INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS bots(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER UNIQUE NOT NULL,
+      name TEXT, metier TEXT,
+      avatar_url TEXT, color_hex TEXT,
+      persona TEXT, welcome_text TEXT,
+      shape TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS leads(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      bot_id INTEGER NOT NULL,
+      name TEXT, email TEXT, message TEXT,
+      extra_json TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id),
+      FOREIGN KEY(bot_id) REFERENCES bots(id)
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS subscriptions(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      provider TEXT CHECK(provider='stripe') NOT NULL,
+      external_id TEXT, status TEXT,
+      current_period_end TEXT,
+      amount_cents INTEGER, currency TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS bot_state(
+      user_id INTEGER NOT NULL,
+      bot_id INTEGER NOT NULL,
+      state_json TEXT,
+      PRIMARY KEY(user_id, bot_id)
+    )""")
 
 init_db()
 
-# ---------------------------------------------------------------------------
-# User model
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Login
+# -----------------------------------------------------------------------------
+login_manager = LoginManager(app)
+login_manager.login_view = "signup"
 
 class User(UserMixin):
     def __init__(self, row: sqlite3.Row):
         self.id = row["id"]
+        self.first_name = row["first_name"]
+        self.last_name = row["last_name"]
         self.email = row["email"]
-        self.password_hash = row["password_hash"]
-        self.name = row["name"] or self.email.split("@")[0]
-        self.auth_provider = row["auth_provider"] or "password"
-        self.google_sub = row["google_sub"]
-        self.subscription_status = row["subscription_status"] or "inactive"
-        self.embed_token = row["embed_token"]
-
-    def get_id(self) -> str:  # type: ignore[override]
-        return str(self.id)
-
-    @property
-    def is_active_subscription(self) -> bool:
-        return self.subscription_status == "active"
+        self.is_active_subscription = bool(row["is_active_subscription"])
 
 @login_manager.user_loader
 def load_user(user_id: str) -> Optional[User]:
-    row = get_user_by_id(int(user_id))
+    row = db_one("SELECT * FROM users WHERE id=?", (user_id,))
     return User(row) if row else None
 
-# ---------------------------------------------------------------------------
-# DB utils
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Utils
+# -----------------------------------------------------------------------------
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-def get_user_by_id(user_id: int) -> Optional[sqlite3.Row]:
-    return get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-
-def get_user_by_email(email: str) -> Optional[sqlite3.Row]:
-    return get_db().execute("SELECT * FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone()
-
-def get_user_by_embed(embed_token: str) -> Optional[sqlite3.Row]:
-    return get_db().execute("SELECT * FROM users WHERE embed_token = ?", (embed_token,)).fetchone()
-
-def get_user_by_stripe_customer(customer_id: str) -> Optional[sqlite3.Row]:
-    sql = "SELECT u.* FROM users u JOIN payments p ON u.id=p.user_id WHERE p.stripe_customer_id=?"
-    return get_db().execute(sql, (customer_id,)).fetchone()
-
-def get_user_by_stripe_subscription(subscription_id: str) -> Optional[sqlite3.Row]:
-    sql = "SELECT u.* FROM users u JOIN payments p ON u.id=p.user_id WHERE p.stripe_subscription_id=?"
-    return get_db().execute(sql, (subscription_id,)).fetchone()
-
-def ensure_embed_token() -> str:
-    conn = get_db()
-    token = secrets.token_urlsafe(32)
-    cur = conn.execute("SELECT 1 FROM users WHERE embed_token = ?", (token,))
-    while cur.fetchone() is not None:
-        token = secrets.token_urlsafe(32)
-        cur = conn.execute("SELECT 1 FROM users WHERE embed_token = ?", (token,))
-    return token
-
-def create_user(email: str, password: Optional[str], name: Optional[str],
-                provider: str, google_sub: Optional[str] = None) -> User:
-    db = get_db()
-    embed_token = ensure_embed_token()
-    password_hash = generate_password_hash(password) if password else None
-    db.execute(
-        "INSERT INTO users (email, password_hash, name, auth_provider, google_sub, embed_token) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (email, password_hash, name, provider, google_sub, embed_token),
-    )
-    db.commit()
-    row = get_user_by_email(email)
-    if not row:
-        raise RuntimeError("User creation failed")
-    user = User(row)
-    create_default_bot_if_needed(user.id)
-    return user
-
-def create_default_bot_if_needed(user_id: int) -> None:
-    db = get_db()
-    if db.execute("SELECT 1 FROM bots WHERE user_id=? AND is_default=1", (user_id,)).fetchone():
+def send_mail(to_email: str, subject: str, html: str) -> None:
+    if not (SMTP_USER and SMTP_PASS):
+        app.logger.warning("SMTP not configured; skip email to %s", to_email)
         return
-    db.execute(
-        """
-        INSERT INTO bots (user_id, name, metier, yaml_file, persona, color_hex, shape, welcome_text, is_default)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-        """,
-        (
-            user_id,
-            "Mon Betty Bot",
-            "generaliste",
-            "default_pack.yaml",
-            "Assistant professionnel",
-            "#4F46E5",
-            "square",  # carré par défaut
-            "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?",
-        ),
-    )
-    db.commit()
-
-def get_default_bot(user_id: int) -> Optional[sqlite3.Row]:
-    return get_db().execute(
-        "SELECT * FROM bots WHERE user_id=? AND is_default=1 ORDER BY id ASC LIMIT 1", (user_id,)
-    ).fetchone()
-
-def update_bot_configuration(
-    bot_id: int,
-    name: str,
-    metier: str,
-    yaml_file: str,
-    persona: str,
-    color_hex: str,
-    shape: str,
-    welcome_text: str,
-) -> None:
-    db = get_db()
-    db.execute(
-        """
-        UPDATE bots
-           SET name=?, metier=?, yaml_file=?, persona=?, color_hex=?, shape=?, welcome_text=?,
-               updated_at=CURRENT_TIMESTAMP
-         WHERE id=?
-        """,
-        (name, metier, yaml_file, persona, color_hex, shape, welcome_text, bot_id),
-    )
-    db.commit()
-
-def update_user_subscription(user_id: int, status: str) -> None:
-    get_db().execute("UPDATE users SET subscription_status=? WHERE id=?", (status, user_id))
-    get_db().commit()
-
-def upsert_payment_record(
-    user_id: int,
-    customer_id: Optional[str],
-    subscription_id: Optional[str],
-    status: Optional[str],
-    current_period_end: Optional[datetime],
-) -> None:
-    db = get_db()
-    existing = db.execute("SELECT id FROM payments WHERE user_id=?", (user_id,)).fetchone()
-    end_value = current_period_end.isoformat() if current_period_end else None
-    if existing:
-        db.execute(
-            """UPDATE payments
-               SET stripe_customer_id=COALESCE(?,stripe_customer_id),
-                   stripe_subscription_id=COALESCE(?,stripe_subscription_id),
-                   status=COALESCE(?,status),
-                   current_period_end=COALESCE(?,current_period_end)
-             WHERE user_id=?""",
-            (customer_id, subscription_id, status, end_value, user_id),
-        )
-    else:
-        db.execute(
-            "INSERT INTO payments (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (user_id, customer_id, subscription_id, status, end_value),
-        )
-    db.commit()
-
-# ---------------------------------------------------------------------------
-# Email utilities
-# ---------------------------------------------------------------------------
-
-SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = os.getenv("SMTP_PORT")
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASS = os.getenv("SMTP_PASS")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "Betty Bots <no-reply@bettybots.ai>")
-
-def build_snippet_html(embed_token: str, shape: Optional[str], color_hex: Optional[str]) -> str:
-    domain = os.getenv("PUBLIC_DOMAIN") or (request.host_url.rstrip("/") if request else "https://your-domain.com")
-    safe_shape = shape or "square"
-    safe_color = color_hex or "#4F46E5"
-    return (
-        "<!-- Betty Bot – intégration -->\n"
-        f'<div id="betty-bot" data-embed-token="{embed_token}" '
-        f'data-shape="{safe_shape}" data-color="{safe_color}"></div>\n'
-        f'<script src="{domain}/embed.js" defer></script>'
-    )
-
-def _smtp_send(to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> None:
-    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and to):
-        logger.warning("SMTP not fully configured; skip email to %s", to)
-        return
-    msg = MIMEMultipart("alternative")
+    msg = MIMEText(html, "html", "utf-8")
+    msg["From"] = SMTP_FROM
+    msg["To"] = to_email
     msg["Subject"] = subject
-    msg["From"] = FROM_EMAIL
-    msg["To"] = to
-    msg.attach(MIMEText(text_body or "Voir version HTML.", "plain"))
-    msg.attach(MIMEText(html_body, "html"))
     try:
-        with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT)) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(FROM_EMAIL, [to], msg.as_string())
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:  # ou ton serveur SMTP
+            s.login(SMTP_USER, SMTP_PASS)
+            s.sendmail(SMTP_FROM, [to_email], msg.as_string())
     except Exception as e:
-        logger.warning("SMTP send failed: %s", e)
+        app.logger.warning("SMTP send failed: %s", e)
 
-def send_snippet_email(recipient: str, snippet_html: str) -> None:
-    html = f"""
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial">
-      <p>Bonjour,</p>
-      <p>Voici votre snippet d’intégration Betty :</p>
-      <pre style="background:#f4f4f5;padding:16px;border-radius:8px;white-space:pre-wrap">{snippet_html}</pre>
-      <p>Collez ce bloc avant la balise <code>&lt;/body&gt;</code> de votre site.</p>
-    </div>
-    """
-    _smtp_send(recipient, "Votre code d'intégration Betty Bot", html, "Votre snippet est dans la version HTML.")
+def get_bot(user_id: int) -> Optional[sqlite3.Row]:
+    return db_one("SELECT * FROM bots WHERE user_id=?", (user_id,))
 
-def send_lead_email(recipient: str, lead: Dict[str, Optional[str]]) -> None:
-    if not recipient:
-        return
-    html = f"""
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial">
-      <h3>📩 Nouveau lead depuis votre Betty Bot</h3>
-      <ul>
-        <li><b>Email</b> : {lead.get('email') or '—'}</li>
-        <li><b>Téléphone</b> : {lead.get('phone') or '—'}</li>
-        <li><b>Intention</b> : {lead.get('intent') or '—'}</li>
-      </ul>
-    </div>
-    """
-    _smtp_send(recipient, "Nouveau lead (Betty Bot)", html, "Nouveau lead. Voir détails en HTML.")
-
-# ---------------------------------------------------------------------------
-# YAML & prompts
-# ---------------------------------------------------------------------------
-
-PACKS_DIR = BASE_DIR / "templates" / "packs"
-PACK_MAPPINGS = {
-    "agent_immobilier": "agent_immobilier",
-    "avocat": "avocat",
-    "comptable": "comptable",
-    "medecin": "medecin",
-    "psychologue": "psychologue",
-}
-
-def load_yaml_for_metier(metier: str) -> Tuple[str, Dict[str, Any]]:
-    if not PACKS_DIR.exists():
-        return "default_pack.yaml", {
-            "description": "Assistant générique pour TPE/PME.",
-            "guidelines": ["Répondre avec empathie", "Qualifier les leads"],
-        }
-    normalized = metier.lower().strip().replace(" ", "_")
-    candidates: List[Path] = []
-    direct = PACKS_DIR / f"{normalized}.yaml"
-    if direct.exists():
-        candidates.append(direct)
-    mapped = PACK_MAPPINGS.get(normalized)
-    if mapped:
-        candidates += list(PACKS_DIR.glob(f"{mapped}*.yaml"))
-    for path in PACKS_DIR.glob("*.yaml"):
-        if normalized in path.stem:
-            candidates.append(path)
-    unique: List[Path] = []
-    seen = set()
-    for p in candidates:
-        if p not in seen:
-            unique.append(p)
-            seen.add(p)
-    pack_path = unique[0] if unique else PACKS_DIR / "default_pack.yaml"
-    if not pack_path.exists():
-        return pack_path.name, {"description": "Assistant générique pour TPE/PME.", "guidelines": ["Répondre avec empathie", "Qualifier les leads"]}
-    try:
-        with pack_path.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-    except Exception as exc:
-        logger.warning("Unable to load YAML pack %s: %s", pack_path, exc)
-        data = {}
-    return pack_path.name, data
-
-def build_system_prompt(bot_row: sqlite3.Row) -> Tuple[str, Dict[str, Any]]:
-    yaml_file, yaml_data = load_yaml_for_metier(bot_row["metier"] or "generaliste")
-    guidelines: List[str] = []
-    if isinstance(yaml_data, dict):
-        if yaml_data.get("system_prompt"):
-            guidelines.append(str(yaml_data["system_prompt"]))
-        if yaml_data.get("description"):
-            guidelines.append(str(yaml_data["description"]))
-        rules = yaml_data.get("guidelines") or yaml_data.get("rules")
-        if isinstance(rules, Iterable):
-            guidelines.extend(str(x) for x in rules)
-        intents = yaml_data.get("intents")
-        if isinstance(intents, Iterable):
-            guidelines.append("Intents cibles : " + ", ".join(map(str, intents)))
-    else:
-        guidelines.append("Assistant conversationnel Betty Bots.")
-    persona = bot_row["persona"] or "Assistant professionnel"
-    color = bot_row["color_hex"] or "#4F46E5"
-    shape = bot_row["shape"] or "square"
-    welcome = bot_row["welcome_text"] or "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?"
-    guidelines += [
-        f"Persona choisie : {persona}.",
-        "Collecte les coordonnées (nom, email, téléphone) si l'utilisateur semble qualifié.",
-        "Propose un rendez-vous si pertinent.",
-        f"Identité visuelle : couleur {color}, forme {shape}.",
-        f"Message d'accueil : {welcome}",
-    ]
-    metadata = {"yaml_file": yaml_file, "persona": persona, "color": color, "shape": shape, "welcome_text": welcome}
-    return "\n".join(guidelines), metadata
-
-# ---------------------------------------------------------------------------
-# LLM stub & lead detection
-# ---------------------------------------------------------------------------
-
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "none").lower()
-LLM_API_KEY = os.getenv("LLM_API_KEY")
-
-def generate_llm_reply(system_prompt: str, history: List[Dict[str, str]], user_message: str) -> str:
-    if not LLM_API_KEY or LLM_PROVIDER in {"none", "mock"}:
-        return "[Réponse simulée] Merci pour votre message. Un conseiller vous recontactera rapidement."
-    if LLM_PROVIDER == "openai":
-        return "[TODO OpenAI] Réponse générée en conditions réelles."
-    if LLM_PROVIDER == "together":
-        return "[TODO Together] Réponse générée en conditions réelles."
-    return "[Réponse simulée générique] Merci pour votre intérêt !"
-
-LEAD_KEYWORDS = {
-    "achat": {"achat", "acheter", "acquérir"},
-    "vente": {"vente", "vendre", "cession"},
-    "estimation": {"estimation", "devis", "tarif"},
-    "rdv": {"rdv", "rendez-vous", "appointment"},
-}
-
-def detect_lead_info(message: str) -> Dict[str, Optional[str]]:
-    import re
-    email_match = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", message)
-    phone_match = re.search(r"(?:(?:\+|00)\d{1,3}[\s.-]?)?(?:\d[\s.-]?){6,14}\d", message)
-    intent_detected: Optional[str] = None
-    lowered = message.lower()
-    for intent, keywords in LEAD_KEYWORDS.items():
-        if any(k in lowered for k in keywords):
-            intent_detected = intent
-            break
-    return {"email": email_match.group(0) if email_match else None,
-            "phone": phone_match.group(0) if phone_match else None,
-            "intent": intent_detected}
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def render_with_fallback(template_name: str, **context: Any) -> Response:
-    template_path = BASE_DIR / "templates" / template_name
-    if template_path.exists():
-        return render_template(template_name, **context)
-    return Response(f"<h1>{template_name}</h1><pre>{json.dumps(context, indent=2, ensure_ascii=False)}</pre>",
-                    mimetype="text/html")
-
-# ---------------------------------------------------------------------------
-# Routes: Public pages
-# ---------------------------------------------------------------------------
-
-@app.route("/", methods=["GET", "POST"])
-def landing() -> Response:
-    # GET -> landing
-    if request.method == "GET":
-        return render_with_fallback("landing.html")
-    # POST -> inscription express (email + prénom optionnel)
-    email = (request.form.get("email") or "").strip().lower()
-    first_name = (request.form.get("first_name") or "").strip() or None
-    if not email:
-        flash("Merci d’indiquer votre e-mail.", "error")
-        return redirect(url_for("landing"))
-    existing = get_user_by_email(email)
+def create_or_update_bot(user_id: int, form: Dict[str, Any]) -> sqlite3.Row:
+    existing = get_bot(user_id)
+    payload = {
+        "name": form.get("name") or "Mon Betty Bot",
+        "metier": form.get("metier") or "",
+        "avatar_url": form.get("avatar_url") or "",
+        "color_hex": form.get("color_hex") or "#4F46E5",
+        "persona": form.get("persona") or "Assistant",
+        "welcome_text": form.get("welcome_text") or "Bonjour 👋",
+        "shape": form.get("shape") or "square",  # ← forme du widget
+    }
     if existing:
-        user = User(existing)
+        db_exec("""
+        UPDATE bots SET name=?, metier=?, avatar_url=?, color_hex=?, persona=?, welcome_text=?, shape=?
+        WHERE id=?""",
+        (payload["name"], payload["metier"], payload["avatar_url"], payload["color_hex"],
+         payload["persona"], payload["welcome_text"], payload["shape"], existing["id"]))
+        return db_one("SELECT * FROM bots WHERE id=?", (existing["id"],))
     else:
-        user = create_user(email=email, password=None, name=first_name, provider="email")
-        # envoi du snippet dès l’inscription
-        default_bot = get_default_bot(user.id)
-        if default_bot:
-            snippet_html = build_snippet_html(user.embed_token, default_bot["shape"], default_bot["color_hex"])
-            send_snippet_email(user.email, snippet_html)
-    login_user(user)
-    return redirect(url_for("dashboard"))
+        db_exec("""
+        INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,persona,welcome_text,shape,created_at)
+        VALUES(?,?,?,?,?,?,?,?,?)""",
+        (user_id, payload["name"], payload["metier"], payload["avatar_url"], payload["color_hex"],
+         payload["persona"], payload["welcome_text"], payload["shape"], now_iso()))
+        return db_one("SELECT * FROM bots WHERE user_id=?", (user_id,))
+
+def bot_state_get(user_id: int, bot_id: int) -> dict:
+    row = db_one("SELECT state_json FROM bot_state WHERE user_id=? AND bot_id=?", (user_id, bot_id))
+    if not row or not row["state_json"]:
+        return {"history": []}
+    try:
+        return json.loads(row["state_json"])
+    except Exception:
+        return {"history": []}
+
+def bot_state_set(user_id: int, bot_id: int, state: dict) -> None:
+    db_exec("""
+    INSERT INTO bot_state(user_id, bot_id, state_json)
+    VALUES(?,?,?)
+    ON CONFLICT(user_id, bot_id) DO UPDATE SET state_json=excluded.state_json
+    """, (user_id, bot_id, json.dumps(state, ensure_ascii=False)))
+
+def bot_state_reset(user_id: int, bot_id: int) -> None:
+    db_exec("DELETE FROM bot_state WHERE user_id=? AND bot_id=?", (user_id, bot_id))
+
+def load_pack(metier_key: str) -> dict:
+    """Charge un pack YAML métier depuis templates/packs/<metier>.yaml"""
+    if not metier_key:
+        return {}
+    pack_path = BASE_DIR / "templates" / "packs" / f"{metier_key}.yaml"
+    if not pack_path.exists():
+        return {}
+    with open(pack_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+def rule_reply(pack: dict, user_msg: str, history: List[dict], cfg: dict) -> str:
+    # Simple heuristique; si tu as un moteur maison, branche-le ici.
+    if not history:
+        return pack.get("welcome") or cfg.get("welcome") or "Bonjour, je vous écoute 🙂"
+    text = (user_msg or "").lower()
+    leads = pack.get("lead_fields") or []
+    if any(k in text for k in ["budget", "prix"]) and "budget" in leads:
+        return "Quel est votre budget approximatif ?"
+    if any(k in text for k in ["ville", "localisation"]) and "ville" in leads:
+        return "Dans quelle ville cherchez-vous ?"
+    return "Merci. Pouvez-vous préciser votre besoin pour que je le qualifie ?"
+
+# -----------------------------------------------------------------------------
+# Routes
+# -----------------------------------------------------------------------------
+@app.route("/")
+def landing() -> Response:
+    return render_template("landing.html")
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup() -> Response:
-    # la landing est l’inscription -> on redirige
-    return redirect(url_for("landing"))
-
-@app.route("/login", methods=["GET", "POST"])
-def login() -> Response:
     if request.method == "POST":
-        email = (request.form.get("email") or "").strip().lower()
-        password = request.form.get("password") or ""
-        row = get_user_by_email(email)
-        if row and row["password_hash"] and check_password_hash(row["password_hash"], password):
-            user = User(row)
+        first_name = (request.form.get("first_name") or "").strip()
+        last_name  = (request.form.get("last_name") or "").strip()
+        email      = (request.form.get("email") or "").strip().lower()
+        if not email:
+            flash("Email requis.", "error")
+            return redirect(url_for("signup"))
+        existing = db_one("SELECT * FROM users WHERE email=?", (email,))
+        if existing:
+            user = User(existing)
             login_user(user)
-            flash("Connexion réussie.", "success")
+            flash("Bienvenue à nouveau 👋", "success")
             return redirect(url_for("dashboard"))
-        flash("Identifiants invalides.", "error")
-        return redirect(url_for("login"))
-    return render_with_fallback("login.html")
+        db_exec("INSERT INTO users(first_name,last_name,email,created_at) VALUES(?,?,?,?)",
+                (first_name, last_name, email, now_iso()))
+        row = db_one("SELECT * FROM users WHERE email=?", (email,))
+        login_user(User(row))
+        flash("Inscription réussie.", "success")
+        return redirect(url_for("dashboard"))
+    return render_template("signup.html")
 
 @app.route("/logout")
-@login_required
 def logout() -> Response:
     logout_user()
-    flash("Déconnexion effectuée.", "info")
     return redirect(url_for("landing"))
 
-@app.route("/auth/google")
-def auth_google() -> Response:
-    if oauth is None or "google" not in oauth:
-        flash("Google OAuth non disponible.", "warning")
-        return redirect(url_for("landing"))
-    redirect_uri = app.config.get("GOOGLE_REDIRECT_URI") or url_for("auth_google_callback", _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
-
-@app.route("/auth/google/callback")
-def auth_google_callback() -> Response:
-    if oauth is None or "google" not in oauth:
-        flash("Google OAuth non disponible.", "warning")
-        return redirect(url_for("landing"))
-    token = oauth.google.authorize_access_token()
-    userinfo = oauth.google.parse_id_token(token)
-    email = userinfo.get("email")
-    google_sub = userinfo.get("sub")
-    name = userinfo.get("name")
-    if not email:
-        flash("Impossible de récupérer l’e-mail Google.", "error")
-        return redirect(url_for("landing"))
-    existing = get_user_by_email(email)
-    if existing:
-        user = User(existing)
-        login_user(user)
-        return redirect(url_for("dashboard"))
-    user = create_user(email, password=None, name=name, provider="google", google_sub=google_sub)
-    login_user(user)
-    default_bot = get_default_bot(user.id)
-    if default_bot:
-        snippet_html = build_snippet_html(user.embed_token, default_bot["shape"], default_bot["color_hex"])
-        send_snippet_email(user.email, snippet_html)
-    return redirect(url_for("dashboard"))
-
-# ---------------------------------------------------------------------------
-# Dashboard & configuration
-# ---------------------------------------------------------------------------
-
-@app.route("/dashboard")
+@app.route("/dashboard", methods=["GET"])
 @login_required
 def dashboard() -> Response:
-    bot = get_default_bot(int(current_user.id))
-    packs = sorted(p.stem for p in PACKS_DIR.glob("*.yaml")) if PACKS_DIR.exists() else []
-    snippet_html = build_snippet_html(current_user.embed_token, bot["shape"], bot["color_hex"]) if bot else ""
-    return render_with_fallback("dashboard.html",
-                                user=current_user, bot=bot, packs=packs, snippet_html=snippet_html)
+    bot = get_bot(int(current_user.id))
+    # Alimente la liste des métiers depuis les YAML présents
+    packs_dir = BASE_DIR / "templates" / "packs"
+    metiers: List[str] = []
+    if packs_dir.exists():
+        metiers = [p.stem for p in sorted(packs_dir.glob("*.yaml"))]
+    return render_template("dashboard.html", bot=bot, metiers=metiers)
 
 @app.route("/dashboard/save", methods=["POST"])
 @login_required
-def save_dashboard() -> Response:
-    bot = get_default_bot(int(current_user.id))
-    if not bot:
-        flash("Bot introuvable.", "error")
-        return redirect(url_for("dashboard"))
-    name = request.form.get("name") or bot["name"] or "Mon Betty Bot"
-    metier = request.form.get("metier") or bot["metier"] or "generaliste"
-    persona = request.form.get("persona") or bot["persona"] or "Assistant professionnel"
-    color_hex = request.form.get("color_hex") or bot["color_hex"] or "#4F46E5"
-    shape = request.form.get("shape") or bot["shape"] or "square"
-    welcome_text = request.form.get("welcome_text") or bot["welcome_text"] or \
-                   "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?"
-    yaml_file, _ = load_yaml_for_metier(metier)
-    update_bot_configuration(bot_id=bot["id"], name=name, metier=metier, yaml_file=yaml_file,
-                             persona=persona, color_hex=color_hex, shape=shape, welcome_text=welcome_text)
+def dashboard_save() -> Response:
+    form = {
+        "name": request.form.get("name"),
+        "metier": request.form.get("metier"),
+        "avatar_url": request.form.get("avatar_url"),
+        "color_hex": request.form.get("color_hex"),
+        "persona": request.form.get("persona"),
+        "welcome_text": request.form.get("welcome_text"),
+        "shape": request.form.get("shape"),  # square / rounded / circle
+    }
+    bot = create_or_update_bot(int(current_user.id), form)
     flash("Configuration enregistrée.", "success")
     return redirect(url_for("test_page"))
 
+# ---- Test (chat sandbox)
 @app.route("/test")
 @login_required
 def test_page() -> Response:
-    bot = get_default_bot(int(current_user.id))
-
-    # Avertissement si l’abonnement n’est pas actif
-    try:
-        is_active = bool(getattr(current_user, "is_active_subscription", False))
-    except Exception:
-        is_active = False
-    warning = None if is_active else "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
-
-    # Choix du template: préfère test.html s'il existe, sinon chat.html
+    bot = get_bot(int(current_user.id))
+    warning = None if current_user.is_active_subscription else \
+        "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
     template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
-
-    # Construit un dict 'cfg' attendu par le template, avec valeurs par défaut
-    def getv(obj, key):
-        return (obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None))
-
+    def getv(obj, key): return (obj[key] if obj and key in obj.keys() else None)
     cfg = {
-        "avatar_url": getv(bot, "avatar_url"),
-        "name":       getv(bot, "name")         or "Mon Betty Bot",
-        "color_hex":  getv(bot, "color_hex")    or "#4F46E5",
-        "shape":      getv(bot, "shape")        or "square",
-        "persona":    getv(bot, "persona")      or "Assistant",
+        "name":       getv(bot, "name") or "Mon Betty Bot",
+        "metier":     getv(bot, "metier") or "",
+        "avatar_url": getv(bot, "avatar_url") or "",
+        "color_hex":  getv(bot, "color_hex") or "#4F46E5",
+        "persona":    getv(bot, "persona") or "Assistant",
         "welcome":    getv(bot, "welcome_text") or "Bonjour 👋",
+        "shape":      getv(bot, "shape") or "square",
     }
+    return render_template(template_name, bot=bot, user=current_user, warning=warning, cfg=cfg)
 
-    return render_with_fallback(
-        template_name,
+@app.route("/test/reset", methods=["POST"])
+@login_required
+def test_reset() -> Response:
+    bot = get_bot(int(current_user.id))
+    if bot:
+        bot_state_reset(int(current_user.id), bot["id"])
+    flash("Conversation réinitialisée.", "success")
+    return redirect(url_for("test_page"))
+
+# ---- API chat (utilisée par le JS de /test pour parler au bot)
+@app.route("/api/chat", methods=["POST"])
+@login_required
+def api_chat() -> Response:
+    bot = get_bot(int(current_user.id))
+    if not bot:
+        return jsonify({"error": "bot_not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    user_msg = (data.get("message") or "").strip()
+    if not user_msg:
+        return jsonify({"error": "empty_message"}), 400
+
+    state = bot_state_get(int(current_user.id), bot["id"])
+    history = state.get("history", [])
+    pack = load_pack(bot["metier"] or "") or {}
+    cfg = {
+        "name": bot["name"] or "Mon Betty Bot",
+        "welcome": bot["welcome_text"] or "Bonjour 👋",
+    }
+    reply = rule_reply(pack, user_msg, history, cfg)
+
+    now = datetime.now(timezone.utc).isoformat()
+    history.append({"role": "user", "content": user_msg, "ts": now})
+    history.append({"role": "bot", "content": reply, "ts": now})
+    if len(history) > 60:
+        history = history[-60:]
+    state["history"] = history
+    bot_state_set(int(current_user.id), bot["id"], state)
+    return jsonify({"reply": reply, "history": history[-10:]})
+
+# ---- API lead (utilisé par le widget embarqué sur le site client)
+@app.route("/api/lead", methods=["POST"])
+def api_lead() -> Response:
+    # Le widget enverra user_id & bot_id en data-* (ou token) ; ici on accepte simple JSON/form.
+    user_id = request.form.get("user_id") or request.json.get("user_id")  # type: ignore
+    bot_id  = request.form.get("bot_id")  or request.json.get("bot_id")   # type: ignore
+    name    = request.form.get("name")    or request.json.get("name")     # type: ignore
+    email   = request.form.get("email")   or request.json.get("email")    # type: ignore
+    message = request.form.get("message") or request.json.get("message")  # type: ignore
+    extra   = request.form.get("extra_json") or request.json.get("extra_json")  # type: ignore
+
+    if not (user_id and bot_id and email):
+        return jsonify({"error": "missing_params"}), 400
+
+    db_exec("""INSERT INTO leads(user_id,bot_id,name,email,message,extra_json,created_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (int(user_id), int(bot_id), name or "", email, message or "", extra or "{}", now_iso()))
+
+    # Email au propriétaire (email d'inscription)
+    owner = db_one("SELECT email FROM users WHERE id=?", (int(user_id),))
+    if owner:
+        html = f"""
+        <h3>Nouveau lead</h3>
+        <p><strong>Nom:</strong> {name or ''}<br>
+        <strong>Email:</strong> {email}<br>
+        <strong>Message:</strong> {message or ''}</p>
+        """
+        send_mail(owner["email"], "Nouveau lead via votre bot", html)
+
+    return jsonify({"ok": True})
+
+# ---- Paiement (Stripe abonnement mensuel)
+@app.route("/pay", methods=["GET"])
+@login_required
+def pay() -> Response:
+    stripe_enabled = bool(STRIPE_SECRET_KEY and STRIPE_PRICE_ID)
+    return render_template("pay.html", stripe_enabled=stripe_enabled)
+
+@app.route("/pay/stripe", methods=["POST"])
+@login_required
+def pay_stripe() -> Response:
+    if not (STRIPE_SECRET_KEY and STRIPE_PRICE_ID):
+        flash("Paiement indisponible pour le moment.", "error")
+        return redirect(url_for("dashboard"))
+    success_url = f"{PUBLIC_BASE_URL or BASE_URL}/confirm?provider=stripe&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{PUBLIC_BASE_URL or BASE_URL}/dashboard"
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+        success_url=success_url,
+        cancel_url=cancel_url,
+    )
+    return redirect(session.url, code=303)
+
+@app.route("/webhook/stripe", methods=["POST"])
+def webhook_stripe() -> Response:
+    payload = request.data
+    sig = request.headers.get("Stripe-Signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except Exception as e:
+        app.logger.warning("Stripe webhook invalid: %s", e)
+        return Response(status=400)
+
+    if event["type"] in ("checkout.session.completed", "invoice.paid", "customer.subscription.updated"):
+        data = event["data"]["object"]
+        # On retrouve l'utilisateur connecté via l'email s'il est présent
+        email = (data.get("customer_details") or {}).get("email") or ""
+        user_row = db_one("SELECT * FROM users WHERE email=?", (email.lower(),))
+        if user_row:
+            db_exec("UPDATE users SET is_active_subscription=1 WHERE id=?", (user_row["id"],))
+            # tracer subscription
+            amount_cents = (data.get("amount_total") or 0) or (data.get("amount_paid") or 0)
+            currency = (data.get("currency") or "eur").upper()
+            db_exec("""
+            INSERT INTO subscriptions(user_id, provider, external_id, status, current_period_end,
+                                      amount_cents, currency, created_at, updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            """, (user_row["id"], "stripe", str(data.get("id")), (data.get("status") or "active"),
+                  datetime.now(timezone.utc).isoformat(), int(amount_cents or 0), currency, now_iso(), now_iso()))
+            # mail confirmation
+            html = "<p>Votre abonnement est actif. Merci !</p>"
+            send_mail(user_row["email"], "Confirmation d’abonnement", html)
+
+    return Response(status=200)
+
+@app.route("/confirm", methods=["GET"])
+@login_required
+def confirm() -> Response:
+    provider = request.args.get("provider") or "stripe"
+    session_id = request.args.get("session_id") or ""
+    amount = None
+    currency = "EUR"
+    if provider == "stripe" and session_id and STRIPE_SECRET_KEY:
+        try:
+            s = stripe.checkout.Session.retrieve(session_id)
+            amount = (s.get("amount_total") or 0) / 100.0
+            currency = (s.get("currency") or "eur").upper()
+        except Exception:
+            pass
+    bot = get_bot(int(current_user.id))
+    return render_template(
+        "confirm.html",
+        provider=provider,
+        amount=amount,
+        currency=currency,
         bot=bot,
         user=current_user,
-        warning=warning,
-        cfg=cfg,  # indispensable pour chat.html
+        base_url=(PUBLIC_BASE_URL or BASE_URL),
     )
 
-@app.route("/snippet")
-@login_required
-def snippet() -> Response:
-    bot = get_default_bot(int(current_user.id))
-    if not bot:
-        flash("Bot introuvable.", "error")
-        return redirect(url_for("dashboard"))
-    snippet_html = build_snippet_html(current_user.embed_token, bot["shape"], bot["color_hex"])
-    return render_with_fallback("snippet.html", snippet=snippet_html, bot=bot, user=current_user)
-
-@app.route("/email-snippet", methods=["POST"])
-@login_required
-def email_snippet() -> Response:
-    bot = get_default_bot(int(current_user.id))
-    if not bot:
-        flash("Bot introuvable.", "error")
-        return redirect(url_for("dashboard"))
-    snippet_html = build_snippet_html(current_user.embed_token, bot["shape"], bot["color_hex"])
-    send_snippet_email(current_user.email, snippet_html)
-    flash("Snippet envoyé par e-mail.", "success")
-    return redirect(url_for("dashboard"))
-
-@app.route("/embed.js")
-def embed_js() -> Response:
-    embed_token = request.args.get("bot")
-    js_path = BASE_DIR / "static" / "embed.js"
-    if not js_path.exists():
-        return Response("console.error('embed.js introuvable');", mimetype="application/javascript")
-    content = js_path.read_text(encoding="utf-8")
-    theme_config: Optional[Dict[str, Any]] = None
-    if embed_token:
-        user_row = get_user_by_embed(embed_token)
-        if user_row:
-            bot = get_default_bot(user_row["id"])
-            if bot:
-                theme_config = {
-                    "color": bot["color_hex"] or "#4F46E5",
-                    "shape": bot["shape"] or "square",
-                    "welcomeText": bot["welcome_text"] or "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?",
-                }
-    if theme_config:
-        content += "\n;window.__bettyBotTheme = " + json.dumps(theme_config) + ";\n"
-    resp = Response(content, mimetype="application/javascript")
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
-
-# ---------------------------------------------------------------------------
-# Chat API
-# ---------------------------------------------------------------------------
-
-def get_or_create_chat(bot_id: int) -> sqlite3.Row:
-    db = get_db()
-    cur = db.execute("SELECT * FROM chats WHERE bot_id=? ORDER BY datetime(created_at) DESC LIMIT 1", (bot_id,))
-    chat = cur.fetchone()
-    if chat:
-        created_at = datetime.fromisoformat(chat["created_at"]) if chat["created_at"] else datetime.utcnow()
-        if created_at < datetime.utcnow() - timedelta(hours=1):
-            chat = None
-    if not chat:
-        db.execute("INSERT INTO chats (bot_id) VALUES (?)", (bot_id,))
-        db.commit()
-        chat = db.execute("SELECT * FROM chats WHERE bot_id=? ORDER BY id DESC LIMIT 1", (bot_id,)).fetchone()
-    return chat
-
-def fetch_chat_history(chat_id: int, limit: int = 10) -> List[Dict[str, str]]:
-    rows = get_db().execute(
-        "SELECT role, content FROM messages WHERE chat_id=? ORDER BY id DESC LIMIT ?", (chat_id, limit)
-    ).fetchall()[::-1]
-    return [{"role": r["role"], "content": r["content"]} for r in rows]
-
-def append_message(chat_id: int, role: str, content: str) -> None:
-    get_db().execute("INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, role, content))
-    get_db().commit()
-
-@app.route("/api/chat", methods=["POST"])
-def api_chat() -> Response:
-    payload = request.get_json(force=True, silent=True) or {}
-    embed_token = payload.get("embed_token")
-    message = (payload.get("message") or "").strip()
-    if not embed_token or not message:
-        return jsonify({"error": "missing_parameters"}), 400
-
-    user_row = get_user_by_embed(embed_token)
-    if not user_row:
-        return jsonify({"error": "unknown_bot"}), 404
-
-    user = User(user_row)
-    if user.subscription_status != "active":
-        return jsonify({"error": "subscription_required"}), 402
-
-    bot = get_default_bot(user.id)
-    if not bot:
-        return jsonify({"error": "bot_not_configured"}), 500
-
-    chat = get_or_create_chat(bot["id"])
-    history = fetch_chat_history(chat["id"], limit=10)
-
-    system_prompt, metadata = build_system_prompt(bot)
-    append_message(chat["id"], "user", message)
-    reply = generate_llm_reply(system_prompt, history, message)
-    append_message(chat["id"], "assistant", reply)
-
-    lead_info = detect_lead_info(message + "\n" + reply)
-    if any([lead_info.get("email"), lead_info.get("phone"), lead_info.get("intent")]):
-        # e-mail lead à l’adresse d’inscription
-        send_lead_email(user.email, lead_info)
-
-    return jsonify({"reply": reply, "lead_suggestion": lead_info, "metadata": metadata})
-
-# ---------------------------------------------------------------------------
-# Errors & CLI
-# ---------------------------------------------------------------------------
-
+# -----------------------------------------------------------------------------
+# Erreurs
+# -----------------------------------------------------------------------------
 @app.errorhandler(404)
-def not_found(_: Exception) -> Response:
-    return render_with_fallback("404.html"), 404
+def _404(e):
+    return render_template("404.html"), 404
 
 @app.errorhandler(500)
-def internal_error(_: Exception) -> Response:
-    return render_with_fallback("500.html"), 500
+def _500(e):
+    return render_template("500.html"), 500
 
-@app.cli.command("create-db")
-def cli_create_db() -> None:
-    init_db()
-    print("Database initialized.")
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
+# -----------------------------------------------------------------------------
+# Run
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-# -------- Alias rétro-compat: save_settings -> save_dashboard --------
-try:
-    from flask_login import login_required  # peut déjà exister
-except Exception:
-    pass
-
-try:
-    @app.post("/_alias/save-settings", endpoint="save_settings")
-    @login_required
-    def _alias_save_settings():
-        return save_dashboard()
-except Exception:
-    # Si l'endpoint existe déjà, on ignore.
-    pass
-# --------------------------------------------------------------------
+    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
