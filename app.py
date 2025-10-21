@@ -878,3 +878,19 @@ def cli_create_db() -> None:
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
+# -------- Alias rétro-compat: save_settings -> save_dashboard --------
+try:
+    from flask_login import login_required  # peut déjà exister
+except Exception:
+    pass
+
+try:
+    @app.post("/_alias/save-settings", endpoint="save_settings")
+    @login_required
+    def _alias_save_settings():
+        return save_dashboard()
+except Exception:
+    # Si l'endpoint existe déjà, on ignore.
+    pass
+# --------------------------------------------------------------------
