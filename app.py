@@ -653,7 +653,17 @@ def test_page() -> Response:
     warning = None if current_user.is_active_subscription else \
         "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
     template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
-    return render_with_fallback(template_name, bot=bot, user=current_user, warning=warning)
+    
+    cfg = {
+        "avatar_url": (bot.get("avatar_url") if isinstance(bot, dict) else getattr(bot, "avatar_url", None)),
+        "name":       (bot.get("name")       if isinstance(bot, dict) else getattr(bot, "name", None)) or "Mon Betty Bot",
+        "color_hex":  (bot.get("color_hex")  if isinstance(bot, dict) else getattr(bot, "color_hex", None)) or "#4F46E5",
+        "shape":      (bot.get("shape")      if isinstance(bot, dict) else getattr(bot, "shape", None)) or "square",
+        "persona":    (bot.get("persona")    if isinstance(bot, dict) else getattr(bot, "persona", None)) or "Assistant",
+        "welcome":    (bot.get("welcome_text") if isinstance(bot, dict) else getattr(bot, "welcome_text", None)) or "Bonjour 👋",
+    }
+
+return render_with_fallback(template_name, bot=bot, user=current_user, warning=warning)
 
 # ---------------------------------------------------------------------------
 # Stripe payment flow
