@@ -1,52 +1,33 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Betty — Chat</title>
-  <style>
-    body{background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
-    .chat{width:420px;height:580px;background:#111827;border:1px solid #1f2937;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}
-    .head{display:flex;align-items:center;gap:10px;background:#1f2937;padding:12px 16px;border-bottom:1px solid #374151}
-    .head img{width:38px;height:38px;border-radius:50%;border:2px solid #ef4444}
-    .head h3{margin:0;font-size:16px}
-    .head span{font-size:13px;color:#9ca3af}
-    .msgs{flex:1;padding:14px;overflow:auto;background:#111827}
-    .m{max-width:80%;margin:0 0 12px;padding:10px 14px;border-radius:12px;font-size:15px;line-height:1.4}
-    .bot{background:#272f3d;color:#f3f4f6}
-    .you{background:#2563eb;color:#fff;margin-left:auto}
-    .bar{display:flex;gap:8px;background:#1f2937;padding:10px;border-top:1px solid #374151}
-    .bar input{flex:1;background:#111827;border:1px solid #374151;border-radius:8px;color:#fff;padding:10px 14px}
-    .bar button{background:#ef4444;border:none;color:#fff;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer}
-  </style>
-</head>
-<body>
-  <div class="chat">
-    <div class="head">
-      <img src="{{ avatar_url or 'https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg' }}" alt="avatar">
-      <div><h3>Betty</h3><span>Votre assistante {{ role|lower }}</span></div>
-    </div>
 
-    <div id="msgs" class="msgs">
-      <div class="m bot">{{ welcome_message }}</div>
-    </div>
+Betty
+Votre assistante {{ role|lower }}
+{{ welcome_message }}
 
-    <div class="bar">
-      <input id="q" placeholder="Écrivez votre message ici…" autocomplete="off">
-      <button id="send">Envoyer</button>
-    </div>
-  </div>
 
-<script>
-const msgs=document.getElementById('msgs'), q=document.getElementById('q');
-document.getElementById('send').onclick=send; q.addEventListener('keydown',e=>{if(e.key==='Enter')send();});
-function add(text,who){const d=document.createElement('div');d.className='m '+who;d.textContent=text;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
-async function send(){
-  const text=q.value.trim(); if(!text) return; add(text,'you'); q.value='';
-  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({tenant:"{{ tenant }}", role:"{{ role }}", text})});
-  const j=await r.json(); add((j&&j.reply)||'Désolé, je n’ai pas compris.', 'bot');
-}
-</script>
-</body>
-</html>
+
+{% if cfg.avatar_url %}
+
+{% endif %}
+{{ brand }} – {{ (cfg.prompt_profile or 'métier')|capitalize }}
+ID: {{ tenant_id }}
+Récapitulatif
+	•	Métier : {{ (cfg.prompt_profile or '—')|capitalize }}
+	•	Personnalité : {% if cfg.prompt_custom %}{{ cfg.prompt_custom }}{% else %}—{% endif %}
+	•	Avatar : {% if cfg.avatar_url %}défini{% else %}non défini{% endif %}
+{% set m = (cfg.prompt_profile or '') %} {% if m == 'danse' %} Voici Betty Danse : accueil chaleureux, infos cours & niveaux, et conversion en essai/inscription. Posez une question (tarifs, planning, disponibilité…). {% elif m == 'immobilier' %} Voici Betty Immo : qualifie vos besoins, propose visites/estimations et facilite la prise de contact. Demandez un bien, un secteur, un budget. {% elif m == 'mecanique' %} Voici Betty Garage : qualifie la panne, récupère modèle/année et propose un créneau atelier. Décrivez le symptôme. {% elif m == 'nutrition' %} Voici Betty Nutrition : conseille prudemment, fixe des objectifs et propose un suivi. Parlez de vos habitudes et contraintes. {% elif m == 'avocat' %} Voici Betty Avocat (accueil) : qualifie le besoin, explique les étapes et propose un RDV (sans avis juridique). {% else %} Voici votre Betty : assistante IA personnalisée, prête à répondre et capter des prospects. {% endif %}
+{{ cfg.welcome or 'Bonjour !' }}
+{% if m == 'danse' %}
+Souhaitez-vous un essai ? Dites-moi votre style et vos disponibilités.
+{% elif m == 'immobilier' %}
+Quel type de bien recherchez-vous, sur quel secteur, et votre budget ?
+{% elif m == 'mecanique' %}
+Quel est le modèle/année de votre véhicule et le symptôme constaté ?
+{% elif m == 'nutrition' %}
+Quel est votre objectif et avez-vous des contraintes alimentaires ?
+{% elif m == 'avocat' %}
+Pouvez-vous préciser votre demande (sans détails sensibles) pour un premier rendez-vous ?
+{% endif %}
+Envoyer
+Retour réglages
+Voir le bloc d’intégration
+Client: {{ cfg.full_name }} — {{ cfg.email }}
