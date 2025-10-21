@@ -650,6 +650,7 @@ def save_dashboard() -> Response:
 @login_required
 def test_page() -> Response:
     bot = get_default_bot(int(current_user.id))
+<<<<<<< HEAD
     warning = None if current_user.is_active_subscription else \
         "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
     template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
@@ -684,76 +685,37 @@ def create_checkout_session() -> Response:
         return redirect(url_for("pay"))
     success_url = request.host_url.rstrip("/") + url_for("snippet")
     cancel_url = request.host_url.rstrip("/") + url_for("pay")
+=======
+    # Avertissement si l'abonnement n'est pas actif
+>>>>>>> 605dc4a (fix(test): réindentation et passage de 'cfg' au template + garde-fou)
     try:
-        session = stripe.checkout.Session.create(
-            mode="subscription",
-            line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
-            success_url=success_url,
-            cancel_url=cancel_url,
-            customer_email=current_user.email,
-            metadata={"user_id": current_user.id, "embed_token": current_user.embed_token},
-        )
-        return redirect(session.url)
-    except Exception as exc:
-        logger.error("Stripe checkout session error: %s", exc)
-        flash("Impossible de créer la session de paiement.", "error")
-        return redirect(url_for("pay"))
+        is_active = bool(getattr(current_user, "is_active_subscription", False))
+    except Exception:
+        is_active = False
+    warning = None if is_active else "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
 
-@app.route("/stripe/webhook", methods=["POST"])
-def stripe_webhook() -> Response:
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get("Stripe-Signature")
-    if STRIPE_WEBHOOK_SECRET and stripe.api_key:
-        try:
-            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-        except Exception as exc:
-            logger.error("Webhook signature verification failed: %s", exc)
-            return ("Invalid signature", 400)
-    else:
-        event = json.loads(payload or "{}")
+    # Choix du template: préfère test.html s'il existe, sinon chat.html
+    template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
 
-    event_type = event.get("type")
-    data_object = event.get("data", {}).get("object", {}) or {}
-    user_row: Optional[sqlite3.Row] = None
-    if event_type == "checkout.session.completed":
-        metadata = data_object.get("metadata", {}) or {}
-        user_id = metadata.get("user_id")
-        if user_id:
-            user_row = get_user_by_id(int(user_id))
-        if not user_row and data_object.get("customer"):
-            user_row = get_user_by_stripe_customer(data_object.get("customer"))
-        subscription_id = data_object.get("subscription")
-        customer_id = data_object.get("customer")
-    elif event_type == "invoice.payment_succeeded":
-        subscription_id = data_object.get("subscription")
-        customer_id = data_object.get("customer")
-        if subscription_id:
-            user_row = get_user_by_stripe_subscription(subscription_id)
-        if not user_row and customer_id:
-            user_row = get_user_by_stripe_customer(customer_id)
-    else:
-        subscription_id = data_object.get("subscription")
-        customer_id = data_object.get("customer")
+    # Construit un dict 'cfg' attendu par le template, avec valeurs par défaut
+    def get(d, k): 
+        return (d.get(k) if isinstance(d, dict) else getattr(d, k, None))
+    cfg = {
+        "avatar_url": get(bot, "avatar_url"),
+        "name":       get(bot, "name")        or "Mon Betty Bot",
+        "color_hex":  get(bot, "color_hex")   or "#4F46E5",
+        "shape":      get(bot, "shape")       or "square",
+        "persona":    get(bot, "persona")     or "Assistant",
+        "welcome":    get(bot, "welcome_text") or "Bonjour 👋",
+    }
 
-    if user_row:
-        current_end_ts = data_object.get("current_period_end")
-        current_end = datetime.utcfromtimestamp(current_end_ts) if isinstance(current_end_ts, int) else None
-        upsert_payment_record(user_id=user_row["id"], customer_id=customer_id,
-                              subscription_id=subscription_id, status=data_object.get("status"),
-                              current_period_end=current_end)
-        if event_type in {"checkout.session.completed", "invoice.payment_succeeded"}:
-            prev = user_row["subscription_status"]
-            update_user_subscription(user_row["id"], "active")
-            if prev != "active":
-                bot = get_default_bot(user_row["id"])
-                if bot:
-                    snippet_html = build_snippet_html(user_row["embed_token"], bot["shape"], bot["color_hex"])
-                    send_snippet_email(user_row["email"], snippet_html)
-    return ("ok", 200)
-
-# ---------------------------------------------------------------------------
-# Snippet & embed
-# ---------------------------------------------------------------------------
+    return render_with_fallback(
+        template_name,
+        bot=bot,
+        user=current_user,
+        warning=warning,
+        cfg=cfg,  # <- essentiel pour chat.html
+    )
 
 @app.route("/snippet")
 @login_required
