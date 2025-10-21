@@ -644,7 +644,7 @@ def save_dashboard() -> Response:
     update_bot_configuration(bot_id=bot["id"], name=name, metier=metier, yaml_file=yaml_file,
                              persona=persona, color_hex=color_hex, shape=shape, welcome_text=welcome_text)
     flash("Configuration enregistrée.", "success")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("test_page"))
 
 @app.route("/test")
 @login_required
