@@ -7,3 +7,12 @@
 .DS_Store
 .env
 .env.txt
+__pycache__/
+*.pyc
+.env
+app.db
+/tmp/
+.vercel/
+.DS_Store
+.venv/
+
