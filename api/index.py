@@ -5,9 +5,7 @@ from app import app as flask_app
 
 
 def _build_environ(request) -> dict:
-    """
-    Construit l'environnement WSGI à partir de l'objet request fourni par Vercel.
-    """
+    """Construit l'environnement WSGI à partir de l'objet request fourni par Vercel."""
     qs = getattr(request, "query", "") or ""
     if isinstance(qs, dict):
         from urllib.parse import urlencode
@@ -41,9 +39,7 @@ def _build_environ(request) -> dict:
 
 
 def handler(request):
-    """
-    Lance l'app Flask en WSGI et retourne (body, status, headers) pour Vercel.
-    """
+    """Lance l'app Flask en WSGI et retourne (body, status, headers) pour Vercel."""
     status_holder: List[Tuple[int, List[Tuple[str, str]]]] = []
 
     def start_response(status, response_headers, exc_info=None):
