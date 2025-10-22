@@ -1,13 +1,9 @@
+# api/index.py — Adaptateur Vercel (WSGI -> Serverless)
 import io
 from typing import Tuple, List
 from app import app as flask_app
 
-
 def _build_environ(request) -> dict:
-    """
-    Construit l'environnement WSGI à partir de l'objet request fourni par Vercel.
-    """
-    # Vercel fournit request.method, request.path, request.headers, request.body, request.query
     qs = request.query or ""
     if isinstance(qs, dict):
         from urllib.parse import urlencode
@@ -39,12 +35,7 @@ def _build_environ(request) -> dict:
 
     return environ
 
-
 def handler(request):
-    """
-    Adaptateur principal pour Vercel : exécute l'application Flask
-    et retourne (body, status, headers).
-    """
     status_holder: List[Tuple[int, List[Tuple[str, str]]]] = []
 
     def start_response(status, response_headers, exc_info=None):
