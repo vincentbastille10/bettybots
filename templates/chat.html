@@ -1,41 +1,44 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="container" style="max-width:760px;margin:32px auto;">
-
-  <h1 style="margin:0 0 8px;">Betty
-    <small style="font-weight:normal;">
-      — votre assistante {{ (role|lower) if role else 'IA' }}
-    </small>
-  </h1>
-  <p class="muted">{{ welcome_message or (cfg.welcome if cfg else '') or 'Bonjour 👋' }}</p>
-
-  {% set cfg = cfg or {} %}
-
-  <div class="card" style="padding:16px;border:1px solid #eee;border-radius:12px;">
-    {% if cfg.avatar_url %}
-      <img src="{{ cfg.avatar_url }}" alt="Avatar" style="height:64px;width:64px;border-radius:50%;margin-bottom:8px;">
-    {% endif %}
-
-    <ul style="line-height:1.6;margin:0 0 8px 0;padding-left:18px;">
-      <li><strong>Métier :</strong> {{ (cfg.prompt_profile or cfg.metier or '—')|capitalize }}</li>
-      <li><strong>Personnalité :</strong> {{ cfg.prompt_custom or cfg.persona or '—' }}</li>
-      <li><strong>Avatar :</strong> {{ 'défini' if cfg.avatar_url else 'non défini' }}</li>
-    </ul>
-
-    <p style="margin:0;">
-      <strong>Message d’accueil :</strong>
-      {{ cfg.welcome or welcome_message or 'Bonjour !' }}
-    </p>
-  </div>
-
-  <!-- Mini formulaire lead : insertion en DB + mail côté serveur -->
-  <form method="post" action="/api/lead" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
-    <input name="name"    placeholder="Votre nom"    style="flex:1;min-width:180px;">
-    <input name="email"   placeholder="Votre email"  style="flex:1;min-width:220px;">
-    <input name="message" placeholder="Votre message" style="flex:2;min-width:280px;">
-    <button type="submit" class="btn">Envoyer</button>
-    <a class="btn btn-secondary" href="{{ url_for('dashboard') }}">← Retour réglages</a>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Tester le bot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <style>
+    #log{border:1px solid #ddd;padding:1rem;min-height:200px;max-width:640px}
+    .bubble{margin:.25rem 0}
+    .user{color:#111}
+    .bot{color:#4F46E5}
+  </style>
+</head>
+<body>
+  {% if warning %}<p style="color:#b00">{{ warning }}</p>{% endif %}
+  <h1>Sandbox</h1>
+  <div id="log"></div>
+  <form id="f" style="margin-top:1rem;display:flex;gap:.5rem" onsubmit="sendMsg(event)">
+    <input id="m" placeholder="Votre message..." style="flex:1;padding:.5rem" />
+    <button>Envoyer</button>
   </form>
-
-</div>
-{% endblock %}
+  <script>
+    async function sendMsg(e){
+      e.preventDefault();
+      const m = document.getElementById('m');
+      const v = m.value.trim();
+      if(!v) return;
+      add('user', v);
+      m.value='';
+      const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:v})});
+      const j = await r.json();
+      add('bot', j.reply || '(pas de réponse)');
+    }
+    function add(role, text){
+      const el = document.createElement('div');
+      el.className='bubble '+role;
+      el.textContent = (role==='user'?'👤 ':'🤖 ')+text;
+      document.getElementById('log').appendChild(el);
+    }
+  </script>
+  <p style="margin-top:1rem"><a href="{{ url_for('dashboard') }}">← Retour</a></p>
+</body>
+</html>
