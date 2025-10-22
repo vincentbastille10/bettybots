@@ -32,25 +32,7 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
-# Page d'accueil simple -> rend un template existant
-@app.route("/", methods=["GET"])
-def landing():
-    # Choisis un template qui existe vraiment dans /templates
-    # 'landing.html' ou 'signup.html' – adapte si besoin
-    return render_template("landing.html")
-
-# 404/500 propres + logs
-@app.errorhandler(404)
-def not_found(e):
-    return render_template("404.html"), 404
-
-@app.errorhandler(500)
-def server_error(e):
-    app.logger.exception("Unhandled error on %s", request.path)
-    return render_template("500.html"), 500
-
-
-# Base/public URL (ne change pas les noms)
+# Base/public URL
 BASE_URL = os.getenv("BASE_URL") or os.getenv("PUBLIC_BASE_URL") or ""
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or BASE_URL
 
@@ -67,25 +49,21 @@ if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
 # -----------------------------------------------------------------------------
-# DB helpers (SQLite) — blindés pour Vercel / FS read-only
+# DB helpers (SQLite) — compatibles Vercel (/tmp en fallback)
 # -----------------------------------------------------------------------------
 def _pick_default_db_path() -> Path:
-    # 1) Si l'utilisateur a mis DB_PATH, on l'essaie en priorité
     p = os.getenv("DB_PATH")
     if p:
         return Path(p)
 
-    # 2) Si on est en serverless (Vercel/AWS), pointer par défaut sur /tmp
     if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
         return Path("/tmp/app.db")
 
-    # 3) Local/dev
     return BASE_DIR / "app.db"
 
 DB_PATH: Path = _pick_default_db_path()
 
 def _safe_connect(path: Path) -> sqlite3.Connection:
-    # S'assure que le dossier existe
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -96,7 +74,6 @@ def _safe_connect(path: Path) -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         return conn
     except sqlite3.OperationalError:
-        # Dernier secours : bascule automatique sur /tmp/app.db
         fallback = Path("/tmp/app.db")
         if path != fallback:
             try:
@@ -105,10 +82,9 @@ def _safe_connect(path: Path) -> sqlite3.Connection:
                 pass
             conn = sqlite3.connect(fallback)
             conn.row_factory = sqlite3.Row
-            # Mémorise le nouveau chemin pour les prochains appels
             globals()["DB_PATH"] = fallback
             return conn
-        raise  # Si même /tmp échoue, on remonte l'erreur
+        raise
 
 def _db() -> sqlite3.Connection:
     return _safe_connect(DB_PATH)
@@ -128,7 +104,6 @@ def db_one(sql: str, params: Tuple[Any, ...] = ()) -> Optional[sqlite3.Row]:
     return rows[0] if rows else None
 
 def init_db() -> None:
-    # _safe_connect gère déjà le fallback /tmp
     db_exec("""
     CREATE TABLE IF NOT EXISTS users(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -217,7 +192,7 @@ def send_mail(to_email: str, subject: str, html: str) -> None:
     msg["To"] = to_email
     msg["Subject"] = subject
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:  # ou ton serveur SMTP
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
             s.login(SMTP_USER, SMTP_PASS)
             s.sendmail(SMTP_FROM, [to_email], msg.as_string())
     except Exception as e:
@@ -235,7 +210,7 @@ def create_or_update_bot(user_id: int, form: Dict[str, Any]) -> sqlite3.Row:
         "color_hex": form.get("color_hex") or "#4F46E5",
         "persona": form.get("persona") or "Assistant",
         "welcome_text": form.get("welcome_text") or "Bonjour 👋",
-        "shape": form.get("shape") or "square",  # ← forme du widget
+        "shape": form.get("shape") or "square",
     }
     if existing:
         db_exec("""
@@ -282,7 +257,6 @@ def load_pack(metier_key: str) -> dict:
         return yaml.safe_load(f) or {}
 
 def rule_reply(pack: dict, user_msg: str, history: List[dict], cfg: dict) -> str:
-    # Simple heuristique; si tu as un moteur maison, branche-le ici.
     if not history:
         return pack.get("welcome") or cfg.get("welcome") or "Bonjour, je vous écoute 🙂"
     text = (user_msg or "").lower()
@@ -296,7 +270,7 @@ def rule_reply(pack: dict, user_msg: str, history: List[dict], cfg: dict) -> str
 # -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
-@app.route("/")
+@app.route("/", methods=["GET"])
 def landing() -> Response:
     return render_template("landing.html")
 
@@ -332,7 +306,6 @@ def logout() -> Response:
 @login_required
 def dashboard() -> Response:
     bot = get_bot(int(current_user.id))
-    # Alimente la liste des métiers depuis les YAML présents
     packs_dir = BASE_DIR / "templates" / "packs"
     metiers: List[str] = []
     if packs_dir.exists():
@@ -351,7 +324,7 @@ def dashboard_save() -> Response:
         "welcome_text": request.form.get("welcome_text"),
         "shape": request.form.get("shape"),  # square / rounded / circle
     }
-    bot = create_or_update_bot(int(current_user.id), form)
+    create_or_update_bot(int(current_user.id), form)
     flash("Configuration enregistrée.", "success")
     return redirect(url_for("test_page"))
 
@@ -363,7 +336,9 @@ def test_page() -> Response:
     warning = None if current_user.is_active_subscription else \
         "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
     template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
+
     def getv(obj, key): return (obj[key] if obj and key in obj.keys() else None)
+
     cfg = {
         "name":       getv(bot, "name") or "Mon Betty Bot",
         "metier":     getv(bot, "metier") or "",
@@ -417,7 +392,6 @@ def api_chat() -> Response:
 # ---- API lead (utilisé par le widget embarqué sur le site client)
 @app.route("/api/lead", methods=["POST"])
 def api_lead() -> Response:
-    # Le widget enverra user_id & bot_id en data-* (ou token) ; ici on accepte simple JSON/form.
     user_id = request.form.get("user_id") or (request.json or {}).get("user_id")  # type: ignore
     bot_id  = request.form.get("bot_id")  or (request.json or {}).get("bot_id")   # type: ignore
     name    = request.form.get("name")    or (request.json or {}).get("name")     # type: ignore
@@ -432,7 +406,6 @@ def api_lead() -> Response:
                VALUES(?,?,?,?,?,?,?)""",
             (int(user_id), int(bot_id), name or "", email, message or "", extra or "{}", now_iso()))
 
-    # Email au propriétaire (email d'inscription)
     owner = db_one("SELECT email FROM users WHERE id=?", (int(user_id),))
     if owner:
         html = f"""
@@ -480,12 +453,10 @@ def webhook_stripe() -> Response:
 
     if event["type"] in ("checkout.session.completed", "invoice.paid", "customer.subscription.updated"):
         data = event["data"]["object"]
-        # On retrouve l'utilisateur connecté via l'email s'il est présent
         email = (data.get("customer_details") or {}).get("email") or ""
         user_row = db_one("SELECT * FROM users WHERE email=?", (email.lower(),))
         if user_row:
             db_exec("UPDATE users SET is_active_subscription=1 WHERE id=?", (user_row["id"],))
-            # tracer subscription
             amount_cents = (data.get("amount_total") or 0) or (data.get("amount_paid") or 0)
             currency = (data.get("currency") or "eur").upper()
             db_exec("""
@@ -494,7 +465,6 @@ def webhook_stripe() -> Response:
             VALUES(?,?,?,?,?,?,?,?,?)
             """, (user_row["id"], "stripe", str(data.get("id")), (data.get("status") or "active"),
                   datetime.now(timezone.utc).isoformat(), int(amount_cents or 0), currency, now_iso(), now_iso()))
-            # mail confirmation
             html = "<p>Votre abonnement est actif. Merci !</p>"
             send_mail(user_row["email"], "Confirmation d’abonnement", html)
 
@@ -526,7 +496,7 @@ def confirm() -> Response:
     )
 
 # -----------------------------------------------------------------------------
-# Erreurs
+# Erreurs (une seule série de handlers)
 # -----------------------------------------------------------------------------
 @app.errorhandler(404)
 def _404(e):
@@ -534,8 +504,7 @@ def _404(e):
 
 @app.errorhandler(500)
 def _500(e):
-    # NOTE: Assure-toi que templates/500.html ne contient pas url_for('index')
-    # mais bien url_for('landing'), sinon la 500 replantera.
+    app.logger.exception("Unhandled error on %s", request.path)
     return render_template("500.html"), 500
 
 # -----------------------------------------------------------------------------
