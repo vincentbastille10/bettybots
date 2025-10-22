@@ -5,6 +5,7 @@ import json
 import smtplib
 import sqlite3
 import logging
+import secrets
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple, List
@@ -22,19 +23,19 @@ from dotenv import load_dotenv
 import yaml
 import stripe
 
-# -----------------------------------------------------------------------------
-# Configuration
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Config
+# =============================================================================
 BASE_DIR = Path(__file__).parent.resolve()
 load_dotenv(BASE_DIR / ".env")
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-# (Optionnel en prod HTTPS)
+# En prod HTTPS, décommente si besoin :
 # app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=True)
 
-# Base/public URL
+# URLs
 BASE_URL = os.getenv("BASE_URL") or os.getenv("PUBLIC_BASE_URL") or ""
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or BASE_URL
 
@@ -43,16 +44,16 @@ SMTP_USER = os.getenv("SMTP_USER") or ""
 SMTP_PASS = os.getenv("SMTP_PASS") or ""
 SMTP_FROM = SMTP_USER or "noreply@bettybots.local"
 
-# Stripe (CB abonnement)
+# Stripe
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY") or ""
-STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID") or ""  # price mensuel
+STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID") or ""      # price mensuel (9,99€)
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET") or ""
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
-# -----------------------------------------------------------------------------
-# DB helpers (SQLite) — compatibles Vercel (/tmp en fallback)
-# -----------------------------------------------------------------------------
+# =============================================================================
+# DB (SQLite)
+# =============================================================================
 def _pick_default_db_path() -> Path:
     p = os.getenv("DB_PATH")
     if p:
@@ -102,13 +103,17 @@ def db_one(sql: str, params: Tuple[Any, ...] = ()) -> Optional[sqlite3.Row]:
     rows = db_query(sql, params)
     return rows[0] if rows else None
 
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
 def init_db() -> None:
     db_exec("""
     CREATE TABLE IF NOT EXISTS users(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       first_name TEXT, last_name TEXT,
-      email TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE,
       is_active_subscription INTEGER DEFAULT 0,
+      is_guest INTEGER DEFAULT 1,
       created_at TEXT NOT NULL
     )""")
     db_exec("""
@@ -153,16 +158,14 @@ def init_db() -> None:
     )""")
 
 init_db()
-
 app.logger.setLevel(logging.INFO)
 app.logger.info(f"DB_PATH in use: {DB_PATH}")
 
-# -----------------------------------------------------------------------------
-# Login
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Auth (auto-guest)
+# =============================================================================
 login_manager = LoginManager(app)
-# ⬇️ IMPORTANT : ne redirige plus vers /signup, mais vers la landing
-login_manager.login_view = "landing"
+login_manager.login_view = "dashboard"  # si non loggé, on reste dans le flux dashboard
 
 class User(UserMixin):
     def __init__(self, row: sqlite3.Row):
@@ -171,18 +174,37 @@ class User(UserMixin):
         self.last_name = row["last_name"]
         self.email = row["email"]
         self.is_active_subscription = bool(row["is_active_subscription"])
+        self.is_guest = bool(row["is_guest"])
 
 @login_manager.user_loader
 def load_user(user_id: str) -> Optional[User]:
     row = db_one("SELECT * FROM users WHERE id=?", (user_id,))
     return User(row) if row else None
 
-# -----------------------------------------------------------------------------
-# Utils
-# -----------------------------------------------------------------------------
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def ensure_guest_user() -> None:
+    """Crée automatiquement un user 'guest' + connexion si personne n'est loggé."""
+    if current_user.is_authenticated:
+        return
+    # ne pas créer de session pour les webhooks Stripe
+    if request.path.startswith("/webhook/stripe"):
+        return
+    # guest-xxxx@guest.local (unique)
+    guest_email = f"guest-{secrets.token_hex(4)}@guest.local"
+    db_exec(
+        "INSERT INTO users(first_name,last_name,email,is_guest,created_at) VALUES(?,?,?,?,?)",
+        ("", "", guest_email, 1, now_iso()),
+    )
+    row = db_one("SELECT * FROM users WHERE email=?", (guest_email,))
+    login_user(User(row), remember=True)
+    app.logger.info("Guest user created: %s", guest_email)
 
+@app.before_request
+def _auto_guest():
+    ensure_guest_user()
+
+# =============================================================================
+# Helpers bot
+# =============================================================================
 def send_mail(to_email: str, subject: str, html: str) -> None:
     if not (SMTP_USER and SMTP_PASS):
         app.logger.warning("SMTP not configured; skip email to %s", to_email)
@@ -267,50 +289,12 @@ def rule_reply(pack: dict, user_msg: str, history: List[dict], cfg: dict) -> str
         return "Dans quelle ville cherchez-vous ?"
     return "Merci. Pouvez-vous préciser votre besoin pour que je le qualifie ?"
 
-# -----------------------------------------------------------------------------
-# Routes
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Routes — Page 1 : DASHBOARD (config du bot)
+# =============================================================================
 @app.route("/", methods=["GET"])
-def landing() -> Response:
-    return render_template("landing.html")
-
-@app.route("/index", methods=["GET"])
-def index() -> Response:
-    return redirect(url_for("landing"))
-
-# ⬇️ Signup : GET redirige vers landing ; POST crée/connexion → dashboard
-@app.route("/signup", methods=["GET", "POST"])
-def signup() -> Response:
-    if request.method == "POST":
-        first_name = (request.form.get("first_name") or "").strip()
-        last_name  = (request.form.get("last_name") or "").strip()
-        email      = (request.form.get("email") or "").strip().lower()
-
-        if not email:
-            flash("Email requis.", "error")
-            return redirect(url_for("landing"))
-
-        existing = db_one("SELECT * FROM users WHERE email=?", (email,))
-        if existing:
-            user = User(existing)
-            login_user(user, remember=True)
-            flash("Bienvenue 👋", "success")
-            return redirect(url_for("dashboard"))
-
-        db_exec("INSERT INTO users(first_name,last_name,email,created_at) VALUES(?,?,?,?)",
-                (first_name, last_name, email, now_iso()))
-        row = db_one("SELECT * FROM users WHERE email=?", (email,))
-        login_user(User(row), remember=True)
-        flash("Inscription réussie.", "success")
-        return redirect(url_for("dashboard"))
-
-    # GET -> on ne montre plus de page d'inscription
-    return redirect(url_for("landing"))
-
-@app.route("/logout")
-def logout() -> Response:
-    logout_user()
-    return redirect(url_for("landing"))
+def home() -> Response:
+    return redirect(url_for("dashboard"))
 
 @app.route("/dashboard", methods=["GET"])
 @login_required
@@ -322,9 +306,10 @@ def dashboard() -> Response:
         metiers = [p.stem for p in sorted(packs_dir.glob("*.yaml"))]
     return render_template("dashboard.html", bot=bot, metiers=metiers)
 
-@app.route("/dashboard/save", methods=["POST"])
+@app.route("/dashboard/generate", methods=["POST"])
 @login_required
-def dashboard_save() -> Response:
+def dashboard_generate() -> Response:
+    """Enregistre la config et prépare l'aperçu (charge pack métier). -> Page 2"""
     form = {
         "name": request.form.get("name"),
         "metier": request.form.get("metier"),
@@ -332,20 +317,29 @@ def dashboard_save() -> Response:
         "color_hex": request.form.get("color_hex"),
         "persona": request.form.get("persona"),
         "welcome_text": request.form.get("welcome_text"),
-        "shape": request.form.get("shape"),  # square / rounded / circle
+        "shape": request.form.get("shape"),
     }
-    create_or_update_bot(int(current_user.id), form)
-    flash("Configuration enregistrée.", "success")
-    return redirect(url_for("test_page"))
+    bot = create_or_update_bot(int(current_user.id), form)
 
-# ---- Test (chat sandbox)
-@app.route("/test")
+    # on peut précharger un état initial si besoin
+    state = bot_state_get(int(current_user.id), bot["id"])
+    if not state.get("history"):
+        state["history"] = []
+        bot_state_set(int(current_user.id), bot["id"], state)
+
+    # Direction Page 2 (preview)
+    return redirect(url_for("preview"))
+
+# =============================================================================
+# Routes — Page 2 : PREVIEW / TEST
+# =============================================================================
+@app.route("/preview", methods=["GET"])
 @login_required
-def test_page() -> Response:
+def preview() -> Response:
     bot = get_bot(int(current_user.id))
-    warning = None if current_user.is_active_subscription else \
-        "Votre abonnement est inactif. Souscrivez pour débloquer les conversations réelles."
-    template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
+    if not bot:
+        flash("Configurez votre bot d’abord.", "warning")
+        return redirect(url_for("dashboard"))
 
     def getv(obj, key): return (obj[key] if obj and key in obj.keys() else None)
 
@@ -358,19 +352,29 @@ def test_page() -> Response:
         "welcome":    getv(bot, "welcome_text") or "Bonjour 👋",
         "shape":      getv(bot, "shape") or "square",
     }
+    warning = None if current_user.is_active_subscription else \
+        "Aperçu de démonstration : l’abonnement activera les conversations réelles."
+    # Utilise templates/test.html si présent, sinon chat.html
+    template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
     return render_template(template_name, bot=bot, user=current_user, warning=warning, cfg=cfg)
 
-@app.route("/test/reset", methods=["POST"])
+@app.post("/preview/reset")
 @login_required
-def test_reset() -> Response:
+def preview_reset() -> Response:
     bot = get_bot(int(current_user.id))
     if bot:
         bot_state_reset(int(current_user.id), bot["id"])
-    flash("Conversation réinitialisée.", "success")
-    return redirect(url_for("test_page"))
+    return redirect(url_for("preview"))
 
-# ---- API chat
-@app.route("/api/chat", methods=["POST"])
+@app.post("/dashboard/save_and_pay")
+@login_required
+def save_and_pay() -> Response:
+    """Depuis la page 2 - validation -> Page 3 (paiement)"""
+    # Ici, si tu veux, re-valide la config du bot avant de payer
+    return redirect(url_for("pay"))
+
+# API bot (utilisée par la page preview/test)
+@app.post("/api/chat")
 @login_required
 def api_chat() -> Response:
     bot = get_bot(int(current_user.id))
@@ -384,10 +388,7 @@ def api_chat() -> Response:
     state = bot_state_get(int(current_user.id), bot["id"])
     history = state.get("history", [])
     pack = load_pack(bot["metier"] or "") or {}
-    cfg = {
-        "name": bot["name"] or "Mon Betty Bot",
-        "welcome": bot["welcome_text"] or "Bonjour 👋",
-    }
+    cfg = {"name": bot["name"] or "Mon Betty Bot", "welcome": bot["welcome_text"] or "Bonjour 👋"}
     reply = rule_reply(pack, user_msg, history, cfg)
 
     now = datetime.now(timezone.utc).isoformat()
@@ -399,59 +400,37 @@ def api_chat() -> Response:
     bot_state_set(int(current_user.id), bot["id"], state)
     return jsonify({"reply": reply, "history": history[-10:]})
 
-# ---- API lead (widget embarqué)
-@app.route("/api/lead", methods=["POST"])
-def api_lead() -> Response:
-    user_id = request.form.get("user_id") or (request.json or {}).get("user_id")  # type: ignore
-    bot_id  = request.form.get("bot_id")  or (request.json or {}).get("bot_id")   # type: ignore
-    name    = request.form.get("name")    or (request.json or {}).get("name")     # type: ignore
-    email   = request.form.get("email")   or (request.json or {}).get("email")    # type: ignore
-    message = request.form.get("message") or (request.json or {}).get("message")  # type: ignore
-    extra   = request.form.get("extra_json") or (request.json or {}).get("extra_json")  # type: ignore
-
-    if not (user_id and bot_id and email):
-        return jsonify({"error": "missing_params"}), 400
-
-    db_exec("""INSERT INTO leads(user_id,bot_id,name,email,message,extra_json,created_at)
-               VALUES(?,?,?,?,?,?,?)""",
-            (int(user_id), int(bot_id), name or "", email, message or "", extra or "{}", now_iso()))
-
-    owner = db_one("SELECT email FROM users WHERE id=?", (int(user_id),))
-    if owner:
-        html = f"""
-        <h3>Nouveau lead</h3>
-        <p><strong>Nom:</strong> {name or ''}<br>
-        <strong>Email:</strong> {email}<br>
-        <strong>Message:</strong> {message or ''}</p>
-        """
-        send_mail(owner["email"], "Nouveau lead via votre bot", html)
-
-    return jsonify({"ok": True})
-
-# ---- Paiement (Stripe abonnement mensuel)
-@app.route("/pay", methods=["GET"])
+# =============================================================================
+# Routes — Page 3 : PAIEMENT
+# =============================================================================
+@app.get("/pay")
 @login_required
 def pay() -> Response:
     stripe_enabled = bool(STRIPE_SECRET_KEY and STRIPE_PRICE_ID)
     return render_template("pay.html", stripe_enabled=stripe_enabled)
 
-@app.route("/pay/stripe", methods=["POST"])
+@app.post("/pay/stripe")
 @login_required
 def pay_stripe() -> Response:
     if not (STRIPE_SECRET_KEY and STRIPE_PRICE_ID):
         flash("Paiement indisponible pour le moment.", "error")
-        return redirect(url_for("dashboard"))
-    success_url = f"{PUBLIC_BASE_URL or BASE_URL}/confirm?provider=stripe&session_id={{CHECKOUT_SESSION_ID}}"
-    cancel_url = f"{PUBLIC_BASE_URL or BASE_URL}/dashboard"
+        return redirect(url_for("pay"))
+
+    success_url = f"{PUBLIC_BASE_URL or BASE_URL}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{PUBLIC_BASE_URL or BASE_URL}/pay"
+
+    # Stripe collectera l'email → on l’utilisera pour “dé-guestifier” l’utilisateur
     session = stripe.checkout.Session.create(
         mode="subscription",
         line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
         success_url=success_url,
         cancel_url=cancel_url,
+        automatic_tax={"enabled": True}
     )
     return redirect(session.url, code=303)
 
-@app.route("/webhook/stripe", methods=["POST"])
+# Webhook Stripe : active l’abonnement + met à jour l’email si guest
+@app.post("/webhook/stripe")
 def webhook_stripe() -> Response:
     payload = request.data
     sig = request.headers.get("Stripe-Signature", "")
@@ -464,7 +443,22 @@ def webhook_stripe() -> Response:
     if event["type"] in ("checkout.session.completed", "invoice.paid", "customer.subscription.updated"):
         data = event["data"]["object"]
         email = (data.get("customer_details") or {}).get("email") or ""
-        user_row = db_one("SELECT * FROM users WHERE email=?", (email.lower(),))
+        customer_id = data.get("customer")
+
+        # 1) S’il existe déjà un user avec cet email → activer l’abonnement
+        user_row = None
+        if email:
+            user_row = db_one("SELECT * FROM users WHERE email=?", (email.lower(),))
+
+        # 2) Sinon, récupère le plus récent guest et mets à jour son email
+        if not user_row and email:
+            guest_row = db_one(
+                "SELECT * FROM users WHERE is_guest=1 ORDER BY id DESC LIMIT 1"
+            )
+            if guest_row:
+                db_exec("UPDATE users SET email=?, is_guest=0 WHERE id=?", (email.lower(), guest_row["id"]))
+                user_row = db_one("SELECT * FROM users WHERE id=?", (guest_row["id"],))
+
         if user_row:
             db_exec("UPDATE users SET is_active_subscription=1 WHERE id=?", (user_row["id"],))
             amount_cents = (data.get("amount_total") or 0) or (data.get("amount_paid") or 0)
@@ -475,39 +469,62 @@ def webhook_stripe() -> Response:
             VALUES(?,?,?,?,?,?,?,?,?)
             """, (user_row["id"], "stripe", str(data.get("id")), (data.get("status") or "active"),
                   datetime.now(timezone.utc).isoformat(), int(amount_cents or 0), currency, now_iso(), now_iso()))
-            html = "<p>Votre abonnement est actif. Merci !</p>"
-            send_mail(user_row["email"], "Confirmation d’abonnement", html)
+            if email:
+                send_mail(email, "Votre abonnement Betty Bot est actif", "<p>Merci pour votre confiance 🙏</p>")
 
     return Response(status=200)
 
-@app.route("/confirm", methods=["GET"])
+# =============================================================================
+# Routes — Page 4 : CONFIRMATION (récap + code à copier)
+# =============================================================================
+@app.get("/confirm")
 @login_required
 def confirm() -> Response:
-    provider = request.args.get("provider") or "stripe"
     session_id = request.args.get("session_id") or ""
     amount = None
     currency = "EUR"
-    if provider == "stripe" and session_id and STRIPE_SECRET_KEY:
+    if session_id and STRIPE_SECRET_KEY:
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             amount = (s.get("amount_total") or 0) / 100.0
             currency = (s.get("currency") or "eur").upper()
         except Exception:
             pass
+
     bot = get_bot(int(current_user.id))
+    # petit code à copier/coller pour intégrer le bot
+    embed_code = ""
+    if bot:
+        embed_code = (
+            f'<iframe src="{PUBLIC_BASE_URL or BASE_URL}/bot?user_id={current_user.id}&bot_id={bot["id"]}" '
+            f'width="420" height="620" style="border:0;border-radius:12px;"></iframe>'
+        )
+
     return render_template(
         "confirm.html",
-        provider=provider,
-        amount=amount,
-        currency=currency,
-        bot=bot,
-        user=current_user,
+        price_label="9,99 € / mois",
+        amount=amount, currency=currency,
+        bot=bot, user=current_user,
+        embed_code=embed_code,
         base_url=(PUBLIC_BASE_URL or BASE_URL),
     )
 
-# -----------------------------------------------------------------------------
+# =============================================================================
+# (Optionnel) Widget embarqué très simple
+# =============================================================================
+@app.get("/bot")
+def public_bot_iframe() -> Response:
+    """Aperçu minimal pour l'iframe publique (à étoffer)."""
+    user_id = int(request.args.get("user_id", "0"))
+    bot_id = int(request.args.get("bot_id", "0"))
+    bot = db_one("SELECT * FROM bots WHERE id=? AND user_id=?", (bot_id, user_id))
+    if not bot:
+        return "<p>Bot introuvable</p>"
+    return render_template("bot.html", bot=bot)
+
+# =============================================================================
 # Erreurs
-# -----------------------------------------------------------------------------
+# =============================================================================
 @app.errorhandler(404)
 def _404(e):
     return render_template("404.html"), 404
@@ -517,8 +534,8 @@ def _500(e):
     app.logger.exception("Unhandled error on %s", request.path)
     return render_template("500.html"), 500
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # Run
-# -----------------------------------------------------------------------------
+# =============================================================================
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
