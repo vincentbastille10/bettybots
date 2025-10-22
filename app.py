@@ -13,7 +13,7 @@ from email.mime.text import MIMEText
 
 from flask import (
     Flask, request, redirect, url_for, render_template,
-    flash, jsonify, Response
+    render_template_string, flash, jsonify, Response
 )
 from flask_login import (
     LoginManager, UserMixin, login_user, current_user,
@@ -297,10 +297,11 @@ def home() -> Response:
 @app.get("/dashboard")
 @login_required
 def dashboard() -> Response:
-    # convertit Row -> dict pour éviter les erreurs Jinja
+    # Row -> dict pour Jinja
     row = get_bot(int(current_user.id))
     bot: Optional[dict] = dict(row) if row else None
 
+    # Packs disponibles
     packs_dir = BASE_DIR / "templates" / "packs"
     metiers: List[str] = []
     if packs_dir.exists():
@@ -311,6 +312,7 @@ def dashboard() -> Response:
 @app.post("/dashboard/generate")
 @login_required
 def dashboard_generate() -> Response:
+    """Enregistre la config et prépare l'aperçu. -> Page 2"""
     form = {
         "name": request.form.get("name"),
         "metier": request.form.get("metier"),
@@ -354,7 +356,48 @@ def preview() -> Response:
     warning = None if current_user.is_active_subscription else \
         "Aperçu de démonstration (l’abonnement activera les conversations réelles)."
 
-    return render_template("test.html", bot=bot, user=current_user, warning=warning, cfg=cfg)
+    # Choix auto du template présent
+    templates_dir = Path(app.template_folder or "templates")
+    if (templates_dir / "preview.html").exists():
+        tpl = "preview.html"
+    elif (templates_dir / "test.html").exists():
+        tpl = "test.html"
+    elif (templates_dir / "chat.html").exists():
+        tpl = "chat.html"
+    else:
+        tpl = None
+
+    if tpl:
+        return render_template(tpl, bot=bot, user=current_user, warning=warning, cfg=cfg)
+
+    # Fallback inline minimal si aucun template n'existe
+    fb = """
+    <!doctype html><html lang="fr"><head><meta charset="utf-8">
+    <title>Aperçu</title><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+    <body>
+      <h1>Aperçu du bot : {{cfg.name}}</h1>
+      <p><em>{{warning}}</em></p>
+      <form onsubmit="event.preventDefault(); sendMsg();">
+        <input id="msg" placeholder="Votre message..." style="width:70%">
+        <button type="submit">Envoyer</button>
+      </form>
+      <pre id="out" style="background:#f6f6f6;padding:12px;border-radius:8px;min-height:120px"></pre>
+      <form method="post" action="/dashboard/save_and_pay" style="margin-top:16px">
+        <button type="submit">Enregistrer → Paiement</button>
+      </form>
+      <script>
+        async function sendMsg(){
+          const m = document.getElementById('msg').value.trim();
+          if(!m) return;
+          const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})});
+          const j = await r.json();
+          document.getElementById('out').textContent = (j.reply || JSON.stringify(j,null,2));
+          document.getElementById('msg').value = '';
+        }
+      </script>
+    </body></html>
+    """
+    return render_template_string(fb, bot=bot, cfg=cfg, warning=warning)
 
 @app.post("/preview/reset")
 @login_required
@@ -521,7 +564,7 @@ def _500(e):
     return render_template("500.html"), 500
 
 # =============================================================================
-# Run
+# Run (local)
 # =============================================================================
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
