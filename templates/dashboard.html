@@ -1,180 +1,63 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>Betty Bots — Dashboard</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+  <meta charset="utf-8">
+  <title>Configurer mon bot</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    :root{--bg:#0d1117;--panel:#111827;--border:#1f2937;--ink:#e5e7eb;--muted:#9ca3af;--accent:#2563eb}
-    *{box-sizing:border-box}
-    body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;margin:0;padding:24px}
-    header{max-width:1000px;margin:0 auto 16px auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
-    header h1{font-size:22px;margin:0}
-    header .who{color:var(--muted);font-size:14px}
-    .wrap{max-width:1000px;margin:0 auto}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px}
-    .row{margin-bottom:18px}
-    label{display:block;margin-bottom:8px;font-weight:600}
-    select,input[type=text],textarea{width:100%;background:#0b1220;border:1px solid #293041;color:#fff;border-radius:10px;padding:10px 12px}
-    small, .muted{color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-    @media (max-width:900px){.grid{grid-template-columns:1fr}}
-    .flex{display:flex;gap:12px;flex-wrap:wrap}
-    .color-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);cursor:pointer}
-    .avatars{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:12px}
-    .avatar{border:2px solid transparent;border-radius:12px;overflow:hidden;cursor:pointer;background:#0b1220}
-    .avatar.selected{border-color:var(--accent)}
-    .avatar img{width:100%;height:120px;object-fit:cover;display:block}
-    .btns{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
-    .btn{background:#1f2937;border:1px solid #374151;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer;text-decoration:none;display:inline-block}
-    .btn.primary{background:var(--accent);border-color:#1d4ed8}
-    .flash{background:#fef3c7;color:#92400e;border:1px solid #f59e0b;padding:10px 12px;border-radius:10px;margin:12px 0}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:780px;margin:40px auto;padding:0 16px}
+    label{display:block;margin:12px 0 6px} input,select,textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}
+    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
+    .primary{background:#4F46E5;color:#fff}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .card{border:1px solid #eee;border-radius:12px;padding:16px}
   </style>
 </head>
 <body>
-  <header>
-    <h1>Configuration de votre bot</h1>
-    <div class="who">Connecté&nbsp;: {{ (user.email if user else '') or '—' }}</div>
-  </header>
-
-  <div class="wrap">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for c,m in messages %}<div class="flash"><b>{{ c }}</b> — {{ m }}</div>{% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <form method="POST" action="{{ url_for('dashboard_save') }}" class="card">
-      <div class="grid">
-        <div>
-          <!-- Nom du bot -->
-          <div class="row">
-            <label for="name">Nom du bot</label>
-            <input id="name" name="name" type="text" placeholder="Mon Betty Bot"
-                   value="{{ (bot['name'] if bot else '') or 'Mon Betty Bot' }}">
-            <small class="muted">Ce nom s’affiche dans la bulle et la fenêtre du widget.</small>
-          </div>
-
-          <!-- Métier -->
-          <div class="row">
-            <label for="metier">Métier</label>
-            <select id="metier" name="metier">
-              {% set current_metier = (bot['metier'] if bot else '') or '' %}
-              {% if metiers and metiers|length>0 %}
-                {% for m in metiers %}
-                  <option value="{{ m }}" {{ 'selected' if m==current_metier else '' }}>{{ m|capitalize }}</option>
-                {% endfor %}
-              {% else %}
-                <!-- fallback si aucun pack n’a été détecté côté serveur -->
-                {% for m in ['avocat','medecin','agent_immobilier','comptable','psychologue','danse'] %}
-                  <option value="{{ m }}" {{ 'selected' if m==current_metier else '' }}>{{ m|replace('_',' ')|capitalize }}</option>
-                {% endfor %}
-              {% endif %}
-            </select>
-            <small class="muted">Détermine le pack YAML utilisé pour la qualification.</small>
-          </div>
-
-          <!-- Personnalité -->
-          <div class="row">
-            <label for="persona">Personnalité</label>
-            {% set cur_persona = (bot['persona'] if bot else '') or 'neutre' %}
-            <select id="persona" name="persona">
-              <option value="neutre"        {{ 'selected' if cur_persona=='neutre' else '' }}>Neutre (clair, pro)</option>
-              <option value="bienveillante" {{ 'selected' if cur_persona=='bienveillante' else '' }}>Bienveillante (chaleureuse)</option>
-              <option value="directe"       {{ 'selected' if cur_persona=='directe' else '' }}>Directe (rapide, concise)</option>
-              <option value="experte"       {{ 'selected' if cur_persona=='experte' else '' }}>Experte (détaillée)</option>
-            </select>
-          </div>
-
-          <!-- Message d’accueil -->
-          <div class="row">
-            <label for="welcome_text">Message d’accueil</label>
-            <textarea id="welcome_text" name="welcome_text" rows="3"
-              placeholder="👋 Bonjour ! Je suis Betty, l’assistante AI. Posez votre question…">{{ (bot['welcome_text'] if bot else '') or "👋 Bonjour ! Je suis Betty, l’assistante AI. Posez votre question…" }}</textarea>
-            <small class="muted">Le nom “Betty” reste fixe, tu personnalises le reste.</small>
-          </div>
-        </div>
-
-        <div>
-          <!-- Couleur -->
-          <div class="row">
-            <label>Couleur (thème)</label>
-            {% set cur_color = (bot['color_hex'] if bot else '') or '#4F46E5' %}
-            <input type="hidden" id="color_hex" name="color_hex" value="{{ cur_color }}">
-            <div class="flex" id="colorPicker">
-              {% for c in ['#4F46E5','#22c55e','#8b5cf6','#ef4444','#f59e0b','#06b6d4','#111827','#f5f5f5'] %}
-                <div class="color-dot" data-color="{{ c }}" style="background:{{ c }};outline: {{ '3px solid #fff' if c|lower==cur_color|lower else 'none' }}"></div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <!-- Forme du widget -->
-          <div class="row">
-            <label>Forme du widget</label>
-            {% set cur_shape = (bot['shape'] if bot else '') or 'square' %}
-            <div class="flex">
-              {% for s,label in [('square','Carré'),('rounded','Arrondi'),('circle','Cercle')] %}
-                <label style="display:flex;align-items:center;gap:6px">
-                  <input type="radio" name="shape" value="{{ s }}" {{ 'checked' if cur_shape==s else '' }}>
-                  <span>{{ label }}</span>
-                </label>
-              {% endfor %}
-            </div>
-          </div>
-
-          <!-- Avatar -->
-          <div class="row">
-            <label>Avatar</label>
-            {% set cur_avatar = (bot['avatar_url'] if bot else '') or '' %}
-            <input type="hidden" id="avatar_url" name="avatar_url" value="{{ cur_avatar }}">
-            <div class="avatars" id="avatarGrid">
-              {% for url in [
-                'https://i.postimg.cc/9F0dFbzs/Spectra-Media-logo.png',
-                'https://i.ibb.co/xKr7s8Nk/Betty-Avocate-copie.jpg',
-                'https://i.ibb.co/CKFQ2cdN/Betty-Agent-immo-copie.jpg',
-                'https://i.ibb.co/bjqWmV09/Betty-Medecine-copie.jpg'
-              ] %}
-                <div class="avatar {{ 'selected' if url==cur_avatar else '' }}">
-                  <img src="{{ url }}" alt="">
-                </div>
-              {% endfor %}
-            </div>
-            <small class="muted">Clique pour sélectionner. Tu pourras mettre ton URL plus tard.</small>
-          </div>
-        </div>
+  <h1>Configurer mon Betty Bot</h1>
+  <form method="post" action="/dashboard/generate" class="card">
+    <label>Nom du bot</label>
+    <input name="name" placeholder="Mon Betty Bot" value="{{ (bot.name if bot else '') or '' }}" />
+    <div class="row">
+      <div>
+        <label>Métier</label>
+        <select name="metier" required>
+          {% if metiers and metiers|length %}
+            {% for m in metiers %}<option value="{{m}}" {% if bot and bot.metier==m %}selected{% endif %}>{{m}}</option>{% endfor %}
+          {% else %}
+            <option value="">-- aucun pack trouvé --</option>
+          {% endif %}
+        </select>
+        <small>Place tes packs dans <code>templates/packs/*.yaml</code></small>
       </div>
-
-      <div class="btns">
-        <button class="btn primary" type="submit">Enregistrer</button>
-        <a class="btn" href="{{ url_for('test_page') }}">Prévisualiser</a>
-        <a class="btn" href="{{ url_for('landing') }}">Retour accueil</a>
+      <div>
+        <label>Couleur (hex)</label>
+        <input name="color_hex" placeholder="#4F46E5" value="{{ (bot.color_hex if bot else '') or '#4F46E5' }}" />
       </div>
-    </form>
-  </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Avatar (URL)</label>
+        <input name="avatar_url" placeholder="https://..." value="{{ (bot.avatar_url if bot else '') or '' }}" />
+      </div>
+      <div>
+        <label>Forme</label>
+        <select name="shape">
+          {% set shp = (bot.shape if bot else 'square') or 'square' %}
+          <option value="square"  {% if shp=='square' %}selected{% endif %}>Carré</option>
+          <option value="rounded" {% if shp=='rounded' %}selected{% endif %}>Arrondi</option>
+          <option value="circle"  {% if shp=='circle' %}selected{% endif %}>Cercle</option>
+        </select>
+      </div>
+    </div>
+    <label>Persona</label>
+    <input name="persona" placeholder="Assistant" value="{{ (bot.persona if bot else '') or 'Assistant' }}" />
+    <label>Message d’accueil</label>
+    <textarea name="welcome_text" rows="3" placeholder="Bonjour 👋">{{ (bot.welcome_text if bot else '') or 'Bonjour 👋' }}</textarea>
 
-  <script>
-    // Couleur
-    const colorInput = document.getElementById('color_hex');
-    document.querySelectorAll('#colorPicker .color-dot').forEach(dot=>{
-      dot.addEventListener('click', ()=>{
-        colorInput.value = dot.dataset.color;
-        document.querySelectorAll('#colorPicker .color-dot').forEach(d=>d.style.outline='none');
-        dot.style.outline='3px solid #fff';
-      });
-    });
-
-    // Avatar
-    const avatarInput = document.getElementById('avatar_url');
-    document.querySelectorAll('#avatarGrid .avatar').forEach(box=>{
-      const img = box.querySelector('img');
-      const url = img.getAttribute('src');
-      box.addEventListener('click', ()=>{
-        avatarInput.value = url;
-        document.querySelectorAll('#avatarGrid .avatar').forEach(b=>b.classList.remove('selected'));
-        box.classList.add('selected');
-      });
-    });
-  </script>
+    <div style="margin-top:16px">
+      <button class="primary" type="submit">Enregistrer / Générer le bot →</button>
+    </div>
+  </form>
 </body>
 </html>
