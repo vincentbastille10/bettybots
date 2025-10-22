@@ -2,7 +2,6 @@
 name = "bettybots"
 version = "0.1.0"
 description = "Flask app for Betty Bots"
-readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
