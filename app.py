@@ -274,6 +274,11 @@ def rule_reply(pack: dict, user_msg: str, history: List[dict], cfg: dict) -> str
 def landing() -> Response:
     return render_template("landing.html")
 
+@app.route("/index", methods=["GET"])
+def index() -> Response:
+    # si tu préfères, tu peux return render_template("landing.html")
+    return redirect(url_for("landing"))
+
 @app.route("/signup", methods=["GET", "POST"])
 def signup() -> Response:
     if request.method == "POST":
