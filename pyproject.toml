@@ -1,3 +1,4 @@
+cat > pyproject.toml <<'EOF'
 [project]
 name = "bettybots"
 version = "0.1.0"
@@ -13,5 +14,6 @@ dependencies = [
   "stripe>=10.0.0"
 ]
 
-[tool.uv]  # permet à Vercel/uv de bien résoudre
+[tool.uv]
 index-url = "https://pypi.org/simple"
+EOF
