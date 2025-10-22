@@ -1,4 +1,8 @@
-from app import app as _app
+from asgiref.wsgi import WsgiToAsgi
+from app import app
 
-def handler(request, context):
-    return _app(request.environ, start_response=None)
+asgi_app = WsgiToAsgi(app)
+
+# Vercel appelle cette fonction
+async def handler(request, context):
+    return await asgi_app(request, context)
