@@ -49,9 +49,27 @@ if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
 # -----------------------------------------------------------------------------
-# DB helpers (SQLite)
+# DB helpers (SQLite) — robuste pour Vercel (FS read-only) avec fallback /tmp
 # -----------------------------------------------------------------------------
-DB_PATH = Path(os.getenv("DB_PATH") or ("/tmp/app.db" if os.getenv("VERCEL") else str(BASE_DIR / "app.db")))
+def _resolve_db_path() -> Path:
+    # 1) Priorité à la variable d'env explicite
+    p = os.getenv("DB_PATH")
+    if p:
+        return Path(p)
+
+    # 2) Tente d'utiliser app.db dans le repo (dev/local)
+    candidate = BASE_DIR / "app.db"
+    try:
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        # test d'écriture (append b"")
+        with open(candidate, "ab"):
+            pass
+        return candidate
+    except Exception:
+        # 3) Fallback pour Vercel/FS read-only
+        return Path("/tmp/app.db")
+
+DB_PATH = _resolve_db_path()
 
 def _db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -73,54 +91,118 @@ def db_one(sql: str, params: Tuple[Any, ...] = ()) -> Optional[sqlite3.Row]:
     return rows[0] if rows else None
 
 def init_db() -> None:
-    db_exec("""
-    CREATE TABLE IF NOT EXISTS users(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      first_name TEXT, last_name TEXT,
-      email TEXT UNIQUE NOT NULL,
-      is_active_subscription INTEGER DEFAULT 0,
-      created_at TEXT NOT NULL
-    )""")
-    db_exec("""
-    CREATE TABLE IF NOT EXISTS bots(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER UNIQUE NOT NULL,
-      name TEXT, metier TEXT,
-      avatar_url TEXT, color_hex TEXT,
-      persona TEXT, welcome_text TEXT,
-      shape TEXT,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )""")
-    db_exec("""
-    CREATE TABLE IF NOT EXISTS leads(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      bot_id INTEGER NOT NULL,
-      name TEXT, email TEXT, message TEXT,
-      extra_json TEXT,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY(user_id) REFERENCES users(id),
-      FOREIGN KEY(bot_id) REFERENCES bots(id)
-    )""")
-    db_exec("""
-    CREATE TABLE IF NOT EXISTS subscriptions(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      provider TEXT CHECK(provider='stripe') NOT NULL,
-      external_id TEXT, status TEXT,
-      current_period_end TEXT,
-      amount_cents INTEGER, currency TEXT,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    )""")
-    db_exec("""
-    CREATE TABLE IF NOT EXISTS bot_state(
-      user_id INTEGER NOT NULL,
-      bot_id INTEGER NOT NULL,
-      state_json TEXT,
-      PRIMARY KEY(user_id, bot_id)
-    )""")
+    """
+    Initialise le schéma, avec fallback automatique sur /tmp en cas de FS read-only.
+    """
+    try:
+        db_exec("""
+        CREATE TABLE IF NOT EXISTS users(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          first_name TEXT, last_name TEXT,
+          email TEXT UNIQUE NOT NULL,
+          is_active_subscription INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL
+        )""")
+        db_exec("""
+        CREATE TABLE IF NOT EXISTS bots(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER UNIQUE NOT NULL,
+          name TEXT, metier TEXT,
+          avatar_url TEXT, color_hex TEXT,
+          persona TEXT, welcome_text TEXT,
+          shape TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id)
+        )""")
+        db_exec("""
+        CREATE TABLE IF NOT EXISTS leads(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          bot_id INTEGER NOT NULL,
+          name TEXT, email TEXT, message TEXT,
+          extra_json TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id),
+          FOREIGN KEY(bot_id) REFERENCES bots(id)
+        )""")
+        db_exec("""
+        CREATE TABLE IF NOT EXISTS subscriptions(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          provider TEXT CHECK(provider='stripe') NOT NULL,
+          external_id TEXT, status TEXT,
+          current_period_end TEXT,
+          amount_cents INTEGER, currency TEXT,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id)
+        )""")
+        db_exec("""
+        CREATE TABLE IF NOT EXISTS bot_state(
+          user_id INTEGER NOT NULL,
+          bot_id INTEGER NOT NULL,
+          state_json TEXT,
+          PRIMARY KEY(user_id, bot_id)
+        )""")
+    except sqlite3.OperationalError as e:
+        # Gestion explicite d'un FS en lecture seule (Vercel)
+        msg = str(e).lower()
+        if "read-only" in msg or "readonly" in msg or "unable to open database file" in msg:
+            # Bascule sur /tmp et réessaie une fois
+            global DB_PATH
+            DB_PATH = Path("/tmp/app.db")
+            with _db() as _:
+                pass
+            # Rejoue l'init
+            db_exec("""
+            CREATE TABLE IF NOT EXISTS users(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              first_name TEXT, last_name TEXT,
+              email TEXT UNIQUE NOT NULL,
+              is_active_subscription INTEGER DEFAULT 0,
+              created_at TEXT NOT NULL
+            )""")
+            db_exec("""
+            CREATE TABLE IF NOT EXISTS bots(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER UNIQUE NOT NULL,
+              name TEXT, metier TEXT,
+              avatar_url TEXT, color_hex TEXT,
+              persona TEXT, welcome_text TEXT,
+              shape TEXT,
+              created_at TEXT NOT NULL,
+              FOREIGN KEY(user_id) REFERENCES users(id)
+            )""")
+            db_exec("""
+            CREATE TABLE IF NOT EXISTS leads(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              bot_id INTEGER NOT NULL,
+              name TEXT, email TEXT, message TEXT,
+              extra_json TEXT,
+              created_at TEXT NOT NULL,
+              FOREIGN KEY(user_id) REFERENCES users(id),
+              FOREIGN KEY(bot_id) REFERENCES bots(id)
+            )""")
+            db_exec("""
+            CREATE TABLE IF NOT EXISTS subscriptions(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              provider TEXT CHECK(provider='stripe') NOT NULL,
+              external_id TEXT, status TEXT,
+              current_period_end TEXT,
+              amount_cents INTEGER, currency TEXT,
+              created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+              FOREIGN KEY(user_id) REFERENCES users(id)
+            )""")
+            db_exec("""
+            CREATE TABLE IF NOT EXISTS bot_state(
+              user_id INTEGER NOT NULL,
+              bot_id INTEGER NOT NULL,
+              state_json TEXT,
+              PRIMARY KEY(user_id, bot_id)
+            )""")
+        else:
+            raise
 
 init_db()
 
@@ -359,12 +441,12 @@ def api_chat() -> Response:
 @app.route("/api/lead", methods=["POST"])
 def api_lead() -> Response:
     # Le widget enverra user_id & bot_id en data-* (ou token) ; ici on accepte simple JSON/form.
-    user_id = request.form.get("user_id") or request.json.get("user_id")  # type: ignore
-    bot_id  = request.form.get("bot_id")  or request.json.get("bot_id")   # type: ignore
-    name    = request.form.get("name")    or request.json.get("name")     # type: ignore
-    email   = request.form.get("email")   or request.json.get("email")    # type: ignore
-    message = request.form.get("message") or request.json.get("message")  # type: ignore
-    extra   = request.form.get("extra_json") or request.json.get("extra_json")  # type: ignore
+    user_id = request.form.get("user_id") or (request.json or {}).get("user_id")  # type: ignore
+    bot_id  = request.form.get("bot_id")  or (request.json or {}).get("bot_id")   # type: ignore
+    name    = request.form.get("name")    or (request.json or {}).get("name")     # type: ignore
+    email   = request.form.get("email")   or (request.json or {}).get("email")    # type: ignore
+    message = request.form.get("message") or (request.json or {}).get("message")  # type: ignore
+    extra   = request.form.get("extra_json") or (request.json or {}).get("extra_json")  # type: ignore
 
     if not (user_id and bot_id and email):
         return jsonify({"error": "missing_params"}), 400
@@ -475,6 +557,8 @@ def _404(e):
 
 @app.errorhandler(500)
 def _500(e):
+    # NOTE: Assure-toi que templates/500.html ne contient pas url_for('index')
+    # mais bien url_for('landing'), sinon la 500 replantera.
     return render_template("500.html"), 500
 
 # -----------------------------------------------------------------------------
