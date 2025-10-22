@@ -31,6 +31,8 @@ load_dotenv(BASE_DIR / ".env")
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+# (Optionnel en prod HTTPS)
+# app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=True)
 
 # Base/public URL
 BASE_URL = os.getenv("BASE_URL") or os.getenv("PUBLIC_BASE_URL") or ""
@@ -55,10 +57,8 @@ def _pick_default_db_path() -> Path:
     p = os.getenv("DB_PATH")
     if p:
         return Path(p)
-
     if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
         return Path("/tmp/app.db")
-
     return BASE_DIR / "app.db"
 
 DB_PATH: Path = _pick_default_db_path()
@@ -68,7 +68,6 @@ def _safe_connect(path: Path) -> sqlite3.Connection:
         path.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
         pass
-
     try:
         conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
@@ -162,7 +161,8 @@ app.logger.info(f"DB_PATH in use: {DB_PATH}")
 # Login
 # -----------------------------------------------------------------------------
 login_manager = LoginManager(app)
-login_manager.login_view = "signup"
+# ⬇️ IMPORTANT : ne redirige plus vers /signup, mais vers la landing
+login_manager.login_view = "landing"
 
 class User(UserMixin):
     def __init__(self, row: sqlite3.Row):
@@ -276,31 +276,36 @@ def landing() -> Response:
 
 @app.route("/index", methods=["GET"])
 def index() -> Response:
-    # si tu préfères, tu peux return render_template("landing.html")
     return redirect(url_for("landing"))
 
+# ⬇️ Signup : GET redirige vers landing ; POST crée/connexion → dashboard
 @app.route("/signup", methods=["GET", "POST"])
 def signup() -> Response:
     if request.method == "POST":
         first_name = (request.form.get("first_name") or "").strip()
         last_name  = (request.form.get("last_name") or "").strip()
         email      = (request.form.get("email") or "").strip().lower()
+
         if not email:
             flash("Email requis.", "error")
-            return redirect(url_for("signup"))
+            return redirect(url_for("landing"))
+
         existing = db_one("SELECT * FROM users WHERE email=?", (email,))
         if existing:
             user = User(existing)
-            login_user(user)
-            flash("Bienvenue à nouveau 👋", "success")
+            login_user(user, remember=True)
+            flash("Bienvenue 👋", "success")
             return redirect(url_for("dashboard"))
+
         db_exec("INSERT INTO users(first_name,last_name,email,created_at) VALUES(?,?,?,?)",
                 (first_name, last_name, email, now_iso()))
         row = db_one("SELECT * FROM users WHERE email=?", (email,))
-        login_user(User(row))
+        login_user(User(row), remember=True)
         flash("Inscription réussie.", "success")
         return redirect(url_for("dashboard"))
-    return render_template("signup.html")
+
+    # GET -> on ne montre plus de page d'inscription
+    return redirect(url_for("landing"))
 
 @app.route("/logout")
 def logout() -> Response:
@@ -364,7 +369,7 @@ def test_reset() -> Response:
     flash("Conversation réinitialisée.", "success")
     return redirect(url_for("test_page"))
 
-# ---- API chat (utilisée par le JS de /test pour parler au bot)
+# ---- API chat
 @app.route("/api/chat", methods=["POST"])
 @login_required
 def api_chat() -> Response:
@@ -394,7 +399,7 @@ def api_chat() -> Response:
     bot_state_set(int(current_user.id), bot["id"], state)
     return jsonify({"reply": reply, "history": history[-10:]})
 
-# ---- API lead (utilisé par le widget embarqué sur le site client)
+# ---- API lead (widget embarqué)
 @app.route("/api/lead", methods=["POST"])
 def api_lead() -> Response:
     user_id = request.form.get("user_id") or (request.json or {}).get("user_id")  # type: ignore
@@ -501,7 +506,7 @@ def confirm() -> Response:
     )
 
 # -----------------------------------------------------------------------------
-# Erreurs (une seule série de handlers)
+# Erreurs
 # -----------------------------------------------------------------------------
 @app.errorhandler(404)
 def _404(e):
