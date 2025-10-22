@@ -2,35 +2,23 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Paiement – Abonnement</title>
+  <title>Paiement</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:780px;margin:40px auto;padding:0 16px}
+    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
+    .primary{background:#4F46E5;color:#fff}
+  </style>
 </head>
 <body>
-  <h1>Payer l’abonnement</h1>
-  <button id="pay">Procéder au paiement</button>
-
-  <script>
-    const btn = document.getElementById('pay');
-    btn.onclick = async () => {
-      btn.disabled = true;
-      try {
-        const res = await fetch('/api/pay', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'subscription', quantity: 1 })
-        });
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          alert('Erreur Stripe: ' + (data.error || 'inconnue'));
-          btn.disabled = false;
-        }
-      } catch (e) {
-        alert('Erreur réseau: ' + e);
-        btn.disabled = false;
-      }
-    };
-  </script>
+  <h1>Paiement</h1>
+  {% if not stripe_enabled %}
+    <p>Le paiement est indisponible (configure STRIPE_SECRET_KEY et STRIPE_PRICE_ID).</p>
+  {% else %}
+    <p>Abonnement : <strong>9,99 € / mois</strong></p>
+    <form method="post" action="/pay/stripe">
+      <button class="primary" type="submit">Procéder au paiement</button>
+    </form>
+  {% endif %}
 </body>
 </html>
