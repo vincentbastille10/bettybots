@@ -9,13 +9,11 @@
 
     { "src": "/api/(.*)", "dest": "/api/$1" },
 
-    { "src": "/favicon\\.ico", "dest": "/static/favicon.ico" },
-    { "src": "/favicon\\.png", "dest": "/static/favicon.png" },
-
     { "src": "/dashboard", "dest": "/api/index.py" },
     { "src": "/preview", "dest": "/api/index.py" },
     { "src": "/pay", "dest": "/api/index.py" },
     { "src": "/confirm", "dest": "/api/index.py" },
+    { "src": "/bot", "dest": "/api/index.py" },
 
     { "src": "/", "dest": "/api/index.py" },
     { "src": "/(.*)", "dest": "/api/index.py" }
