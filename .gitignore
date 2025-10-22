@@ -16,3 +16,12 @@ app.db
 .DS_Store
 .venv/
 
+__pycache__/
+*.pyc
+.env
+app.db
+/tmp/
+.vercel/
+.DS_Store
+.venv/
+
