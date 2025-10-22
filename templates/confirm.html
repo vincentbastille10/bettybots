@@ -1,19 +1,31 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
   <title>Confirmation</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:780px;margin:40px auto;padding:0 16px}
+    pre{background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap}
+  </style>
 </head>
 <body>
-  <h1>Abonnement confirmé</h1>
-  {% if amount %}
-    <p>Montant payé : {{ amount }} {{ currency }}</p>
-  {% else %}
-    <p>Merci ! Votre abonnement est actif.</p>
+  <h1>Abonnement confirmé ✅</h1>
+  <p>Formule : <strong>{{ price_label }}</strong>{% if amount %} (Stripe: {{ amount }} {{ currency }}){% endif %}</p>
+
+  {% if bot %}
+    <h2>Votre bot</h2>
+    <ul>
+      <li><strong>Nom :</strong> {{ bot.name }}</li>
+      <li><strong>Métier :</strong> {{ bot.metier }}</li>
+      <li><strong>Persona :</strong> {{ bot.persona }}</li>
+      <li><strong>Couleur :</strong> {{ bot.color_hex }}</li>
+    </ul>
   {% endif %}
-  <p>Le code d’intégration vous sera envoyé par email.</p>
-  <p><a href="{{ url_for('dashboard') }}">Aller au dashboard</a></p>
+
+  <h2>Code à copier sur votre site</h2>
+  <pre>{{ embed_code }}</pre>
+
+  <p><a href="/dashboard">Retour au dashboard</a></p>
 </body>
 </html>
