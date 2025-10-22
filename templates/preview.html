@@ -1,360 +1,144 @@
-from __future__ import annotations
-import os, sqlite3, secrets, json
-from pathlib import Path
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from flask import (
-    Flask, render_template, request, redirect, url_for, flash, jsonify, Response, send_from_directory
-)
-from flask_login import (
-    LoginManager, UserMixin, login_user, logout_user, current_user, login_required
-)
-import stripe
-import yaml
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Aperçu du bot</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{--bg:#0b0b0c;--card:#111214;--line:#23262d;--text:#e7e9ee;--muted:#a7adbb;--primary:{{ (cfg.color_hex if cfg else '#4F46E5') }}}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    .wrap{max-width:980px;margin:40px auto;padding:0 20px}
+    h1{margin:0 0 8px}
+    p.muted{color:var(--muted);margin:0 0 18px}
+    .grid{display:grid;grid-template-columns:1fr 340px;gap:16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+    .chat{display:flex;flex-direction:column;height:560px}
+    .messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
+    .bubble{max-width:80%;padding:10px 12px;border-radius:14px;line-height:1.35;border:1px solid var(--line)}
+    .me{align-self:flex-end;background:#1a1d24}
+    .bot{align-self:flex-start;background:#101216}
+    .input{display:flex;gap:8px;margin-top:10px}
+    .input input{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
+    .input button{padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
+    .avatar{width:72px;height:72px;border-radius:{{ '50%' if (cfg.shape=='circle') else ('12px' if (cfg.shape=='rounded') else '8px') }};border:1px solid var(--line);overflow:hidden;background:#0f1012}
+    .avatar img{width:100%;height:100%;object-fit:cover}
+    .lead{display:flex;flex-direction:column;gap:8px}
+    .lead input, .lead textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
+    .lead button{padding:10px 12px;border-radius:10px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
+    .badge{display:inline-block;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 8px;border-radius:999px;color:var(--muted);font-size:12px}
+    @media (max-width:1000px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  {% set bot_id = bot.get('id') if bot else None %}
+  <div class="wrap">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div class="avatar">{% if cfg.avatar_url %}<img src="{{ cfg.avatar_url }}" alt="avatar">{% endif %}</div>
+      <div>
+        <h1 style="margin:0">{{ cfg.name if cfg else 'Mon Betty Bot' }}</h1>
+        <div class="badge">Pack: {{ cfg.metier or '—' }}</div>
+      </div>
+      <div style="flex:1"></div>
+      <div>
+        {% if not cfg.paid %}
+          <a href="/pay" class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Débloquer l’intégration →</a>
+        {% else %}
+          <span class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Abonnement actif ✅</span>
+        {% endif %}
+      </div>
+    </div>
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Vercel-friendly config (DB dans /tmp en serverless) + Stripe
-# ──────────────────────────────────────────────────────────────────────────────
-BASE_DIR = Path(__file__).resolve().parent
+    <div class="grid">
+      <!-- Chat -->
+      <div class="card">
+        <div class="chat">
+          <div id="messages" class="messages"></div>
+          <div class="input">
+            <input id="msg" placeholder="Écrivez votre message…">
+            <button id="send">Envoyer</button>
+          </div>
+        </div>
+      </div>
 
-def pick_db_path() -> Path:
-    if os.getenv("DB_PATH"):
-        return Path(os.getenv("DB_PATH"))
-    if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
-        return Path("/tmp/bettybots.db")
-    return BASE_DIR / "bettybots.db"
+      <!-- Capture lead (apparait dès que le bot le suggère, ou volontairement) -->
+      <div class="card">
+        <h3 style="margin-top:0">Laissez vos coordonnées</h3>
+        <p class="muted" id="leadHint">Le bot vous les demandera si nécessaire.</p>
+        <div class="lead">
+          <input id="lead_name" placeholder="Votre nom">
+          <input id="lead_email" placeholder="Votre email">
+          <textarea id="lead_msg" placeholder="Votre projet ou votre besoin…"></textarea>
+          <button id="lead_btn">Envoyer mes coordonnées</button>
+          <div id="lead_ok" class="badge" style="display:none;border-color:#24d47c;background:rgba(36,212,124,.15);color:#24d47c">Merci, reçu ✅</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-DB_PATH = pick_db_path()
+  <script>
+    const messages = document.getElementById('messages');
+    const msgInput = document.getElementById('msg');
+    const sendBtn = document.getElementById('send');
+    const leadBtn = document.getElementById('lead_btn');
+    const leadOk  = document.getElementById('lead_ok');
+    const leadHint= document.getElementById('leadHint');
 
-def connect_db() -> sqlite3.Connection:
-    try: DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    except Exception: pass
-    try:
-        c = sqlite3.connect(DB_PATH, check_same_thread=False)
-        c.row_factory = sqlite3.Row
-        return c
-    except sqlite3.OperationalError:
-        tmp = Path("/tmp/bettybots.db")
-        tmp.parent.mkdir(parents=True, exist_ok=True)
-        c = sqlite3.connect(tmp, check_same_thread=False)
-        c.row_factory = sqlite3.Row
-        return c
-
-def db_exec(sql: str, params: tuple = ()) -> None:
-    c = connect_db(); c.execute(sql, params); c.commit(); c.close()
-
-def db_one(sql: str, params: tuple = ()) -> Optional[sqlite3.Row]:
-    c = connect_db(); cur = c.execute(sql, params); r = cur.fetchone(); c.close(); return r
-
-def db_all(sql: str, params: tuple = ()) -> List[sqlite3.Row]:
-    c = connect_db(); cur = c.execute(sql, params); rows = cur.fetchall(); c.close(); return rows
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-app = Flask(__name__, static_folder="static", template_folder="templates")
-app.secret_key = os.getenv("FLASK_SECRET", "dev_key")
-
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
-STRIPE_PRICE_CENTS = int(os.getenv("STRIPE_PRICE_CENTS", "999"))   # 9,99 €
-STRIPE_CURRENCY   = os.getenv("STRIPE_CURRENCY", "eur")
-PUBLIC_BASE_URL   = os.getenv("PUBLIC_BASE_URL") or os.getenv("BASE_URL") or ""
-
-if STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Auth
-# ──────────────────────────────────────────────────────────────────────────────
-login_manager = LoginManager(); login_manager.init_app(app); login_manager.login_view = "root"
-
-class User(UserMixin):
-    def __init__(self, row: sqlite3.Row):
-        self.id   = row["id"]
-        self.email = row["email"]
-        self.is_active_subscription = bool(row["is_active_subscription"])
-
-@login_manager.user_loader
-def load_user(user_id: str):
-    row = db_one("SELECT * FROM users WHERE id=?", (user_id,))
-    return User(row) if row else None
-
-# ──────────────────────────────────────────────────────────────────────────────
-# DB schema
-# ──────────────────────────────────────────────────────────────────────────────
-def init_db():
-    c = connect_db()
-    c.execute("""
-      CREATE TABLE IF NOT EXISTS users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE,
-        is_active_subscription INTEGER DEFAULT 0,
-        created_at TEXT
-      )
-    """)
-    c.execute("""
-      CREATE TABLE IF NOT EXISTS bots(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER UNIQUE,
-        name TEXT,
-        metier TEXT,
-        avatar_url TEXT,
-        color_hex TEXT,
-        shape TEXT,
-        persona TEXT,
-        welcome_text TEXT,
-        created_at TEXT
-      )
-    """)
-    c.execute("""
-      CREATE TABLE IF NOT EXISTS bot_state(
-        user_id INTEGER NOT NULL,
-        bot_id INTEGER NOT NULL,
-        state_json TEXT,
-        PRIMARY KEY(user_id, bot_id)
-      )
-    """)
-    c.execute("""
-      CREATE TABLE IF NOT EXISTS leads(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER, bot_id INTEGER,
-        name TEXT, email TEXT, message TEXT,
-        extra_json TEXT, created_at TEXT
-      )
-    """)
-    c.commit(); c.close()
-
-init_db()
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Utilities (packs, bot state)
-# ──────────────────────────────────────────────────────────────────────────────
-def get_bot(user_id: int) -> Optional[sqlite3.Row]:
-    return db_one("SELECT * FROM bots WHERE user_id=?", (user_id,))
-
-def bot_state_get(user_id: int, bot_id: int) -> dict:
-    row = db_one("SELECT state_json FROM bot_state WHERE user_id=? AND bot_id=?", (user_id, bot_id))
-    if not row or not row["state_json"]: return {"history":[]}
-    try: return json.loads(row["state_json"])
-    except Exception: return {"history":[]}
-
-def bot_state_set(user_id: int, bot_id: int, state: dict) -> None:
-    db_exec("""
-    INSERT INTO bot_state(user_id,bot_id,state_json) VALUES(?,?,?)
-    ON CONFLICT(user_id,bot_id) DO UPDATE SET state_json=excluded.state_json
-    """, (user_id, bot_id, json.dumps(state, ensure_ascii=False)))
-
-def load_pack(metier_key: str) -> dict:
-    if not metier_key: return {}
-    p = BASE_DIR / "templates" / "packs" / f"{metier_key}.yaml"
-    if not p.exists(): return {}
-    with open(p, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-def rule_reply(pack: dict, user_msg: str, history: List[dict], cfg: dict) -> dict:
-    """
-    Très simple moteur de règles :
-    - 1er message => message d’accueil (pack.welcome ou cfg.welcome)
-    - si l’utilisateur parle de prix/budget/ville/email => on pose la question & on active capture lead
-    Retourne dict: {reply:str, ask_lead:bool}
-    """
-    if not history:
-        welcome = pack.get("welcome") or cfg.get("welcome") or "Bonjour, je vous écoute 🙂"
-        return {"reply": welcome, "ask_lead": False}
-
-    t = (user_msg or "").lower()
-    lead_fields = pack.get("lead_fields") or []
-    ask = False
-    if any(k in t for k in ["prix","tarif","budget"]) and "budget" in lead_fields:
-        ask = True; return {"reply":"Quel est votre budget approximatif ?", "ask_lead": True}
-    if any(k in t for k in ["ville","localisation"]) and "ville" in lead_fields:
-        ask = True; return {"reply":"Dans quelle ville cherchez-vous ?", "ask_lead": True}
-    if "email" in t or "contact" in t:
-        ask = True; return {"reply":"Super. Laissez-moi votre nom et email et je vous recontacte très vite.", "ask_lead": True}
-    # réponse par défaut
-    return {"reply":"Merci. Pouvez-vous préciser votre besoin pour que je le qualifie ?", "ask_lead": ask}
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Favicon (éviter 500 inutiles)
-# ──────────────────────────────────────────────────────────────────────────────
-@app.get("/favicon.ico")
-def favicon():
-    fav_dir = BASE_DIR / "static"
-    if (fav_dir / "favicon.ico").exists():
-        return send_from_directory(fav_dir, "favicon.ico")
-    return Response(status=204)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Accueil → auto-invité → Dashboard direct
-# ──────────────────────────────────────────────────────────────────────────────
-@app.get("/")
-def root():
-    if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
-    email = f"guest-{secrets.token_hex(4)}@guest.local"
-    try:
-        db_exec("INSERT INTO users(email,created_at) VALUES(?,?)", (email, now_iso()))
-    except Exception:
-        pass
-    row = db_one("SELECT * FROM users WHERE email=?", (email,))
-    if row:
-        login_user(User(row))
-        app.logger.info(f"Guest user created: {email}")
-    return redirect(url_for("dashboard"))
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Page 1 — Dashboard (config bot)
-# ──────────────────────────────────────────────────────────────────────────────
-@app.route("/dashboard", methods=["GET","POST"])
-@login_required
-def dashboard():
-    metiers = []
-    packs_dir = BASE_DIR / "templates" / "packs"
-    if packs_dir.exists():
-        metiers = [p.stem for p in sorted(packs_dir.glob("*.yaml"))]  # p.ex. ["avocate","agent_immo","medecine"]
-
-    row = get_bot(int(current_user.id)); bot = dict(row) if row else None
-
-    if request.method == "POST":
-        name   = request.form.get("name") or "Mon Betty Bot"
-        metier = request.form.get("metier") or ""
-        avatar = request.form.get("avatar_url") or ""
-        color  = request.form.get("color_hex") or "#4F46E5"
-        shape  = request.form.get("shape") or "square"
-        persona= request.form.get("persona") or "Assistant"
-        welcome= request.form.get("welcome_text") or "Bonjour 👋"
-
-        if bot:
-            db_exec("""UPDATE bots SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=? WHERE user_id=?""",
-                    (name,metier,avatar,color,shape,persona,welcome,current_user.id))
-        else:
-            db_exec("""INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text,created_at)
-                       VALUES(?,?,?,?,?,?,?,?,?)""",
-                    (current_user.id,name,metier,avatar,color,shape,persona,welcome,now_iso()))
-        return redirect(url_for("preview"))
-
-    return render_template("dashboard.html", metiers=metiers, bot=bot)
-
-@app.post("/dashboard/generate")
-@login_required
-def dashboard_generate():
-    return dashboard()
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Page 2 — PREVIEW = chat fonctionnel (pas d’embed code)
-# ──────────────────────────────────────────────────────────────────────────────
-@app.get("/preview")
-@login_required
-def preview():
-    row = get_bot(int(current_user.id))
-    if not row:
-        flash("Configure d’abord votre bot.", "warning")
-        return redirect(url_for("dashboard"))
-    bot = dict(row)
-    cfg = {
-        "name": bot.get("name") or "Mon Betty Bot",
-        "welcome": bot.get("welcome_text") or "Bonjour 👋",
-        "color_hex": bot.get("color_hex") or "#4F46E5",
-        "shape": bot.get("shape") or "square",
-        "avatar_url": bot.get("avatar_url") or "",
-        "metier": bot.get("metier") or "",
-        "paid": bool(getattr(current_user, "is_active_subscription", False)),
+    function addBubble(text, who){
+      const b = document.createElement('div');
+      b.className = 'bubble ' + (who==='me' ? 'me' : 'bot');
+      b.textContent = text;
+      messages.appendChild(b);
+      messages.scrollTop = messages.scrollHeight;
     }
-    return render_template("preview.html", bot=bot, cfg=cfg)
 
-# API chat utilisée par la page preview
-@app.post("/api/chat")
-@login_required
-def api_chat():
-    bot = get_bot(int(current_user.id))
-    if not bot:
-        return jsonify({"error":"bot_not_found"}), 404
+    // premier message = welcome (coté API si history vide)
+    async function send(text){
+      addBubble(text, 'me');
+      msgInput.value = '';
+      const r = await fetch('/api/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({message:text})
+      });
+      const data = await r.json();
+      if (data.reply) addBubble(data.reply, 'bot');
+      if (data.ask_lead){
+        leadHint.textContent = "Le bot a besoin de vos coordonnées pour continuer :";
+      }
+    }
 
-    data = request.get_json(silent=True) or {}
-    user_msg = (data.get("message") or "").strip()
-    if not user_msg:
-        return jsonify({"error":"empty_message"}), 400
+    sendBtn.onclick = ()=>{ const t = msgInput.value.trim(); if(t) send(t); };
+    msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); const t=msgInput.value.trim(); if(t) send(t); } });
 
-    state = bot_state_get(int(current_user.id), bot["id"])
-    history = state.get("history", [])
-    pack = load_pack(bot["metier"] or "") or {}
-    cfg = {"name": bot["name"] or "Mon Betty Bot", "welcome": bot["welcome_text"] or "Bonjour 👋"}
+    leadBtn.onclick = async ()=>{
+      const name = document.getElementById('lead_name').value.trim();
+      const email= document.getElementById('lead_email').value.trim();
+      const msg  = document.getElementById('lead_msg').value.trim();
+      const res = await fetch('/api/lead', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          user_id: {{ current_user.id }},
+          bot_id: {{ bot_id or 'null' }},
+          name: name, email: email, message: msg,
+          extra: { source: 'preview' }
+        })
+      });
+      const d = await res.json();
+      if (d.ok){
+        leadOk.style.display='inline-block';
+        setTimeout(()=> leadOk.style.display='none', 2500);
+      }
+    };
 
-    rr = rule_reply(pack, user_msg, history, cfg)
-    reply, ask_lead = rr["reply"], rr["ask_lead"]
-
-    ts = now_iso()
-    history.append({"role":"user","content":user_msg,"ts":ts})
-    history.append({"role":"bot","content":reply,"ts":ts})
-    history = history[-60:]
-    state["history"] = history
-    bot_state_set(int(current_user.id), bot["id"], state)
-
-    return jsonify({"reply": reply, "ask_lead": ask_lead, "history": history[-12:]})
-
-# Enregistrement de leads (utilisé par preview)
-@app.post("/api/lead")
-def api_lead():
-    payload = request.get_json(silent=True) or {}
-    user_id = payload.get("user_id"); bot_id = payload.get("bot_id")
-    name = payload.get("name",""); email = payload.get("email",""); message = payload.get("message","")
-    extra = json.dumps(payload.get("extra") or {}, ensure_ascii=False)
-    if not (user_id and bot_id and email):
-        return jsonify({"error":"missing_params"}), 400
-    db_exec("""INSERT INTO leads(user_id,bot_id,name,email,message,extra_json,created_at)
-               VALUES(?,?,?,?,?,?,?)""", (int(user_id),int(bot_id),name,email,message,extra,now_iso()))
-    return jsonify({"ok":True})
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Page 3 — Paiement Stripe (Checkout dynamique)
-# ──────────────────────────────────────────────────────────────────────────────
-@app.get("/pay")
-@login_required
-def pay():
-    row = get_bot(int(current_user.id))
-    return render_template("pay.html", bot=(dict(row) if row else None))
-
-@app.post("/pay/stripe")
-@login_required
-def pay_stripe() -> Response:
-    if not STRIPE_SECRET_KEY:
-        flash("Paiement indisponible pour le moment.", "error")
-        return redirect(url_for("pay"))
-
-    row = get_bot(int(current_user.id)); bot = dict(row) if row else {}
-    metier = (bot.get("metier") or "Générique").capitalize()
-    avatar = bot.get("avatar_url") or ""
-    product_name = f"Abonnement mensuel Betty {metier}"
-
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        line_items=[{
-            "price_data": {
-                "currency": STRIPE_CURRENCY,
-                "recurring": {"interval": "month"},
-                "unit_amount": STRIPE_PRICE_CENTS,
-                "product_data": {"name": product_name, "images": [avatar] if avatar else []}
-            },
-            "quantity": 1
-        }],
-        success_url=f"{PUBLIC_BASE_URL}/confirm?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{PUBLIC_BASE_URL}/pay",
-        subscription_data={"metadata":{"user_id":str(current_user.id), "bot_id":str(bot.get("id") or ""), "metier":metier}}
-    )
-    return redirect(session.url, code=303)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Page 4 — Confirmation : on active l’abonnement local (si pas de webhook)
-# ──────────────────────────────────────────────────────────────────────────────
-@app.get("/confirm")
-@login_required
-def confirm():
-    # Active l'abonnement côté app (pratique tant qu’on n’a pas branché le webhook Stripe)
-    db_exec("UPDATE users SET is_active_subscription=1 WHERE id=?", (current_user.id,))
-    return render_template("confirm.html")
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Run local
-# ──────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    app.run(debug=True)
+    // Fire welcome by sending an empty user message? Non, on laisse l’API faire si historique vide:
+    (async ()=>{
+      const r = await fetch('/api/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({message:""})
+      });
+      const data = await r.json();
+      if (data.reply) addBubble(data.reply, 'bot');
+    })();
+  </script>
+</body>
+</html>
