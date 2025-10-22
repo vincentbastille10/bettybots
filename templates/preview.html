@@ -5,52 +5,82 @@
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    :root { --primary:#4F46E5; --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb; }
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;background:var(--bg);color:var(--text);margin:0}
-    .wrap{max-width:900px;margin:40px auto;padding:0 20px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
+    :root{--bg:#0b0b0c;--card:#111214;--line:#23262d;--text:#e7e9ee;--muted:#a7adbb;--primary:#4F46E5}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    .wrap{max-width:980px;margin:40px auto;padding:0 20px}
     h1{margin:0 0 10px}
-    .muted{color:var(--muted)}
-    #out{background:#0f1012;border:1px solid var(--line);border-radius:10px;min-height:160px;padding:12px;white-space:pre-wrap}
-    input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
-    .row{display:grid;grid-template-columns:2fr 1fr;gap:14px}
-    .btn{appearance:none;border:0;background:var(--primary);color:#fff;font-weight:600;padding:12px 16px;border-radius:12px;cursor:pointer}
+    p.muted{color:var(--muted);margin:0 0 18px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+    .grid{display:grid;grid-template-columns:280px 1fr;gap:18px}
+    .avatar{width:100%;aspect-ratio:1/1;border-radius:14px;border:1px solid var(--line);overflow:hidden;background:#0f1012}
+    .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .kv{margin:6px 0}
+    .kv .k{color:var(--muted);font-size:12px}
+    .kv .v{font-weight:600}
+    .btns{display:flex;gap:10px;margin-top:16px}
+    .btn{appearance:none;border:0;border-radius:12px;padding:12px 16px;font-weight:600;cursor:pointer}
+    .btn-primary{background:var(--primary);color:#fff}
+    .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Aperçu du bot : {{ cfg.name }}</h1>
-    {% if warning %}<p class="muted">{{ warning }}</p>{% endif %}
+    <h1>Aperçu de votre bot</h1>
+    <p class="muted">Vérifiez le rendu. Si tout est bon, passez au paiement.</p>
+
+    {% set _name   = bot.get('name','Mon Betty Bot') if bot else 'Mon Betty Bot' %}
+    {% set _metier = bot.get('metier','')           if bot else '' %}
+    {% set _avatar = bot.get('avatar_url','')       if bot else '' %}
+    {% set _color  = bot.get('color_hex','#4F46E5') if bot else '#4F46E5' %}
+    {% set _shape  = bot.get('shape','square')      if bot else 'square' %}
+    {% set _persona= bot.get('persona','Assistant') if bot else 'Assistant' %}
+    {% set _welcome= bot.get('welcome_text','Bonjour 👋') if bot else 'Bonjour 👋' %}
+
     <div class="card">
-      <div class="row">
+      <div class="grid">
         <div>
-          <form onsubmit="event.preventDefault(); sendMsg();">
-            <input id="msg" type="text" placeholder="Votre message…">
-          </form>
-          <div id="out" style="margin-top:12px">{{ cfg.welcome }}</div>
+          <div class="avatar" style="
+            border-radius: {{ '50%' if _shape=='circle' else ('12px' if _shape=='rounded' else '6px') }};
+            border-color: {{ _color }};
+          ">
+            {% if _avatar %}
+              <img src="{{ _avatar }}" alt="Avatar">
+            {% else %}
+              <img src="https://dummyimage.com/800x800/0f1012/e7e9ee&text=Avatar" alt="Avatar">
+            {% endif %}
+          </div>
         </div>
         <div>
-          <form method="post" action="/dashboard/save_and_pay">
-            <button class="btn" type="submit" style="width:100%">Enregistrer → Paiement</button>
-          </form>
-          <form method="post" action="/preview/reset" style="margin-top:8px">
-            <button class="btn" type="submit" style="width:100%;background:#2c2f36">Réinitialiser la conversation</button>
-          </form>
+          <div class="row">
+            <div class="card">
+              <div class="kv"><div class="k">Nom du bot</div><div class="v">{{ _name }}</div></div>
+              <div class="kv"><div class="k">Métier</div><div class="v">{{ _metier or '—' }}</div></div>
+              <div class="kv"><div class="k">Persona</div><div class="v">{{ _persona }}</div></div>
+              <div class="kv"><div class="k">Couleur</div><div class="v"><span style="display:inline-block;width:14px;height:14px;background:{{_color}};border-radius:4px;vertical-align:-2px;margin-right:6px"></span>{{ _color }}</div></div>
+              <div class="kv"><div class="k">Forme</div><div class="v">{{ _shape }}</div></div>
+            </div>
+            <div class="card">
+              <div class="kv"><div class="k">Message d’accueil</div><div class="v">{{ _welcome }}</div></div>
+              <div class="kv"><div class="k">Code d’intégration (exemple)</div></div>
+              <pre style="white-space:pre-wrap;background:#0f1012;border:1px solid var(--line);padding:10px;border-radius:10px;overflow:auto;font-size:12px;"><code>&lt;script src="{{ request.host_url.rstrip('/') }}/static/widget.js"&gt;&lt;/script&gt;
+&lt;div id="betty-widget"
+  data-name="{{ _name|e }}"
+  data-color="{{ _color|e }}"
+  data-avatar="{{ _avatar|e }}"&gt;&lt;/div&gt;</code></pre>
+            </div>
+          </div>
+
+          <div class="btns">
+            <a class="btn btn-ghost" href="/dashboard">← Modifier</a>
+            <a class="btn btn-primary" href="/pay">Procéder au paiement →</a>
+          </div>
         </div>
       </div>
     </div>
+
   </div>
-  <script>
-    async function sendMsg(){
-      const input = document.getElementById('msg');
-      const m = (input.value || '').trim();
-      if(!m) return;
-      const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})});
-      const j = await r.json();
-      const out = document.getElementById('out');
-      out.textContent = (j.reply || JSON.stringify(j,null,2));
-      input.value='';
-    }
-  </script>
 </body>
 </html>
