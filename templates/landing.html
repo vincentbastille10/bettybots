@@ -4,47 +4,77 @@
   <meta charset="utf-8">
   <title>Betty Bots — Votre bot métier en 2 minutes</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <!-- Favicon (ton image hébergée) -->
+  <link rel="icon" type="image/png" href="https://i.postimg.cc/9F0dFbzs/Spectra-Media-logo.png">
+  <link rel="apple-touch-icon" href="https://i.postimg.cc/9F0dFbzs/Spectra-Media-logo.png">
+
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:32px}
-    .wrap{max-width:920px;margin:auto;display:grid;gap:24px;grid-template-columns:1.2fr .8fr}
-    .card{border:1px solid #e5e7eb;border-radius:14px;padding:20px}
+    :root { color-scheme: light dark; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:32px;line-height:1.45}
+    .wrap{max-width:980px;margin:auto;display:grid;gap:24px;grid-template-columns:1.2fr .8fr}
+    .card{border:1px solid #e5e7eb;border-radius:14px;padding:20px;background:#fff}
     h1{font-size:32px;margin:0 0 12px}
-    label{display:block;margin:12px 0 6px}
-    input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:10px}
-    button{margin-top:14px;padding:12px 16px;border:0;background:#4F46E5;color:#fff;border-radius:10px;cursor:pointer;width:100%}
+    p,li{color:#374151}
+    label{display:block;margin:12px 0 6px;font-weight:600}
+    input{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px}
+    button{margin-top:16px;padding:12px 16px;border:0;background:#4F46E5;color:#fff;border-radius:10px;cursor:pointer;width:100%;font-weight:600}
+    button:hover{filter:brightness(0.95)}
     .price{font-size:28px;font-weight:700}
     .muted{color:#6b7280}
     .flash{background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:10px 12px;border-radius:8px;margin-bottom:12px}
+    .help{font-size:12px;color:#6b7280;margin-top:6px}
+    ul{padding-left:18px;margin:12px 0}
     @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+    @media (prefers-color-scheme: dark){
+      body{background:#0b0b0c;color:#e5e7eb}
+      .card{background:#111214;border-color:#27272a}
+      input{background:#0f1011;color:#e5e7eb;border-color:#2a2b2f}
+      .muted{color:#9aa0a6}
+      .flash{background:#3b2e14;border-color:#a16207;color:#fde68a}
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Votre chatbot métier, prêt en 2 minutes</h1>
+      <h1>Votre chatbot métier, prêt en 2&nbsp;minutes</h1>
       <p class="muted">Choisissez votre métier, capturez des leads, branchez un LLM. Essai immédiat.</p>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          {% for c,m in messages %}<div class="flash"><b>{{ c }}</b> — {{ m }}</div>{% endfor %}
+          {% for c,m in messages %}
+            <div class="flash"><b>{{ c }}</b> — {{ m }}</div>
+          {% endfor %}
         {% endif %}
       {% endwith %}
 
-      <form method="post" action="{{ url_for('landing') }}">
-        <label>Prénom (facultatif)</label>
-        <input name="name" placeholder="Prénom">
-        <label>Email</label>
-        <input name="email" type="email" required placeholder="vous@domaine.com">
+      <!-- Le formulaire envoie vers /signup (ton endpoint existant) -->
+      <form method="post" action="{{ url_for('signup') }}" novalidate>
+        <label for="first_name">Prénom (facultatif)</label>
+        <input id="first_name" name="first_name" placeholder="Prénom">
+
+        <label for="last_name">Nom (facultatif)</label>
+        <input id="last_name" name="last_name" placeholder="Nom">
+
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required placeholder="vous@domaine.com" autocomplete="email">
+
+        <label for="email2">Confirmer l’email</label>
+        <input id="email2" name="email_confirm" type="email" required placeholder="vous@domaine.com" autocomplete="email">
+
+        <div class="help">Nous enverrons le snippet d’intégration à cette adresse.</div>
+
         <button type="submit">Commencer</button>
       </form>
 
       <p style="margin-top:10px" class="muted">
-        Déjà inscrit ? <a href="{{ url_for('login') }}">Se connecter</a>
+        Déjà inscrit ? <a href="{{ url_for('signup') }}">Accédez à votre compte</a>
       </p>
     </div>
 
     <div class="card">
-      <div class="price">9,99 € / mois</div>
+      <div class="price">9,99&nbsp;€ / mois</div>
       <p class="muted">Sans engagement • Stripe • Annulable à tout moment</p>
       <ul>
         <li>Qualification automatique de leads</li>
@@ -54,5 +84,18 @@
       </ul>
     </div>
   </div>
+
+  <!-- Petite vérif côté client pour l’email doublé (optionnel, la vraie vérif = côté serveur) -->
+  <script>
+    document.addEventListener('submit', function(e){
+      const f = e.target;
+      const email = f.querySelector('#email')?.value?.trim().toLowerCase();
+      const email2 = f.querySelector('#email2')?.value?.trim().toLowerCase();
+      if (email && email2 && email !== email2) {
+        e.preventDefault();
+        alert("Les adresses email ne correspondent pas.");
+      }
+    });
+  </script>
 </body>
 </html>
