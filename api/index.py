@@ -8,10 +8,8 @@ def _build_environ(request) -> dict:
     """
     Construit l'environnement WSGI à partir de l'objet request fourni par Vercel.
     """
-    # Vercel fournit request.method, request.path, request.headers, request.body, request.query
     qs = getattr(request, "query", "") or ""
     if isinstance(qs, dict):
-        # suivant le runtime, request.query peut déjà être une chaîne
         from urllib.parse import urlencode
         qs = urlencode(qs, doseq=True)
 
@@ -33,7 +31,6 @@ def _build_environ(request) -> dict:
         "wsgi.run_once": True,
     }
 
-    # Transfert des en-têtes HTTP
     for k, v in (getattr(request, "headers", {}) or {}).items():
         key = "HTTP_" + k.upper().replace("-", "_")
         if key in ("HTTP_CONTENT_TYPE", "HTTP_CONTENT_LENGTH"):
@@ -45,15 +42,13 @@ def _build_environ(request) -> dict:
 
 def handler(request):
     """
-    Adaptateur principal pour Vercel : exécute l'application Flask
-    et retourne (body, status, headers).
+    Lance l'app Flask en WSGI et retourne (body, status, headers) pour Vercel.
     """
     status_holder: List[Tuple[int, List[Tuple[str, str]]]] = []
 
     def start_response(status, response_headers, exc_info=None):
         code = int(status.split(" ", 1)[0])
         status_holder.append((code, response_headers))
-        # WSGI "write" callable non utilisé
         return lambda x: None
 
     environ = _build_environ(request)
