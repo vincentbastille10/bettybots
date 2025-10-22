@@ -1,4 +1,3 @@
-cat > pyproject.toml <<'EOF'
 [project]
 name = "bettybots"
 version = "0.1.0"
@@ -16,4 +15,3 @@ dependencies = [
 
 [tool.uv]
 index-url = "https://pypi.org/simple"
-EOF
