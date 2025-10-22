@@ -32,7 +32,7 @@ load_dotenv(BASE_DIR / ".env")
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-# En prod HTTPS, tu peux activer :
+# En prod HTTPS :
 # app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=True)
 
 # URLs
@@ -185,7 +185,6 @@ def ensure_guest_user() -> None:
     """Crée automatiquement un user 'guest' + connexion si personne n'est loggé."""
     if current_user.is_authenticated:
         return
-    # éviter de créer une session pour les webhooks
     if request.path.startswith("/webhook/stripe"):
         return
     guest_email = f"guest-{secrets.token_hex(4)}@guest.local"
@@ -298,17 +297,20 @@ def home() -> Response:
 @app.get("/dashboard")
 @login_required
 def dashboard() -> Response:
-    bot = get_bot(int(current_user.id))
+    # convertit Row -> dict pour éviter les erreurs Jinja
+    row = get_bot(int(current_user.id))
+    bot: Optional[dict] = dict(row) if row else None
+
     packs_dir = BASE_DIR / "templates" / "packs"
     metiers: List[str] = []
     if packs_dir.exists():
         metiers = [p.stem for p in sorted(packs_dir.glob("*.yaml"))]
+
     return render_template("dashboard.html", bot=bot, metiers=metiers)
 
 @app.post("/dashboard/generate")
 @login_required
 def dashboard_generate() -> Response:
-    """Enregistre la config et prépare l'aperçu (charge pack métier). -> Page 2"""
     form = {
         "name": request.form.get("name"),
         "metier": request.form.get("metier"),
@@ -318,14 +320,12 @@ def dashboard_generate() -> Response:
         "welcome_text": request.form.get("welcome_text"),
         "shape": request.form.get("shape"),
     }
-    bot = create_or_update_bot(int(current_user.id), form)
-
-    # Prépare un état vide au besoin
-    state = bot_state_get(int(current_user.id), bot["id"])
+    bot_row = create_or_update_bot(int(current_user.id), form)
+    # init state si besoin
+    state = bot_state_get(int(current_user.id), bot_row["id"])
     if not state.get("history"):
         state["history"] = []
-        bot_state_set(int(current_user.id), bot["id"], state)
-
+        bot_state_set(int(current_user.id), bot_row["id"], state)
     return redirect(url_for("preview"))
 
 # =============================================================================
@@ -334,12 +334,13 @@ def dashboard_generate() -> Response:
 @app.get("/preview")
 @login_required
 def preview() -> Response:
-    bot = get_bot(int(current_user.id))
-    if not bot:
+    row = get_bot(int(current_user.id))
+    if not row:
         flash("Configurez votre bot d’abord.", "warning")
         return redirect(url_for("dashboard"))
+    bot = dict(row)
 
-    def getv(obj, key): return (obj[key] if obj and key in obj.keys() else None)
+    def getv(obj, key): return (obj.get(key) if obj else None)
 
     cfg = {
         "name":       getv(bot, "name") or "Mon Betty Bot",
@@ -358,33 +359,34 @@ def preview() -> Response:
 @app.post("/preview/reset")
 @login_required
 def preview_reset() -> Response:
-    bot = get_bot(int(current_user.id))
-    if bot:
-        bot_state_reset(int(current_user.id), bot["id"])
+    row = get_bot(int(current_user.id))
+    if row:
+        bot_state_reset(int(current_user.id), row["id"])
     return redirect(url_for("preview"))
 
 @app.post("/dashboard/save_and_pay")
 @login_required
 def save_and_pay() -> Response:
-    """Depuis la page 2 - validation -> Page 3 (paiement)"""
     return redirect(url_for("pay"))
 
 # API bot (utilisée par la page preview/test)
 @app.post("/api/chat")
 @login_required
 def api_chat() -> Response:
-    bot = get_bot(int(current_user.id))
-    if not bot:
+    row = get_bot(int(current_user.id))
+    if not row:
         return jsonify({"error": "bot_not_found"}), 404
+    bot_id = row["id"]
+
     data = request.get_json(silent=True) or {}
     user_msg = (data.get("message") or "").strip()
     if not user_msg:
         return jsonify({"error": "empty_message"}), 400
 
-    state = bot_state_get(int(current_user.id), bot["id"])
+    state = bot_state_get(int(current_user.id), bot_id)
     history = state.get("history", [])
-    pack = load_pack(bot["metier"] or "") or {}
-    cfg = {"name": bot["name"] or "Mon Betty Bot", "welcome": bot["welcome_text"] or "Bonjour 👋"}
+    pack = load_pack((row["metier"] or "")) or {}
+    cfg = {"name": (row["name"] or "Mon Betty Bot"), "welcome": (row["welcome_text"] or "Bonjour 👋")}
     reply = rule_reply(pack, user_msg, history, cfg)
 
     now = datetime.now(timezone.utc).isoformat()
@@ -393,7 +395,7 @@ def api_chat() -> Response:
     if len(history) > 60:
         history = history[-60:]
     state["history"] = history
-    bot_state_set(int(current_user.id), bot["id"], state)
+    bot_state_set(int(current_user.id), bot_id, state)
     return jsonify({"reply": reply, "history": history[-10:]})
 
 # =============================================================================
@@ -438,7 +440,6 @@ def webhook_stripe() -> Response:
     if event["type"] in ("checkout.session.completed", "invoice.paid", "customer.subscription.updated"):
         data = event["data"]["object"]
         email = (data.get("customer_details") or {}).get("email") or ""
-        # Activer l’abonnement pour l’utilisateur avec cet email (ou dernier guest)
         user_row = db_one("SELECT * FROM users WHERE email=?", (email.lower(),)) if email else None
         if not user_row and email:
             guest_row = db_one("SELECT * FROM users WHERE is_guest=1 ORDER BY id DESC LIMIT 1")
@@ -477,7 +478,9 @@ def confirm() -> Response:
         except Exception:
             pass
 
-    bot = get_bot(int(current_user.id))
+    row = get_bot(int(current_user.id))
+    bot = dict(row) if row else None
+
     embed_code = ""
     if bot:
         embed_code = (
@@ -499,9 +502,10 @@ def confirm() -> Response:
 def public_bot_iframe() -> Response:
     user_id = int(request.args.get("user_id", "0"))
     bot_id = int(request.args.get("bot_id", "0"))
-    bot = db_one("SELECT * FROM bots WHERE id=? AND user_id=?", (bot_id, user_id))
-    if not bot:
+    row = db_one("SELECT * FROM bots WHERE id=? AND user_id=?", (bot_id, user_id))
+    if not row:
         return "<p>Bot introuvable</p>"
+    bot = dict(row)
     return render_template("bot.html", bot=bot)
 
 # =============================================================================
