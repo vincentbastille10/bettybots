@@ -2,50 +2,71 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Aperçu du bot</title>
+  <title>Configurer mon bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:780px;margin:40px auto;padding:0 16px}
-    #out{background:#f6f6f6;padding:12px;border-radius:8px;min-height:140px;white-space:pre-wrap}
+    label{display:block;margin:12px 0 6px} input,select,textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}
     button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
     .primary{background:#4F46E5;color:#fff}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .card{border:1px solid #eee;border-radius:12px;padding:16px}
   </style>
 </head>
 <body>
-  <h1>Aperçu du bot : {{ cfg.name }}</h1>
-  {% if warning %}<p><em>{{ warning }}</em></p>{% endif %}
+  <h1>Configurer mon Betty Bot</h1>
 
-  <div>
-    <strong>Message d’accueil :</strong> {{ cfg.welcome }}
-  </div>
+  <form method="post" action="/dashboard/generate" class="card">
+    <label>Nom du bot</label>
+    <input name="name" placeholder="Mon Betty Bot" value="{{ (bot['name'] if bot else '') or '' }}" />
 
-  <form onsubmit="event.preventDefault(); sendMsg();">
-    <input id="msg" placeholder="Votre message..." style="width:70%">
-    <button type="submit">Envoyer</button>
+    <div class="row">
+      <div>
+        <label>Métier</label>
+        <select name="metier" required>
+          {% if metiers and metiers|length %}
+            {% set msel = (bot['metier'] if bot else '') %}
+            {% for m in metiers %}
+              <option value="{{ m }}" {% if m==msel %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          {% else %}
+            <option value="">-- aucun pack trouvé --</option>
+          {% endif %}
+        </select>
+        <small>Place tes packs dans <code>templates/packs/*.yaml</code></small>
+      </div>
+
+      <div>
+        <label>Couleur (hex)</label>
+        <input name="color_hex" placeholder="#4F46E5" value="{{ (bot['color_hex'] if bot else '') or '#4F46E5' }}" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Avatar (URL)</label>
+        <input name="avatar_url" placeholder="https://..." value="{{ (bot['avatar_url'] if bot else '') or '' }}" />
+      </div>
+      <div>
+        <label>Forme</label>
+        {% set shp = (bot['shape'] if bot else 'square') or 'square' %}
+        <select name="shape">
+          <option value="square"  {% if shp=='square' %}selected{% endif %}>Carré</option>
+          <option value="rounded" {% if shp=='rounded' %}selected{% endif %}>Arrondi</option>
+          <option value="circle"  {% if shp=='circle' %}selected{% endif %}>Cercle</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Persona</label>
+    <input name="persona" placeholder="Assistant" value="{{ (bot['persona'] if bot else '') or 'Assistant' }}" />
+
+    <label>Message d’accueil</label>
+    <textarea name="welcome_text" rows="3" placeholder="Bonjour 👋">{{ (bot['welcome_text'] if bot else '') or 'Bonjour 👋' }}</textarea>
+
+    <div style="margin-top:16px">
+      <button class="primary" type="submit">Enregistrer / Générer le bot →</button>
+    </div>
   </form>
-  <pre id="out"></pre>
-
-  <form method="post" action="/dashboard/save_and_pay" style="margin-top:20px">
-    <button class="primary" type="submit">Enregistrer → Paiement</button>
-  </form>
-
-  <form method="post" action="/preview/reset" style="margin-top:10px">
-    <button type="submit">Réinitialiser la conversation</button>
-  </form>
-
-  <script>
-    async function sendMsg(){
-      const m = document.getElementById('msg').value.trim();
-      if(!m) return;
-      const r = await fetch('/api/chat',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({message:m})
-      });
-      const j = await r.json();
-      document.getElementById('out').textContent = (j.reply || JSON.stringify(j,null,2));
-      document.getElementById('msg').value = '';
-    }
-  </script>
 </body>
 </html>
