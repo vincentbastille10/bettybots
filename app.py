@@ -49,32 +49,51 @@ if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
 # -----------------------------------------------------------------------------
-# DB helpers (SQLite) — robuste pour Vercel (FS read-only) avec fallback /tmp
+# DB helpers (SQLite) — blindés pour Vercel / FS read-only
 # -----------------------------------------------------------------------------
-def _resolve_db_path() -> Path:
-    # 1) Priorité à la variable d'env explicite
+def _pick_default_db_path() -> Path:
+    # 1) Si l'utilisateur a mis DB_PATH, on l'essaie en priorité
     p = os.getenv("DB_PATH")
     if p:
         return Path(p)
 
-    # 2) Tente d'utiliser app.db dans le repo (dev/local)
-    candidate = BASE_DIR / "app.db"
-    try:
-        candidate.parent.mkdir(parents=True, exist_ok=True)
-        # test d'écriture (append b"")
-        with open(candidate, "ab"):
-            pass
-        return candidate
-    except Exception:
-        # 3) Fallback pour Vercel/FS read-only
+    # 2) Si on est en serverless (Vercel/AWS), pointer par défaut sur /tmp
+    if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
         return Path("/tmp/app.db")
 
-DB_PATH = _resolve_db_path()
+    # 3) Local/dev
+    return BASE_DIR / "app.db"
+
+DB_PATH: Path = _pick_default_db_path()
+
+def _safe_connect(path: Path) -> sqlite3.Connection:
+    # S'assure que le dossier existe
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except sqlite3.OperationalError:
+        # Dernier secours : bascule automatique sur /tmp/app.db
+        fallback = Path("/tmp/app.db")
+        if path != fallback:
+            try:
+                fallback.parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            conn = sqlite3.connect(fallback)
+            conn.row_factory = sqlite3.Row
+            # Mémorise le nouveau chemin pour les prochains appels
+            globals()["DB_PATH"] = fallback
+            return conn
+        raise  # Si même /tmp échoue, on remonte l'erreur
 
 def _db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _safe_connect(DB_PATH)
 
 def db_exec(sql: str, params: Tuple[Any, ...] = ()) -> None:
     with _db() as c:
@@ -91,118 +110,55 @@ def db_one(sql: str, params: Tuple[Any, ...] = ()) -> Optional[sqlite3.Row]:
     return rows[0] if rows else None
 
 def init_db() -> None:
-    """
-    Initialise le schéma, avec fallback automatique sur /tmp en cas de FS read-only.
-    """
-    try:
-        db_exec("""
-        CREATE TABLE IF NOT EXISTS users(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          first_name TEXT, last_name TEXT,
-          email TEXT UNIQUE NOT NULL,
-          is_active_subscription INTEGER DEFAULT 0,
-          created_at TEXT NOT NULL
-        )""")
-        db_exec("""
-        CREATE TABLE IF NOT EXISTS bots(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER UNIQUE NOT NULL,
-          name TEXT, metier TEXT,
-          avatar_url TEXT, color_hex TEXT,
-          persona TEXT, welcome_text TEXT,
-          shape TEXT,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY(user_id) REFERENCES users(id)
-        )""")
-        db_exec("""
-        CREATE TABLE IF NOT EXISTS leads(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          bot_id INTEGER NOT NULL,
-          name TEXT, email TEXT, message TEXT,
-          extra_json TEXT,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY(user_id) REFERENCES users(id),
-          FOREIGN KEY(bot_id) REFERENCES bots(id)
-        )""")
-        db_exec("""
-        CREATE TABLE IF NOT EXISTS subscriptions(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          provider TEXT CHECK(provider='stripe') NOT NULL,
-          external_id TEXT, status TEXT,
-          current_period_end TEXT,
-          amount_cents INTEGER, currency TEXT,
-          created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-          FOREIGN KEY(user_id) REFERENCES users(id)
-        )""")
-        db_exec("""
-        CREATE TABLE IF NOT EXISTS bot_state(
-          user_id INTEGER NOT NULL,
-          bot_id INTEGER NOT NULL,
-          state_json TEXT,
-          PRIMARY KEY(user_id, bot_id)
-        )""")
-    except sqlite3.OperationalError as e:
-        # Gestion explicite d'un FS en lecture seule (Vercel)
-        msg = str(e).lower()
-        if "read-only" in msg or "readonly" in msg or "unable to open database file" in msg:
-            # Bascule sur /tmp et réessaie une fois
-            global DB_PATH
-            DB_PATH = Path("/tmp/app.db")
-            with _db() as _:
-                pass
-            # Rejoue l'init
-            db_exec("""
-            CREATE TABLE IF NOT EXISTS users(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              first_name TEXT, last_name TEXT,
-              email TEXT UNIQUE NOT NULL,
-              is_active_subscription INTEGER DEFAULT 0,
-              created_at TEXT NOT NULL
-            )""")
-            db_exec("""
-            CREATE TABLE IF NOT EXISTS bots(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id INTEGER UNIQUE NOT NULL,
-              name TEXT, metier TEXT,
-              avatar_url TEXT, color_hex TEXT,
-              persona TEXT, welcome_text TEXT,
-              shape TEXT,
-              created_at TEXT NOT NULL,
-              FOREIGN KEY(user_id) REFERENCES users(id)
-            )""")
-            db_exec("""
-            CREATE TABLE IF NOT EXISTS leads(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id INTEGER NOT NULL,
-              bot_id INTEGER NOT NULL,
-              name TEXT, email TEXT, message TEXT,
-              extra_json TEXT,
-              created_at TEXT NOT NULL,
-              FOREIGN KEY(user_id) REFERENCES users(id),
-              FOREIGN KEY(bot_id) REFERENCES bots(id)
-            )""")
-            db_exec("""
-            CREATE TABLE IF NOT EXISTS subscriptions(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id INTEGER NOT NULL,
-              provider TEXT CHECK(provider='stripe') NOT NULL,
-              external_id TEXT, status TEXT,
-              current_period_end TEXT,
-              amount_cents INTEGER, currency TEXT,
-              created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-              FOREIGN KEY(user_id) REFERENCES users(id)
-            )""")
-            db_exec("""
-            CREATE TABLE IF NOT EXISTS bot_state(
-              user_id INTEGER NOT NULL,
-              bot_id INTEGER NOT NULL,
-              state_json TEXT,
-              PRIMARY KEY(user_id, bot_id)
-            )""")
-        else:
-            raise
+    # _safe_connect gère déjà le fallback /tmp
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS users(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_name TEXT, last_name TEXT,
+      email TEXT UNIQUE NOT NULL,
+      is_active_subscription INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS bots(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER UNIQUE NOT NULL,
+      name TEXT, metier TEXT,
+      avatar_url TEXT, color_hex TEXT,
+      persona TEXT, welcome_text TEXT,
+      shape TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS leads(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      bot_id INTEGER NOT NULL,
+      name TEXT, email TEXT, message TEXT,
+      extra_json TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id),
+      FOREIGN KEY(bot_id) REFERENCES bots(id)
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS subscriptions(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      provider TEXT CHECK(provider='stripe') NOT NULL,
+      external_id TEXT, status TEXT,
+      current_period_end TEXT,
+      amount_cents INTEGER, currency TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )""")
+    db_exec("""
+    CREATE TABLE IF NOT EXISTS bot_state(
+      user_id INTEGER NOT NULL,
+      bot_id INTEGER NOT NULL,
+      state_json TEXT,
+      PRIMARY KEY(user_id, bot_id)
+    )""")
 
 init_db()
 
