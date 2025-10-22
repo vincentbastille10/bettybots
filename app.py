@@ -32,7 +32,7 @@ load_dotenv(BASE_DIR / ".env")
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-# En prod HTTPS, décommente si besoin :
+# En prod HTTPS, tu peux activer :
 # app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=True)
 
 # URLs
@@ -165,7 +165,7 @@ app.logger.info(f"DB_PATH in use: {DB_PATH}")
 # Auth (auto-guest)
 # =============================================================================
 login_manager = LoginManager(app)
-login_manager.login_view = "dashboard"  # si non loggé, on reste dans le flux dashboard
+login_manager.login_view = "home"  # si non loggé, renvoie vers "/"
 
 class User(UserMixin):
     def __init__(self, row: sqlite3.Row):
@@ -185,10 +185,9 @@ def ensure_guest_user() -> None:
     """Crée automatiquement un user 'guest' + connexion si personne n'est loggé."""
     if current_user.is_authenticated:
         return
-    # ne pas créer de session pour les webhooks Stripe
+    # éviter de créer une session pour les webhooks
     if request.path.startswith("/webhook/stripe"):
         return
-    # guest-xxxx@guest.local (unique)
     guest_email = f"guest-{secrets.token_hex(4)}@guest.local"
     db_exec(
         "INSERT INTO users(first_name,last_name,email,is_guest,created_at) VALUES(?,?,?,?,?)",
@@ -292,11 +291,11 @@ def rule_reply(pack: dict, user_msg: str, history: List[dict], cfg: dict) -> str
 # =============================================================================
 # Routes — Page 1 : DASHBOARD (config du bot)
 # =============================================================================
-@app.route("/", methods=["GET"])
+@app.get("/")
 def home() -> Response:
     return redirect(url_for("dashboard"))
 
-@app.route("/dashboard", methods=["GET"])
+@app.get("/dashboard")
 @login_required
 def dashboard() -> Response:
     bot = get_bot(int(current_user.id))
@@ -306,7 +305,7 @@ def dashboard() -> Response:
         metiers = [p.stem for p in sorted(packs_dir.glob("*.yaml"))]
     return render_template("dashboard.html", bot=bot, metiers=metiers)
 
-@app.route("/dashboard/generate", methods=["POST"])
+@app.post("/dashboard/generate")
 @login_required
 def dashboard_generate() -> Response:
     """Enregistre la config et prépare l'aperçu (charge pack métier). -> Page 2"""
@@ -321,19 +320,18 @@ def dashboard_generate() -> Response:
     }
     bot = create_or_update_bot(int(current_user.id), form)
 
-    # on peut précharger un état initial si besoin
+    # Prépare un état vide au besoin
     state = bot_state_get(int(current_user.id), bot["id"])
     if not state.get("history"):
         state["history"] = []
         bot_state_set(int(current_user.id), bot["id"], state)
 
-    # Direction Page 2 (preview)
     return redirect(url_for("preview"))
 
 # =============================================================================
 # Routes — Page 2 : PREVIEW / TEST
 # =============================================================================
-@app.route("/preview", methods=["GET"])
+@app.get("/preview")
 @login_required
 def preview() -> Response:
     bot = get_bot(int(current_user.id))
@@ -353,10 +351,9 @@ def preview() -> Response:
         "shape":      getv(bot, "shape") or "square",
     }
     warning = None if current_user.is_active_subscription else \
-        "Aperçu de démonstration : l’abonnement activera les conversations réelles."
-    # Utilise templates/test.html si présent, sinon chat.html
-    template_name = "test.html" if (BASE_DIR / "templates" / "test.html").exists() else "chat.html"
-    return render_template(template_name, bot=bot, user=current_user, warning=warning, cfg=cfg)
+        "Aperçu de démonstration (l’abonnement activera les conversations réelles)."
+
+    return render_template("test.html", bot=bot, user=current_user, warning=warning, cfg=cfg)
 
 @app.post("/preview/reset")
 @login_required
@@ -370,7 +367,6 @@ def preview_reset() -> Response:
 @login_required
 def save_and_pay() -> Response:
     """Depuis la page 2 - validation -> Page 3 (paiement)"""
-    # Ici, si tu veux, re-valide la config du bot avant de payer
     return redirect(url_for("pay"))
 
 # API bot (utilisée par la page preview/test)
@@ -419,7 +415,6 @@ def pay_stripe() -> Response:
     success_url = f"{PUBLIC_BASE_URL or BASE_URL}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{PUBLIC_BASE_URL or BASE_URL}/pay"
 
-    # Stripe collectera l'email → on l’utilisera pour “dé-guestifier” l’utilisateur
     session = stripe.checkout.Session.create(
         mode="subscription",
         line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
@@ -443,22 +438,13 @@ def webhook_stripe() -> Response:
     if event["type"] in ("checkout.session.completed", "invoice.paid", "customer.subscription.updated"):
         data = event["data"]["object"]
         email = (data.get("customer_details") or {}).get("email") or ""
-        customer_id = data.get("customer")
-
-        # 1) S’il existe déjà un user avec cet email → activer l’abonnement
-        user_row = None
-        if email:
-            user_row = db_one("SELECT * FROM users WHERE email=?", (email.lower(),))
-
-        # 2) Sinon, récupère le plus récent guest et mets à jour son email
+        # Activer l’abonnement pour l’utilisateur avec cet email (ou dernier guest)
+        user_row = db_one("SELECT * FROM users WHERE email=?", (email.lower(),)) if email else None
         if not user_row and email:
-            guest_row = db_one(
-                "SELECT * FROM users WHERE is_guest=1 ORDER BY id DESC LIMIT 1"
-            )
+            guest_row = db_one("SELECT * FROM users WHERE is_guest=1 ORDER BY id DESC LIMIT 1")
             if guest_row:
                 db_exec("UPDATE users SET email=?, is_guest=0 WHERE id=?", (email.lower(), guest_row["id"]))
                 user_row = db_one("SELECT * FROM users WHERE id=?", (guest_row["id"],))
-
         if user_row:
             db_exec("UPDATE users SET is_active_subscription=1 WHERE id=?", (user_row["id"],))
             amount_cents = (data.get("amount_total") or 0) or (data.get("amount_paid") or 0)
@@ -492,7 +478,6 @@ def confirm() -> Response:
             pass
 
     bot = get_bot(int(current_user.id))
-    # petit code à copier/coller pour intégrer le bot
     embed_code = ""
     if bot:
         embed_code = (
@@ -509,12 +494,9 @@ def confirm() -> Response:
         base_url=(PUBLIC_BASE_URL or BASE_URL),
     )
 
-# =============================================================================
-# (Optionnel) Widget embarqué très simple
-# =============================================================================
+# Widget embarqué simple
 @app.get("/bot")
 def public_bot_iframe() -> Response:
-    """Aperçu minimal pour l'iframe publique (à étoffer)."""
     user_id = int(request.args.get("user_id", "0"))
     bot_id = int(request.args.get("bot_id", "0"))
     bot = db_one("SELECT * FROM bots WHERE id=? AND user_id=?", (bot_id, user_id))
