@@ -32,6 +32,24 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
+# Page d'accueil simple -> rend un template existant
+@app.route("/", methods=["GET"])
+def landing():
+    # Choisis un template qui existe vraiment dans /templates
+    # 'landing.html' ou 'signup.html' – adapte si besoin
+    return render_template("landing.html")
+
+# 404/500 propres + logs
+@app.errorhandler(404)
+def not_found(e):
+    return render_template("404.html"), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    app.logger.exception("Unhandled error on %s", request.path)
+    return render_template("500.html"), 500
+
+
 # Base/public URL (ne change pas les noms)
 BASE_URL = os.getenv("BASE_URL") or os.getenv("PUBLIC_BASE_URL") or ""
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or BASE_URL
