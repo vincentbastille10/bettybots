@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import sqlite3
+import secrets
 from pathlib import Path
 from flask import (
     Flask, render_template, request, redirect,
@@ -19,20 +20,16 @@ import stripe
 BASE_DIR = Path(__file__).resolve().parent
 
 def pick_db_path() -> Path:
-    """Sur Vercel (serverless), on doit écrire dans /tmp. Local: fichier dans le projet."""
-    # Si l’utilisateur a forcé une variable
+    """Sur Vercel (serverless), écrire dans /tmp. Local: fichier dans le projet."""
     if os.getenv("DB_PATH"):
         return Path(os.getenv("DB_PATH"))
-    # Détection Vercel/AWS Lambda -> /tmp
     if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
         return Path("/tmp/payments.db")
-    # Local
     return BASE_DIR / "payments.db"
 
 DB_PATH = pick_db_path()
 
 def connect_db() -> sqlite3.Connection:
-    # Assure que le dossier existe (utile si on a défini DB_PATH ailleurs)
     try:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -42,7 +39,6 @@ def connect_db() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         return conn
     except sqlite3.OperationalError:
-        # Fallback ultime -> /tmp
         tmp = Path("/tmp/payments.db")
         tmp.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(tmp, check_same_thread=False)
@@ -52,11 +48,11 @@ def connect_db() -> sqlite3.Connection:
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", "dev_key")
 
-# Stripe (prix dynamique)
+# Stripe
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PRICE_CENTS = int(os.getenv("STRIPE_PRICE_CENTS", "999"))  # 9,99 €
-STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "eur")
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or os.getenv("BASE_URL") or ""
+STRIPE_CURRENCY   = os.getenv("STRIPE_CURRENCY", "eur")
+PUBLIC_BASE_URL   = os.getenv("PUBLIC_BASE_URL") or os.getenv("BASE_URL") or ""
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
@@ -64,7 +60,7 @@ if STRIPE_SECRET_KEY:
 # Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = "index"
+login_manager.login_view = "root"
 
 # ---------------------------------------------------------------------
 # DB helpers
@@ -100,13 +96,6 @@ def db_one(sql: str, params: tuple = ()) -> sqlite3.Row | None:
     c.close()
     return row
 
-def db_all(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-    c = connect_db()
-    cur = c.execute(sql, params)
-    rows = cur.fetchall()
-    c.close()
-    return rows
-
 def db_exec(sql: str, params: tuple = ()) -> None:
     c = connect_db()
     c.execute(sql, params)
@@ -119,7 +108,7 @@ def get_bot(user_id: int) -> sqlite3.Row | None:
 init_db()
 
 # ---------------------------------------------------------------------
-# Auth simplifiée (email-only)
+# Modèle utilisateur
 # ---------------------------------------------------------------------
 class User(UserMixin):
     def __init__(self, id_: int, email: str):
@@ -134,33 +123,35 @@ def load_user(user_id: str):
     return None
 
 # ---------------------------------------------------------------------
-# Favicon pour éviter du bruit d’erreurs
+# Favicon (évite les 500 si pas d'icône)
 # ---------------------------------------------------------------------
 @app.get("/favicon.ico")
 def favicon() -> Response:
-    # Sert un favicon s'il existe; sinon renvoie 204 pour ne pas planter
     fav_dir = BASE_DIR / "static"
     if (fav_dir / "favicon.ico").exists():
         return send_from_directory(fav_dir, "favicon.ico")
     return Response(status=204)
 
 # ---------------------------------------------------------------------
-# Page d’accueil → formulaire d’email simple
+# Accueil → création INVITÉ + redirection Dashboard
 # ---------------------------------------------------------------------
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        email = (request.form.get("email") or "").strip().lower()
-        if not email:
-            flash("Entrez un email.", "error")
-            return redirect(url_for("index"))
-        row = db_one("SELECT * FROM users WHERE email=?", (email,))
-        if not row:
-            db_exec("INSERT INTO users(email) VALUES(?)", (email,))
-            row = db_one("SELECT * FROM users WHERE email=?", (email,))
-        login_user(User(row["id"], row["email"]))
+@app.get("/")
+def root():
+    # si déjà connecté, direct dashboard
+    if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
-    return render_template("index.html")
+
+    # crée/charge un utilisateur invité
+    email = f"guest-{secrets.token_hex(4)}@guest.local"
+    try:
+        db_exec("INSERT INTO users(email) VALUES(?)", (email,))
+    except Exception:
+        pass
+    row = db_one("SELECT * FROM users WHERE email=?", (email,))
+    if row:
+        login_user(User(row["id"], row["email"]))
+        app.logger.info(f"Guest user created: {email}")
+    return redirect(url_for("dashboard"))
 
 # ---------------------------------------------------------------------
 # Page 1 — Dashboard (config du bot)
@@ -173,30 +164,29 @@ def dashboard():
     bot = dict(row) if row else None
 
     if request.method == "POST":
-        name = request.form.get("name") or "Mon Betty Bot"
-        metier = request.form.get("metier") or ""
-        avatar_url = request.form.get("avatar_url") or ""
-        color_hex = request.form.get("color_hex") or "#4F46E5"
-        shape = request.form.get("shape") or "square"
-        persona = request.form.get("persona") or "Assistant"
-        welcome_text = request.form.get("welcome_text") or "Bonjour 👋"
+        name        = request.form.get("name") or "Mon Betty Bot"
+        metier      = request.form.get("metier") or ""
+        avatar_url  = request.form.get("avatar_url") or ""
+        color_hex   = request.form.get("color_hex") or "#4F46E5"
+        shape       = request.form.get("shape") or "square"
+        persona     = request.form.get("persona") or "Assistant"
+        welcome_txt = request.form.get("welcome_text") or "Bonjour 👋"
 
         if bot:
             db_exec("""
                 UPDATE bots SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
                 WHERE user_id=?
-            """, (name, metier, avatar_url, color_hex, shape, persona, welcome_text, current_user.id))
+            """, (name, metier, avatar_url, color_hex, shape, persona, welcome_txt, current_user.id))
         else:
             db_exec("""
                 INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text)
                 VALUES(?,?,?,?,?,?,?,?)
-            """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_text))
+            """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_txt))
 
         return redirect(url_for("preview"))
 
     return render_template("dashboard.html", metiers=metiers, bot=bot)
 
-# alias pour ton bouton "Enregistrer / Générer"
 @app.post("/dashboard/generate")
 @login_required
 def dashboard_generate():
@@ -236,10 +226,10 @@ def pay_stripe() -> Response:
     avatar = bot.get("avatar_url") or ""
     product_name = f"Abonnement mensuel Betty {metier}"
     amount_cents = STRIPE_PRICE_CENTS
-    currency = STRIPE_CURRENCY
+    currency     = STRIPE_CURRENCY
 
     success_url = f"{PUBLIC_BASE_URL}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
-    cancel_url = f"{PUBLIC_BASE_URL}/pay"
+    cancel_url  = f"{PUBLIC_BASE_URL}/pay"
 
     session = stripe.checkout.Session.create(
         mode="subscription",
