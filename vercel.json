@@ -1,12 +1,11 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "api/*.py", "use": "@vercel/python" },
-    { "src": "static/**/*", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/pay", "dest": "/static/pay.html" },
-    { "src": "/", "dest": "/static/index.html" }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/pay", "destination": "/api/index" },
+    { "source": "/success", "destination": "/api/index" },
+    { "source": "/cancel", "destination": "/api/index" },
+    { "source": "/", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/api/index" }
   ]
 }
