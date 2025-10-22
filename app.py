@@ -51,7 +51,7 @@ if STRIPE_SECRET_KEY:
 # -----------------------------------------------------------------------------
 # DB helpers (SQLite)
 # -----------------------------------------------------------------------------
-DB_PATH = BASE_DIR / "app.db"
+DB_PATH = Path(os.getenv("DB_PATH") or ("/tmp/app.db" if os.getenv("VERCEL") else str(BASE_DIR / "app.db")))
 
 def _db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
