@@ -1,9 +1,11 @@
-# api/index.py — Adaptateur Vercel (WSGI -> Serverless)
 import io
 from typing import Tuple, List
 from app import app as flask_app
 
+
 def _build_environ(request) -> dict:
+    """Construit l'environnement WSGI à partir de la requête Vercel."""
+    # Vercel peut fournir request.query en str ou en dict
     qs = request.query or ""
     if isinstance(qs, dict):
         from urllib.parse import urlencode
@@ -27,6 +29,7 @@ def _build_environ(request) -> dict:
         "wsgi.run_once": True,
     }
 
+    # Transfère les headers HTTP -> variables WSGI
     for k, v in (request.headers or {}).items():
         key = "HTTP_" + k.upper().replace("-", "_")
         if key in ("HTTP_CONTENT_TYPE", "HTTP_CONTENT_LENGTH"):
@@ -35,13 +38,17 @@ def _build_environ(request) -> dict:
 
     return environ
 
+
 def handler(request):
+    """
+    Adaptateur Vercel: exécute l'app Flask (WSGI) et renvoie (body, status, headers).
+    """
     status_holder: List[Tuple[int, List[Tuple[str, str]]]] = []
 
     def start_response(status, response_headers, exc_info=None):
         code = int(status.split(" ", 1)[0])
         status_holder.append((code, response_headers))
-        return lambda x: None
+        return lambda x: None  # Flask n'utilise pas 'write' ici
 
     environ = _build_environ(request)
     result_iter = flask_app(environ, start_response)
