@@ -6,3 +6,4 @@ stripe>=13.0
 PyYAML>=6.0
 gunicorn>=21.2
 requests>=2.31
+asgiref
