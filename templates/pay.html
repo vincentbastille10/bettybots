@@ -1,104 +1,36 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Betty — Paiement</title>
-  <style>
-    :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--btn:#2563eb}
-    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
-    body{margin:0;background:var(--bg);color:var(--text)}
-    .wrap{max-width:900px;margin:40px auto;padding:0 16px}
-    h1{margin:0 0 12px;font-size:30px}
-    h3{margin:0 0 10px}
-    .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:22px;margin:18px 0}
-    .kv{display:grid;grid-template-columns:180px 1fr;gap:8px}
-    .kv div{padding:6px 0;border-bottom:1px dashed #1f2937}
-    .note{color:var(--muted);font-size:13px;margin-top:8px}
-    .btn{background:var(--btn);border:none;color:#fff;padding:12px 16px;border-radius:10px;cursor:pointer;font-weight:600}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    @media (max-width:780px){.grid2{grid-template-columns:1fr}}
-  </style>
+  <meta charset="utf-8">
+  <title>Paiement – Abonnement</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
 </head>
 <body>
-<div class="wrap">
-  <h1>Abonnement Betty Bot — Paiement</h1>
+  <h1>Payer l’abonnement</h1>
+  <button id="pay">Procéder au paiement</button>
 
-  <div class="card">
-    <div class="kv">
-      <div>Tenant</div><div>{{ tenant }}</div>
-      <div>Métier</div><div>{{ role }}</div>
-      <div>Couleur</div>
-      <div><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:{{ color }};vertical-align:-2px;margin-right:6px;"></span>{{ color }}</div>
-      <div>Avatar</div><div>{{ "fourni" if avatar else "—" }}</div>
-    </div>
-    <p class="note">Après paiement, vous serez redirigé·e vers la page d’intégration et vous recevrez le code par e-mail.</p>
-  </div>
-
-  <div class="grid2">
-    <div class="card">
-      <h3>Payer par carte (Stripe)</h3>
-      <button id="btnStripe" class="btn">Payer avec Stripe</button>
-      <p id="stripeErr" class="note" style="display:none;color:#fca5a5;"></p>
-    </div>
-
-    <div class="card">
-      <h3>Payer avec PayPal</h3>
-      <div id="paypal-buttons"></div>
-      <p id="ppErr" class="note" style="display:none;color:#fca5a5;"></p>
-    </div>
-  </div>
-
-  <button class="btn" onclick="window.location='/preview?tenant={{ tenant }}'">Retour à la prévisualisation</button>
-</div>
-
-<script>
-  const TENANT={{ tenant|tojson }}, ROLE={{ role|tojson }}, COLOR={{ color|tojson }}, AVATAR={{ avatar|tojson }};
-  const PAYPAL_ENV={{ paypal_env|tojson }}, PAYPAL_CLIENT_ID={{ paypal_client_id|tojson }}, PAYPAL_PLAN_ID={{ paypal_plan_id|tojson }};
-</script>
-
-<script>
-  // Stripe
-  const btnStripe=document.getElementById("btnStripe"), stripeErr=document.getElementById("stripeErr");
-  btnStripe.addEventListener("click", async ()=>{
-    stripeErr.style.display="none"; btnStripe.disabled=true;
-    try{
-      const r=await fetch("/api/stripe/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tenant:TENANT})});
-      const js=await r.json();
-      if(js.url) window.location=js.url;
-      else{ stripeErr.textContent=js.error||"Erreur Stripe."; stripeErr.style.display="block"; btnStripe.disabled=false; }
-    }catch(e){ stripeErr.textContent="Erreur réseau Stripe."; stripeErr.style.display="block"; btnStripe.disabled=false; }
-  });
-</script>
-
-<script>
-  // PayPal SDK
-  (function(){
-    const base=PAYPAL_ENV==="sandbox"?"https://www.sandbox.paypal.com":"https://www.paypal.com";
-    const s=document.createElement("script");
-    s.src=`${base}/sdk/js?client-id=${encodeURIComponent(PAYPAL_CLIENT_ID)}&vault=true&intent=subscription`;
-    s.onload=initPaypal; s.onerror=()=>{const el=document.getElementById("ppErr"); el.textContent="Impossible de charger PayPal."; el.style.display="block";};
-    document.body.appendChild(s);
-  })();
-
-  function initPaypal(){
-    if(!window.paypal){const el=document.getElementById("ppErr"); el.textContent="PayPal SDK introuvable."; el.style.display="block"; return;}
-    paypal.Buttons({
-      style:{layout:"vertical", color:"gold", shape:"pill", label:"subscribe"},
-      createSubscription:(data,actions)=>{
-        if(!PAYPAL_PLAN_ID){const el=document.getElementById("ppErr"); el.textContent="Plan PayPal manquant."; el.style.display="block"; return;}
-        return actions.subscription.create({plan_id:PAYPAL_PLAN_ID});
-      },
-      onApprove: async (data)=>{
-        try{
-          const r=await fetch("/api/paypal/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tenant:TENANT, subscriptionID:data.subscriptionID})});
-          const js=await r.json();
-          if(js.ok) window.location="/bot?tenant="+encodeURIComponent(TENANT)+"&paid=1";
-          else{const el=document.getElementById("ppErr"); el.textContent="Paiement PayPal non validé : "+(js.reason||"inconnu"); el.style.display="block";}
-        }catch(e){const el=document.getElementById("ppErr"); el.textContent="Erreur de vérification PayPal."; el.style.display="block";}
-      },
-      onError:(err)=>{const el=document.getElementById("ppErr"); el.textContent="Erreur PayPal."; el.style.display="block";}
-    }).render("#paypal-buttons");
-  }
-</script>
+  <script>
+    const btn = document.getElementById('pay');
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/pay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'subscription', quantity: 1 })
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          alert('Erreur Stripe: ' + (data.error || 'inconnue'));
+          btn.disabled = false;
+        }
+      } catch (e) {
+        alert('Erreur réseau: ' + e);
+        btn.disabled = false;
+      }
+    };
+  </script>
 </body>
 </html>
