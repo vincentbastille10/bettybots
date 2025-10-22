@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, flash, session as flask_session, Response
+    url_for, flash, Response, send_from_directory
 )
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
@@ -13,46 +13,71 @@ from flask_login import (
 import stripe
 
 # ---------------------------------------------------------------------
-# Configuration générale
+# Configuration
 # ---------------------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "payments.db"
 
-app = Flask(__name__)
+def pick_db_path() -> Path:
+    """Sur Vercel (serverless), on doit écrire dans /tmp. Local: fichier dans le projet."""
+    # Si l’utilisateur a forcé une variable
+    if os.getenv("DB_PATH"):
+        return Path(os.getenv("DB_PATH"))
+    # Détection Vercel/AWS Lambda -> /tmp
+    if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
+        return Path("/tmp/payments.db")
+    # Local
+    return BASE_DIR / "payments.db"
+
+DB_PATH = pick_db_path()
+
+def connect_db() -> sqlite3.Connection:
+    # Assure que le dossier existe (utile si on a défini DB_PATH ailleurs)
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    try:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except sqlite3.OperationalError:
+        # Fallback ultime -> /tmp
+        tmp = Path("/tmp/payments.db")
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(tmp, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", "dev_key")
 
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_PRICE_CENTS = int(os.getenv("STRIPE_PRICE_CENTS", "999"))
+# Stripe (prix dynamique)
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PRICE_CENTS = int(os.getenv("STRIPE_PRICE_CENTS", "999"))  # 9,99 €
 STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "eur")
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://bettybots.vercel.app")
-BASE_URL = "http://127.0.0.1:5000"
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or os.getenv("BASE_URL") or ""
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
+# Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "index"
 
 # ---------------------------------------------------------------------
-# Base de données SQLite
+# DB helpers
 # ---------------------------------------------------------------------
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def get_bot(user_id: int):
-    conn = get_db()
-    cur = conn.execute("SELECT * FROM bots WHERE user_id = ?", (user_id,))
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-def init_db():
-    conn = get_db()
-    conn.execute("""
+def init_db() -> None:
+    c = connect_db()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE
+        )
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS bots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -65,19 +90,36 @@ def init_db():
             welcome_text TEXT
         )
     """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE
-        )
-    """)
-    conn.commit()
-    conn.close()
+    c.commit()
+    c.close()
+
+def db_one(sql: str, params: tuple = ()) -> sqlite3.Row | None:
+    c = connect_db()
+    cur = c.execute(sql, params)
+    row = cur.fetchone()
+    c.close()
+    return row
+
+def db_all(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+    c = connect_db()
+    cur = c.execute(sql, params)
+    rows = cur.fetchall()
+    c.close()
+    return rows
+
+def db_exec(sql: str, params: tuple = ()) -> None:
+    c = connect_db()
+    c.execute(sql, params)
+    c.commit()
+    c.close()
+
+def get_bot(user_id: int) -> sqlite3.Row | None:
+    return db_one("SELECT * FROM bots WHERE user_id=?", (user_id,))
 
 init_db()
 
 # ---------------------------------------------------------------------
-# Authentification simplifiée
+# Auth simplifiée (email-only)
 # ---------------------------------------------------------------------
 class User(UserMixin):
     def __init__(self, id_: int, email: str):
@@ -86,94 +128,100 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    conn = get_db()
-    cur = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    row = cur.fetchone()
-    conn.close()
+    row = db_one("SELECT * FROM users WHERE id=?", (user_id,))
     if row:
         return User(row["id"], row["email"])
     return None
 
+# ---------------------------------------------------------------------
+# Favicon pour éviter du bruit d’erreurs
+# ---------------------------------------------------------------------
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    # Sert un favicon s'il existe; sinon renvoie 204 pour ne pas planter
+    fav_dir = BASE_DIR / "static"
+    if (fav_dir / "favicon.ico").exists():
+        return send_from_directory(fav_dir, "favicon.ico")
+    return Response(status=204)
+
+# ---------------------------------------------------------------------
+# Page d’accueil → formulaire d’email simple
+# ---------------------------------------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        email = request.form.get("email")
-        conn = get_db()
-        cur = conn.execute("SELECT * FROM users WHERE email = ?", (email,))
-        user = cur.fetchone()
-        if not user:
-            conn.execute("INSERT INTO users (email) VALUES (?)", (email,))
-            conn.commit()
-            user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        conn.close()
-        login_user(User(user["id"], user["email"]))
+        email = (request.form.get("email") or "").strip().lower()
+        if not email:
+            flash("Entrez un email.", "error")
+            return redirect(url_for("index"))
+        row = db_one("SELECT * FROM users WHERE email=?", (email,))
+        if not row:
+            db_exec("INSERT INTO users(email) VALUES(?)", (email,))
+            row = db_one("SELECT * FROM users WHERE email=?", (email,))
+        login_user(User(row["id"], row["email"]))
         return redirect(url_for("dashboard"))
     return render_template("index.html")
 
 # ---------------------------------------------------------------------
-# Tableau de bord principal (page 1)
+# Page 1 — Dashboard (config du bot)
 # ---------------------------------------------------------------------
 @app.route("/dashboard", methods=["GET", "POST"])
 @login_required
 def dashboard():
-    conn = get_db()
-    bot = get_bot(current_user.id)
     metiers = ["Avocate", "Agent Immo", "Médecine"]
+    row = get_bot(int(current_user.id))
+    bot = dict(row) if row else None
 
     if request.method == "POST":
-        data = {
-            "name": request.form.get("name"),
-            "metier": request.form.get("metier"),
-            "avatar_url": request.form.get("avatar_url"),
-            "color_hex": request.form.get("color_hex"),
-            "shape": request.form.get("shape"),
-            "persona": request.form.get("persona"),
-            "welcome_text": request.form.get("welcome_text"),
-        }
+        name = request.form.get("name") or "Mon Betty Bot"
+        metier = request.form.get("metier") or ""
+        avatar_url = request.form.get("avatar_url") or ""
+        color_hex = request.form.get("color_hex") or "#4F46E5"
+        shape = request.form.get("shape") or "square"
+        persona = request.form.get("persona") or "Assistant"
+        welcome_text = request.form.get("welcome_text") or "Bonjour 👋"
 
         if bot:
-            conn.execute("""
+            db_exec("""
                 UPDATE bots SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
                 WHERE user_id=?
-            """, (
-                data["name"], data["metier"], data["avatar_url"], data["color_hex"],
-                data["shape"], data["persona"], data["welcome_text"], current_user.id
-            ))
+            """, (name, metier, avatar_url, color_hex, shape, persona, welcome_text, current_user.id))
         else:
-            conn.execute("""
-                INSERT INTO bots (user_id, name, metier, avatar_url, color_hex, shape, persona, welcome_text)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                current_user.id, data["name"], data["metier"], data["avatar_url"],
-                data["color_hex"], data["shape"], data["persona"], data["welcome_text"]
-            ))
-        conn.commit()
-        conn.close()
+            db_exec("""
+                INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text)
+                VALUES(?,?,?,?,?,?,?,?)
+            """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_text))
+
         return redirect(url_for("preview"))
 
-    conn.close()
     return render_template("dashboard.html", metiers=metiers, bot=bot)
 
-# ---------------------------------------------------------------------
-# Page 2 – Preview du bot
-# ---------------------------------------------------------------------
-@app.route("/preview")
+# alias pour ton bouton "Enregistrer / Générer"
+@app.post("/dashboard/generate")
 @login_required
-def preview():
-    bot = get_bot(current_user.id)
-    if not bot:
-        flash("Configure ton bot avant de continuer.")
-        return redirect(url_for("dashboard"))
-    return render_template("preview.html", bot=bot)
+def dashboard_generate():
+    return dashboard()
 
 # ---------------------------------------------------------------------
-# Page 3 – Paiement Stripe
+# Page 2 — Preview
 # ---------------------------------------------------------------------
-@app.route("/pay")
+@app.get("/preview")
+@login_required
+def preview():
+    row = get_bot(int(current_user.id))
+    if not row:
+        flash("Configure d’abord ton bot.", "warning")
+        return redirect(url_for("dashboard"))
+    return render_template("preview.html", bot=dict(row))
+
+# ---------------------------------------------------------------------
+# Page 3 — Paiement Stripe (Checkout dynamique)
+# ---------------------------------------------------------------------
+@app.get("/pay")
 @login_required
 def pay():
-    bot = get_bot(current_user.id)
-    return render_template("pay.html", bot=bot)
+    row = get_bot(int(current_user.id))
+    return render_template("pay.html", bot=(dict(row) if row else None))
 
 @app.post("/pay/stripe")
 @login_required
@@ -182,8 +230,7 @@ def pay_stripe() -> Response:
         flash("Paiement indisponible pour le moment.", "error")
         return redirect(url_for("pay"))
 
-    # Récupération du bot configuré
-    row = get_bot(current_user.id)
+    row = get_bot(int(current_user.id))
     bot = dict(row) if row else {}
     metier = (bot.get("metier") or "Générique").capitalize()
     avatar = bot.get("avatar_url") or ""
@@ -194,7 +241,6 @@ def pay_stripe() -> Response:
     success_url = f"{PUBLIC_BASE_URL}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{PUBLIC_BASE_URL}/pay"
 
-    # ✅ Création de session Stripe dynamique (le nom & avatar changent selon le bot)
     session = stripe.checkout.Session.create(
         mode="subscription",
         line_items=[{
@@ -222,15 +268,15 @@ def pay_stripe() -> Response:
     return redirect(session.url, code=303)
 
 # ---------------------------------------------------------------------
-# Page 4 – Confirmation après paiement
+# Page 4 — Confirmation
 # ---------------------------------------------------------------------
-@app.route("/confirm")
+@app.get("/confirm")
 @login_required
 def confirm():
     return render_template("confirm.html")
 
 # ---------------------------------------------------------------------
-# Lancement
+# Run local
 # ---------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
