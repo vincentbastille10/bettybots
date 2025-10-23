@@ -1,21 +1,24 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "app.py", "use": "@vercel/python" },
     { "src": "static/**/*", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/static/(.*)", "dest": "/static/$1" },
+    { "src": "^/static/(.*)$", "dest": "/static/$1" },
+    { "src": "^/favicon\\.ico$", "dest": "/favicon.ico" },
 
-    { "src": "/api/(.*)", "dest": "/api/$1" },
+    // Toutes les API Flask (dont /api/chat) sont servies par app.py
+    { "src": "^/api/(.*)$", "dest": "/app.py" },
 
-    { "src": "/dashboard", "dest": "/api/index.py" },
-    { "src": "/preview", "dest": "/api/index.py" },
-    { "src": "/pay", "dest": "/api/index.py" },
-    { "src": "/confirm", "dest": "/api/index.py" },
-    { "src": "/bot", "dest": "/api/index.py" },
+    // Pages de l’app
+    { "src": "^/dashboard$", "dest": "/app.py" },
+    { "src": "^/preview$", "dest": "/app.py" },
+    { "src": "^/pay$", "dest": "/app.py" },
+    { "src": "^/confirm$", "dest": "/app.py" },
+    { "src": "^/bot$", "dest": "/app.py" },
 
-    { "src": "/", "dest": "/api/index.py" },
-    { "src": "/(.*)", "dest": "/api/index.py" }
+    // Catch-all
+    { "src": ".*", "dest": "/app.py" }
   ]
 }
