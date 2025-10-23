@@ -255,53 +255,121 @@ def root():
 @login_required
 def dashboard():
     """Configuration du bot - Page 1."""
-    metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue"]
+    metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
     
     try:
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else None
+        
+        # Préparer cfg pour le template (conversion inverse)
+        cfg = None
+        if bot:
+            # Conversion metier → pack_slug
+            metier_to_pack = {
+                "Agent Immo": "agent_immobilier",
+                "Avocate": "avocat",
+                "Médecine": "medecin",
+                "Coiffeur": "coiffeur",
+                "Coach sportif": "coach_sportif"
+            }
+            
+            # Extraction avatar_key depuis avatar_url
+            avatar_url = bot.get("avatar_url", "")
+            avatar_key = 0
+            if "betty_avatar2" in avatar_url:
+                avatar_key = 1
+            elif "betty_avatar3" in avatar_url:
+                avatar_key = 2
+            
+            # Conversion shape → widget_size
+            shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
+            
+            cfg = {
+                "name": bot.get("name", "Mon Betty Bot"),
+                "slug": metier_to_pack.get(bot.get("metier", ""), "agent_immobilier"),
+                "avatar_key": avatar_key,
+                "color_hex": bot.get("color_hex", "#4F46E5"),
+                "persona": bot.get("persona", "neutre"),
+                "widget_size": shape_to_size.get(bot.get("shape", "square"), "m"),
+                "greeting": bot.get("welcome_text", "Bonjour 👋")
+            }
     except (ValueError, TypeError):
         bot = None
+        cfg = None
 
     if request.method == "POST":
-        # Récupération et validation des données
-        name = (request.form.get("name") or "Mon Betty Bot").strip()[:100]
-        metier = (request.form.get("metier") or "").strip()
-        avatar_url = sanitize_url(request.form.get("avatar_url") or "")
+        logger.info(f"📝 POST reçu sur /dashboard pour user {current_user.id}")
+        logger.info(f"Form data: {dict(request.form)}")
+        
+        # Récupération et validation des données (adaptées au template HTML)
+        name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
+        
+        # Conversion pack_slug → metier
+        pack_slug = (request.form.get("pack_slug") or "agent_immobilier").strip()
+        pack_to_metier = {
+            "agent_immobilier": "Agent Immo",
+            "avocat": "Avocate",
+            "medecin": "Médecine",
+            "coiffeur": "Coiffeur",  # Nouveau
+            "coach_sportif": "Coach sportif"  # Nouveau
+        }
+        metier = pack_to_metier.get(pack_slug, "Agent Immo")
+        
+        # Conversion avatar_key (0,1,2) → avatar_url
+        try:
+            avatar_key = int(request.form.get("avatar_key") or 0)
+            avatars = [
+                url_for('static', filename='img/betty_avatar1.png', _external=True),
+                url_for('static', filename='img/betty_avatar2.png', _external=True),
+                url_for('static', filename='img/betty_avatar3.png', _external=True)
+            ]
+            avatar_url = avatars[avatar_key] if 0 <= avatar_key < len(avatars) else avatars[0]
+        except (ValueError, IndexError):
+            avatar_url = ""
+        
         color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
-        shape = (request.form.get("shape") or "square").strip()
-        persona = (request.form.get("persona") or "Assistant").strip()[:500]
-        welcome_txt = (request.form.get("welcome_text") or "Bonjour 👋").strip()[:500]
+        persona = (request.form.get("persona") or "neutre").strip()[:500]
+        
+        # widget_size → shape pour la cohérence
+        widget_size = (request.form.get("widget_size") or "m").strip()
+        shape_map = {"s": "circle", "m": "square", "l": "rounded"}
+        shape = shape_map.get(widget_size, "square")
+        
+        welcome_txt = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
 
-        # Validation du métier
-        if metier not in metiers:
-            metier = ""
+        logger.info(f"✅ Données traitées: name={name}, metier={metier}, pack={pack_slug}")
 
-        # Validation de la forme
-        if shape not in ("square", "circle", "rounded"):
-            shape = "square"
+        # Validation du métier (étendu)
+        valid_metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
+        if metier not in valid_metiers:
+            logger.warning(f"⚠️ Métier invalide: {metier}")
+            metier = "Agent Immo"
 
         try:
             if bot:
+                logger.info(f"🔄 UPDATE bot existant (id={bot['id']})")
                 success = db_exec("""
                     UPDATE bots 
                     SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
                     WHERE user_id=?
                 """, (name, metier, avatar_url, color_hex, shape, persona, welcome_txt, current_user.id))
             else:
+                logger.info(f"➕ INSERT nouveau bot pour user {current_user.id}")
                 success = db_exec("""
                     INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text)
                     VALUES(?,?,?,?,?,?,?,?)
                 """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_txt))
             
             if success:
+                logger.info(f"✅ Sauvegarde réussie, redirection vers preview")
                 flash("✅ Configuration sauvegardée !", "success")
                 return redirect(url_for("preview"))
             else:
+                logger.error(f"❌ db_exec a retourné False")
                 flash("❌ Erreur lors de la sauvegarde", "error")
         
         except Exception as e:
-            logger.error(f"Erreur sauvegarde bot : {e}")
+            logger.error(f"❌ Exception sauvegarde bot : {e}", exc_info=True)
             flash("❌ Erreur inattendue lors de la sauvegarde", "error")
 
     return render_template("dashboard.html", metiers=metiers, bot=bot)
