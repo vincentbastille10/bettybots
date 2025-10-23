@@ -1,0 +1,19 @@
+@app.post("/api/lead")
+def api_lead():
+    data = request.get_json(force=True)
+    name = data.get("name")
+    email = data.get("email")
+    message = data.get("message", "")
+    metier = (data.get("extra", {}) or {}).get("metier", "inconnu")
+
+    # Stocke en DB (ou envoie par email)
+    db_exec(
+        "INSERT INTO leads (name, email, message, metier) VALUES (?, ?, ?, ?)",
+        (name, email, message, metier)
+    )
+
+    # ⚠️ à faire une fois : crée la table si pas déjà présente
+    # CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY, name TEXT, email TEXT, message TEXT, metier TEXT);
+
+    # Ici tu pourrais envoyer un mail à l’adresse du user connecté
+    return jsonify({"status": "saved"})
