@@ -5,7 +5,7 @@
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
-  {# ----- CONFIG SAFE DEFAULTS ----- #}
+  {# ----- CONFIG (safe defaults) ----- #}
   {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
   {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
   {% set metier     = (cfg.metier if (cfg and cfg.metier) else '—') %}
@@ -15,7 +15,7 @@
   {% set bot_id     = (bot.get('id') if bot else None) %}
   {% set persona    = (cfg.persona if (cfg and cfg.persona) else 'neutre') %}
 
-  {# 3 avatars prédéfinis, plus d’URL libre #}
+  {# 3 avatars prédéfinis #}
   {% set avatars = [
       url_for('static', filename='img/betty_avatar1.png'),
       url_for('static', filename='img/betty_avatar2.png'),
@@ -36,7 +36,7 @@
 
     /* Bandeau annonce */
     .promo{
-      background:linear-gradient( to right, rgba(255,255,255,.06), rgba(255,255,255,.02) );
+      background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));
       border-bottom:1px solid var(--line);
       padding:10px 20px; text-align:center; font-size:14px; color:var(--muted);
     }
@@ -103,12 +103,12 @@
         </div>
       </div>
       <div class="btnbar">
-        <a class="btn" href="/dashboard">← Retour à la configuration</a>
-        <a class="btn primary" href="/preview">Enregistrer & tester →</a>
+        <a class="btn" href="/dashboard">← Retour</a>
+        <a class="btn primary" href="/pay">Aller au paiement →</a>
       </div>
     </div>
 
-    <!-- Choix des 4 personnalités -->
+    <!-- Choix des 4 personnalités pour l’essai -->
     <div class="toolbar">
       <div class="seg" id="personaSeg">
         <button data-val="neutre">Neutre</button>
@@ -136,23 +136,20 @@
     const AVATAR   = {{ avatar_key|tojson }};
     const PRIMARY  = {{ primary|tojson }};
     const START_GREETING = "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?";
+    let persona = {{ persona|tojson }};
 
     const messagesEl = document.getElementById('messages');
     const msgInput   = document.getElementById('msg');
     const sendBtn    = document.getElementById('send');
 
-    // Personnalités
+    // Personnalités (toggle UI)
     const personaSeg = document.getElementById('personaSeg');
     const personaButtons = Array.from(personaSeg.querySelectorAll('button'));
-    let persona = {{ persona|tojson }};
     function renderPersona(){
       personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona));
     }
     personaButtons.forEach(b=>{
-      b.addEventListener('click', ()=>{
-        persona = b.dataset.val;
-        renderPersona();
-      });
+      b.addEventListener('click', ()=>{ persona = b.dataset.val; renderPersona(); });
     });
     renderPersona();
 
