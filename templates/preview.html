@@ -4,41 +4,41 @@
   <meta charset="utf-8">
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  {% set primary = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
-  {% set shape = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
+
+  {# ---- Variables d'affichage sûres ---- #}
+  {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
+  {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
   {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '') %}
-  {% set metier = (cfg.metier if (cfg and cfg.metier) else '—') %}
-  {% set bot_name = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
-  {% set paid = (cfg.paid if (cfg and cfg.paid) else False) %}
-  {% set pack_slug = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilierbilier') %}
-  {% set user_id = (current_user.get_id() if current_user.is_authenticated else None) %}
-  {% set bot_id = (bot.get('id') if bot else None) %}
+  {% set metier     = (cfg.metier if (cfg and cfg.metier) else '—') %}
+  {% set bot_name   = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
+  {% set pack_slug  = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilierbilier') %}
+  {% set user_id    = (current_user.get_id() if current_user.is_authenticated else None) %}
+  {% set bot_id     = (bot.get('id') if bot else None) %}
 
   <style>
     :root{
-      --bg:#0b0b0c;
-      --card:#111214;
-      --line:#23262d;
-      --text:#e7e9ee;
-      --muted:#a7adbb;
+      --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb;
       --primary:{{ primary }};
     }
     *{box-sizing:border-box}
-    body{
-      margin:0;
-      background:var(--bg);
-      color:var(--text);
-      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    }
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     .wrap{max-width:980px;margin:40px auto;padding:0 20px}
-    h1{margin:0 0 8px}
-    p.muted{color:var(--muted);margin:0 0 18px}
-    .card{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:14px;
-      padding:16px;
+    .row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+    h1{margin:0}
+    .btnbar{display:flex;gap:8px;margin-left:auto}
+    .btn{
+      display:inline-block;padding:8px 12px;border-radius:999px;border:1px solid var(--line);
+      background:rgba(255,255,255,.08);color:#fff;text-decoration:none;font-size:13px
     }
+    .btn.primary{background:rgba(79,70,229,.2);border-color:var(--primary)}
+    .avatar{
+      width:72px;height:72px;border:1px solid var(--line);overflow:hidden;background:#0f1012;
+      border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
+    }
+    .avatar img{width:100%;height:100%;object-fit:cover}
+    .badge{display:inline-block;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 8px;border-radius:999px;color:var(--muted);font-size:12px}
+
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
     .chat{display:flex;flex-direction:column;height:560px}
     .messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
     .bubble{max-width:80%;padding:10px 12px;border-radius:14px;line-height:1.35;border:1px solid var(--line)}
@@ -50,45 +50,23 @@
       background:#0f1012;color:var(--text)
     }
     .input button{
-      padding:12px 14px;border-radius:12px;border:0;background:var(--primary);
-      color:#fff;font-weight:600;cursor:pointer
+      padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer
     }
-    .avatar{
-      width:72px;height:72px;
-      border-radius:
-        {% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
-      border:1px solid var(--line);
-      overflow:hidden;
-      background:#0f1012
-    }
-    .avatar img{width:100%;height:100%;object-fit:cover}
-    .badge{
-      display:inline-block;
-      background:rgba(255,255,255,.08);
-      border:1px solid var(--line);
-      padding:4px 8px;
-      border-radius:999px;
-      color:var(--muted);
-      font-size:12px
-    }
+    .input button[disabled]{opacity:.6;cursor:not-allowed}
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <div class="row">
       <div class="avatar">{% if avatar_url %}<img src="{{ avatar_url }}" alt="avatar">{% endif %}</div>
       <div>
-        <h1 style="margin:0">{{ bot_name }}</h1>
+        <h1>{{ bot_name }}</h1>
         <div class="badge">Pack : {{ metier }}</div>
       </div>
-      <div style="flex:1"></div>
-      <div>
-        {% if not paid %}
-          <a href="/pay" class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Débloquer l’intégration →</a>
-        {% else %}
-          <span class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Abonnement actif ✅</span>
-        {% endif %}
+      <div class="btnbar">
+        <a class="btn" href="/dashboard">← Retour à la configuration</a>
+        <a class="btn primary" href="/pay">Aller au paiement →</a>
       </div>
     </div>
 
@@ -96,7 +74,7 @@
       <div class="chat">
         <div id="messages" class="messages"></div>
         <div class="input">
-          <input id="msg" placeholder="Écrivez votre message…">
+          <input id="msg" placeholder="Écrivez votre message…" autocomplete="off">
           <button id="send">Envoyer</button>
         </div>
       </div>
@@ -104,58 +82,96 @@
   </div>
 
   <script>
-    const USER_ID = {{ user_id|tojson }};
-    const BOT_ID  = {{ bot_id|tojson }};
-    const PACK    = {{ pack_slug|tojson }};
-    const messages = document.getElementById('messages');
-    const msgInput = document.getElementById('msg');
-    const sendBtn  = document.getElementById('send');
+    // Contexte (sérialisés pour éviter toute erreur)
+    const USER_ID  = {{ user_id|tojson }};
+    const BOT_ID   = {{ bot_id|tojson }};
+    const PACK     = {{ pack_slug|tojson }};
+
+    const messagesEl = document.getElementById('messages');
+    const msgInput   = document.getElementById('msg');
+    const sendBtn    = document.getElementById('send');
 
     function addBubble(text, who){
       const b = document.createElement('div');
-      b.className = 'bubble ' + (who==='me' ? 'me' : 'bot');
+      b.className = 'bubble ' + (who === 'me' ? 'me' : 'bot');
       b.textContent = String(text || '');
-      messages.appendChild(b);
-      messages.scrollTop = messages.scrollHeight;
+      messagesEl.appendChild(b);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function userHistory(){
+      // historique minimal côté client (messages utilisateur uniquement)
+      return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
+    }
+
+    async function callChatAPI(text){
+      const payload = { message: text, pack: PACK, history: userHistory() };
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',              // IMPORTANT: garde la session Flask (login_required)
+        body: JSON.stringify(payload)
+      });
+      // Si Flask renvoie une redirection (non connecté), res.ok peut être true mais le JSON ne matche pas → on tente/attrape
+      let data = {};
+      try { data = await res.json(); } catch (_) { data = {}; }
+      return { ok: res.ok, data };
+    }
+
+    let sending = false;
     async function send(text){
-      addBubble(text, 'me');
+      if (sending) return;
+      const t = (text || '').trim();
+      if (!t) return;
+      sending = true;
+      sendBtn.disabled = true;
+
+      addBubble(t, 'me');
       msgInput.value = '';
-      const history = Array.from(messages.querySelectorAll('.bubble.me')).map(el=>el.textContent);
+
       try{
-        const r = await fetch('/api/chat', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          credentials:'same-origin',  // important pour garder la session
-          body: JSON.stringify({ message:text, pack:PACK, history })
-        });
-        const data = await r.json().catch(()=> ({}));
-        if (data.reply) addBubble(data.reply, 'bot');
-      }catch(e){
-        addBubble("⚠️ Erreur de connexion au serveur", 'bot');
+        const { ok, data } = await callChatAPI(t);
+        if (!ok || !data || (typeof data.reply !== 'string')) {
+          addBubble('⚠️ Erreur serveur.', 'bot');
+        } else {
+          addBubble(data.reply, 'bot');
+        }
+      } catch (e){
+        addBubble('⚠️ Impossible de joindre le serveur.', 'bot');
+      } finally {
+        sending = false;
+        sendBtn.disabled = false;
+        msgInput.focus();
       }
     }
 
-    sendBtn.onclick = ()=>{ const t = msgInput.value.trim(); if(t) send(t); };
-    msgInput.addEventListener('keydown', (e)=>{
-      if(e.key==='Enter'){ e.preventDefault(); const t=msgInput.value.trim(); if(t) send(t); }
+    // UI events
+    sendBtn.addEventListener('click', () => {
+      const text = msgInput.value;
+      send(text);
     });
 
-    // Message de bienvenue automatique
-    (async ()=>{
-      try{
-        const r = await fetch('/api/chat', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          credentials:'same-origin',
-          body: JSON.stringify({ message:\"\", pack:PACK, history:[] })
-        });
-        const data = await r.json().catch(()=> ({}));
-        if (data.reply) addBubble(data.reply, 'bot');
-      }catch(e){
-        addBubble(\"⚠️ Échec de connexion à l’API\", 'bot');
+    msgInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const text = msgInput.value;
+        send(text);
       }
+    });
+
+    // Message d’accueil automatique (history vide -> opening du pack)
+    (async () => {
+      try{
+        const { ok, data } = await callChatAPI('');
+        if (ok && data && typeof data.reply === 'string') {
+          addBubble(data.reply, 'bot');
+        } else {
+          addBubble('Bonjour 👋', 'bot');
+        }
+      } catch {
+        addBubble('Bonjour 👋', 'bot');
+      }
+      msgInput.focus();
     })();
   </script>
 </body>
