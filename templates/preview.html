@@ -4,8 +4,19 @@
   <meta charset="utf-8">
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  {% set primary = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
+  {% set shape = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
+  {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '') %}
+  {% set metier = (cfg.metier if (cfg and cfg.metier) else '—') %}
+  {% set bot_name = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
+  {% set paid = (cfg.paid if (cfg is defined and cfg is not none and cfg.paid is not none) else False) %}
+  {% set user_id = (current_user.get_id() if (current_user.is_authenticated) else None) %}
+  {% set bot_id = (bot.get('id') if (bot) else None) %}
+
   <style>
-    :root{--bg:#0b0b0c;--card:#111214;--line:#23262d;--text:#e7e9ee;--muted:#a7adbb;--primary:{{ (cfg.color_hex if cfg else '#4F46E5') }}}
+    :root{
+      --bg:#0b0b0c;--card:#111214;--line:#23262d;--text:#e7e9ee;--muted:#a7adbb;--primary:{{ primary }};
+    }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     .wrap{max-width:980px;margin:40px auto;padding:0 20px}
@@ -21,7 +32,12 @@
     .input{display:flex;gap:8px;margin-top:10px}
     .input input{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
     .input button{padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
-    .avatar{width:72px;height:72px;border-radius:{{ '50%' if (cfg.shape=='circle') else ('12px' if (cfg.shape=='rounded') else '8px') }};border:1px solid var(--line);overflow:hidden;background:#0f1012}
+    .avatar{
+      width:72px;height:72px;
+      border-radius:
+        {% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
+      border:1px solid var(--line);overflow:hidden;background:#0f1012
+    }
     .avatar img{width:100%;height:100%;object-fit:cover}
     .lead{display:flex;flex-direction:column;gap:8px}
     .lead input, .lead textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
@@ -31,17 +47,16 @@
   </style>
 </head>
 <body>
-  {% set bot_id = bot.get('id') if bot else None %}
   <div class="wrap">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-      <div class="avatar">{% if cfg.avatar_url %}<img src="{{ cfg.avatar_url }}" alt="avatar">{% endif %}</div>
+      <div class="avatar">{% if avatar_url %}<img src="{{ avatar_url }}" alt="avatar">{% endif %}</div>
       <div>
-        <h1 style="margin:0">{{ cfg.name if cfg else 'Mon Betty Bot' }}</h1>
-        <div class="badge">Pack: {{ cfg.metier or '—' }}</div>
+        <h1 style="margin:0">{{ bot_name }}</h1>
+        <div class="badge">Pack: {{ metier }}</div>
       </div>
       <div style="flex:1"></div>
       <div>
-        {% if not cfg.paid %}
+        {% if not paid %}
           <a href="/pay" class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Débloquer l’intégration →</a>
         {% else %}
           <span class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Abonnement actif ✅</span>
@@ -61,7 +76,7 @@
         </div>
       </div>
 
-      <!-- Capture lead (apparait dès que le bot le suggère, ou volontairement) -->
+      <!-- Capture lead -->
       <div class="card">
         <h3 style="margin-top:0">Laissez vos coordonnées</h3>
         <p class="muted" id="leadHint">Le bot vous les demandera si nécessaire.</p>
@@ -77,33 +92,38 @@
   </div>
 
   <script>
+    // Sérialisation sûre (évite les NameError/undefined dans le JS)
+    const USER_ID = {{ user_id|tojson }};
+    const BOT_ID  = {{ bot_id|tojson }};
     const messages = document.getElementById('messages');
     const msgInput = document.getElementById('msg');
-    const sendBtn = document.getElementById('send');
-    const leadBtn = document.getElementById('lead_btn');
-    const leadOk  = document.getElementById('lead_ok');
-    const leadHint= document.getElementById('leadHint');
+    const sendBtn  = document.getElementById('send');
+    const leadBtn  = document.getElementById('lead_btn');
+    const leadOk   = document.getElementById('lead_ok');
+    const leadHint = document.getElementById('leadHint');
 
     function addBubble(text, who){
       const b = document.createElement('div');
       b.className = 'bubble ' + (who==='me' ? 'me' : 'bot');
-      b.textContent = text;
+      b.textContent = String(text || '');
       messages.appendChild(b);
       messages.scrollTop = messages.scrollHeight;
     }
 
-    // premier message = welcome (coté API si history vide)
     async function send(text){
       addBubble(text, 'me');
       msgInput.value = '';
-      const r = await fetch('/api/chat', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({message:text})
-      });
-      const data = await r.json();
-      if (data.reply) addBubble(data.reply, 'bot');
-      if (data.ask_lead){
-        leadHint.textContent = "Le bot a besoin de vos coordonnées pour continuer :";
+      try{
+        const r = await fetch('/api/chat', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ message:text })
+        });
+        const data = await r.json().catch(()=> ({}));
+        if (data.reply) addBubble(data.reply, 'bot');
+        if (data.ask_lead){ leadHint.textContent = "Le bot a besoin de vos coordonnées pour continuer :"; }
+      }catch(e){
+        addBubble("⚠️ Erreur serveur", 'bot');
       }
     }
 
@@ -114,30 +134,40 @@
       const name = document.getElementById('lead_name').value.trim();
       const email= document.getElementById('lead_email').value.trim();
       const msg  = document.getElementById('lead_msg').value.trim();
-      const res = await fetch('/api/lead', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          user_id: {{ current_user.id }},
-          bot_id: {{ bot_id or 'null' }},
-          name: name, email: email, message: msg,
-          extra: { source: 'preview' }
-        })
-      });
-      const d = await res.json();
-      if (d.ok){
-        leadOk.style.display='inline-block';
-        setTimeout(()=> leadOk.style.display='none', 2500);
+      if (!name || !email){ alert('Nom et email requis.'); return; }
+      try{
+        const res = await fetch('/api/lead', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            user_id: USER_ID, bot_id: BOT_ID,
+            name, email, message: msg,
+            extra: { source: 'preview' }
+          })
+        });
+        const d = await res.json().catch(()=> ({}));
+        if (res.ok && (d.ok || d.status==='saved')){
+          leadOk.style.display='inline-block';
+          setTimeout(()=> leadOk.style.display='none', 2500);
+        } else {
+          alert('⚠️ Échec envoi coordonnées');
+        }
+      }catch(e){
+        alert('⚠️ Erreur réseau');
       }
     };
 
-    // Fire welcome by sending an empty user message? Non, on laisse l’API faire si historique vide:
+    // Message d’accueil piloté par l’API si historique vide
     (async ()=>{
-      const r = await fetch('/api/chat', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({message:""})
-      });
-      const data = await r.json();
-      if (data.reply) addBubble(data.reply, 'bot');
+      try{
+        const r = await fetch('/api/chat', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ message:"" })
+        });
+        const data = await r.json().catch(()=> ({}));
+        if (data.reply) addBubble(data.reply, 'bot');
+      }catch(e){
+        addBubble("⚠️ Échec de connexion à l’API", 'bot');
+      }
     })();
   </script>
 </body>
