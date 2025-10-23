@@ -84,7 +84,6 @@
   </div>
 
   <script>
-    // Contexte
     const USER_ID  = {{ user_id|tojson }};
     const BOT_ID   = {{ bot_id|tojson }};
     const PACK     = {{ pack_slug|tojson }};
@@ -110,15 +109,13 @@
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',       // IMPORTANT pour @login_required
+        credentials: 'same-origin',
         body: JSON.stringify(payload)
       });
 
       const ctype = (res.headers.get('content-type')||'').toLowerCase();
       if (!ctype.includes('application/json')) {
-        const snippet = await res.text().catch(()=>'');
-        console.warn('Réponse non-JSON de /api/chat', {status: res.status, snippet});
-        return { ok:false, data:null, status:res.status, html:snippet };
+        return { ok:false, data:null, status:res.status };
       }
       const data = await res.json().catch(()=>null);
       return { ok: res.ok && !!data, data, status: res.status };
@@ -133,27 +130,24 @@
       addBubble(t, 'me'); msgInput.value = '';
 
       try{
-        const { ok, data, status } = await callChatAPI(t);
+        const { ok, data } = await callChatAPI(t);
         if (!ok || !data || typeof data.reply !== 'string') {
           addBubble('⚠️ Erreur serveur.', 'bot', 'warn');
         } else {
           addBubble(data.reply, 'bot');
         }
-      } catch (e){
-        console.error('Erreur fetch /api/chat', e);
+      } catch {
         addBubble('⚠️ Impossible de joindre le serveur.', 'bot', 'warn');
       } finally {
         sending = false; sendBtn.disabled = false; msgInput.focus();
       }
     }
 
-    // UI
     sendBtn.addEventListener('click', ()=> send(msgInput.value));
     msgInput.addEventListener('keydown', (e)=>{
       if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); }
     });
 
-    // Welcome (history vide => opening du pack)
     (async ()=>{
       const { ok, data } = await callChatAPI('');
       if (ok && data && typeof data.reply === 'string') addBubble(data.reply, 'bot');
