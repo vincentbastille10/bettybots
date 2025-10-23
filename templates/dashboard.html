@@ -2,166 +2,87 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Configurer mon Betty Bot</title>
+  <title>Configuration de mon Betty Bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    :root { --primary:#4F46E5; --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb; }
+    :root{--bg:#0b0b0c;--card:#111214;--line:#23262d;--text:#e7e9ee;--muted:#a7adbb;--primary:#4F46E5}
     *{box-sizing:border-box}
-    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);margin:0}
-    .wrap{max-width:980px;margin:40px auto;padding:0 20px}
-    h1{font-size:28px;margin:0 0 8px}
-    p.muted{color:var(--muted);margin:0 0 16px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
-    label{display:block;font-size:14px;color:var(--muted);margin:10px 0 6px}
-    input[type=text], input[type=url], textarea, select{
-      width:100%;background:#0f1012;border:1px solid var(--line);color:var(--text);
-      padding:12px;border-radius:10px;font-size:15px;outline:none
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    .wrap{max-width:900px;margin:40px auto;padding:0 20px}
+    h1{margin:0 0 14px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    label{font-size:13px;color:var(--muted)}
+    input,select,textarea{
+      width:100%;margin-top:6px;margin-bottom:14px;padding:10px;border-radius:10px;
+      border:1px solid var(--line);background:#0f1012;color:var(--text)
     }
-    textarea{min-height:88px;resize:vertical}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-    .btn{appearance:none;border:0;background:var(--primary);color:#fff;font-weight:600;
-      padding:12px 16px;border-radius:12px;cursor:pointer}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
-    .avatar{position:relative;aspect-ratio:1/1;border-radius:12px;border:2px solid var(--line);
-      overflow:hidden;cursor:pointer;background:#0f1012;display:flex;align-items:center;justify-content:center}
-    .avatar img{width:100%;height:100%;object-fit:cover;display:block}
-    .avatar input{position:absolute;inset:0;opacity:0;cursor:pointer}
-    .avatar.active{border-color:var(--primary);box-shadow:0 0 0 2px rgba(79,70,229,.3) inset}
-    .chips{display:flex;gap:8px;flex-wrap:wrap}
-    .chip{border:1px solid var(--line);padding:8px 10px;border-radius:999px;cursor:pointer;color:var(--text)}
-    .chip input{display:none}
-    .chip.active{border-color:var(--primary);background:rgba(79,70,229,.15)}
-    .color-row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center}
-    .hint{font-size:12px;color:var(--muted)}
-    .footer{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+    textarea{min-height:96px}
+    .row{display:flex;gap:10px;align-items:center;margin-top:10px}
+    .btn{padding:12px 14px;border:0;border-radius:12px;cursor:pointer;font-weight:600}
+    .primary{background:var(--primary);color:#fff}
+    .ghost{background:transparent;border:1px solid var(--line);color:#fff}
+    .right{margin-left:auto}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Configurer mon Betty Bot</h1>
-    <p class="muted">Choisis ton métier, ton avatar et ta couleur. Clique sur <strong>Enregistrer / Générer</strong> pour passer au test.</p>
 
-    <form method="post" action="/dashboard/generate">
-      <!-- Métier + Nom -->
-      <div class="card">
-        <div class="row">
-          <div>
-            <label>Métier</label>
-            <select name="metier" id="metierSelect" required>
-              {% set msel = (bot['metier'] if bot else '') %}
-              {% for m in metiers %}
-                <option value="{{m}}" {% if m==msel %}selected{% endif %}>{{m}}</option>
-              {% endfor %}
+    <!-- IMPORTANT : action = /dashboard (PAS /dashboard/generate) -->
+    <form action="/dashboard" method="post" class="card" id="botForm">
+      <div class="grid">
+        <div>
+          <label>Nom du bot
+            <input type="text" name="name" value="{{ (bot.name if bot else '') or 'Betty' }}">
+          </label>
+
+          <label>Métier
+            <select name="metier">
+              {% set m = (bot.metier if bot else '') %}
+              <option value="Avocate" {{ 'selected' if m=='Avocate' else '' }}>Avocate</option>
+              <option value="Agent Immo" {{ 'selected' if m=='Agent Immo' else '' }}>Agent Immo</option>
+              <option value="Médecine" {{ 'selected' if m=='Médecine' else '' }}>Médecine</option>
+              <option value="Comptable" {{ 'selected' if m=='Comptable' else '' }}>Comptable</option>
+              <option value="Psychologue" {{ 'selected' if m=='Psychologue' else '' }}>Psychologue</option>
             </select>
-          </div>
-          <div>
-            <label>Nom du bot</label>
-            <input type="text" name="name" placeholder="Mon Betty Bot" value="{{ (bot['name'] if bot else '') or '' }}">
-          </div>
-        </div>
-      </div>
+          </label>
 
-      <!-- Avatars hébergés sur Postimg -->
-      <div class="card">
-        <label>Avatar</label>
-        {% set current = (bot['avatar_url'] if bot else '') or '' %}
-        <div class="grid" id="avatarGrid">
-          <label class="avatar {% if current == 'https://i.postimg.cc/xThRbfjz/Betty-Agent-immo-copie.jpg' %}active{% endif %}">
-            <img src="https://i.postimg.cc/xThRbfjz/Betty-Agent-immo-copie.jpg" alt="Agent immobilier">
-            <input type="radio" name="avatar_choice" value="https://i.postimg.cc/xThRbfjz/Betty-Agent-immo-copie.jpg" {% if current == 'https://i.postimg.cc/xThRbfjz/Betty-Agent-immo-copie.jpg' %}checked{% endif %}>
+          <label>Avatar (URL)
+            <input type="url" name="avatar_url" value="{{ (bot.avatar_url if bot else '') or '' }}" placeholder="https://…">
           </label>
-          <label class="avatar {% if current == 'https://i.postimg.cc/BQkg1SZ6/Betty-Avocate-copie.jpg' %}active{% endif %}">
-            <img src="https://i.postimg.cc/BQkg1SZ6/Betty-Avocate-copie.jpg" alt="Avocate">
-            <input type="radio" name="avatar_choice" value="https://i.postimg.cc/BQkg1SZ6/Betty-Avocate-copie.jpg" {% if current == 'https://i.postimg.cc/BQkg1SZ6/Betty-Avocate-copie.jpg' %}checked{% endif %}>
-          </label>
-          <label class="avatar {% if current == 'https://i.postimg.cc/yYtPS16S/Betty-Medecine-copie.jpg' %}active{% endif %}">
-            <img src="https://i.postimg.cc/yYtPS16S/Betty-Medecine-copie.jpg" alt="Médecine">
-            <input type="radio" name="avatar_choice" value="https://i.postimg.cc/yYtPS16S/Betty-Medecine-copie.jpg" {% if current == 'https://i.postimg.cc/yYtPS16S/Betty-Medecine-copie.jpg' %}checked{% endif %}>
+
+          <label>Couleur primaire (hex)
+            <input type="text" name="color_hex" value="{{ (bot.color_hex if bot else '') or '#4F46E5' }}">
           </label>
         </div>
 
-        <div style="margin-top:10px">
-          <label>URL avatar (optionnel, si tu veux coller la tienne)</label>
-          <input type="url" id="avatar_url" name="avatar_url" placeholder="https://..." value="{{ current }}">
-          <div class="hint">La sélection dans la grille met automatiquement à jour ce champ.</div>
+        <div>
+          <label>Forme d’avatar
+            {% set shape = (bot.shape if bot else 'rounded') %}
+            <select name="shape">
+              <option value="rounded" {{ 'selected' if shape=='rounded' else '' }}>Arrondi</option>
+              <option value="circle"  {{ 'selected' if shape=='circle'  else '' }}>Cercle</option>
+              <option value="square"  {{ 'selected' if shape=='square'  else '' }}>Carré</option>
+            </select>
+          </label>
+
+          <label>Persona
+            <input type="text" name="persona" value="{{ (bot.persona if bot else '') or 'Assistant' }}">
+          </label>
+
+          <label>Message d’accueil
+            <textarea name="welcome_text">{{ (bot.welcome_text if bot else '') or 'Bonjour 👋' }}</textarea>
+          </label>
         </div>
       </div>
 
-      <!-- Couleur + Forme -->
-      <div class="card">
-        <div class="row">
-          <div>
-            <label>Couleur principale</label>
-            {% set col = (bot['color_hex'] if bot else '') or '#4F46E5' %}
-            <div class="color-row">
-              <input type="color" id="colorPicker" value="{{ col }}">
-              <input type="text" id="colorHex" name="color_hex" value="{{ col }}" placeholder="#4F46E5">
-            </div>
-          </div>
-          <div>
-            <label>Forme de l’avatar</label>
-            {% set shp = (bot['shape'] if bot else 'square') or 'square' %}
-            <div class="chips" id="shapeChips">
-              <label class="chip {% if shp=='square' %}active{% endif %}"><input type="radio" name="shape" value="square"  {% if shp=='square' %}checked{% endif %}>Carré</label>
-              <label class="chip {% if shp=='rounded' %}active{% endif %}"><input type="radio" name="shape" value="rounded" {% if shp=='rounded' %}checked{% endif %}>Arrondi</label>
-              <label class="chip {% if shp=='circle' %}active{% endif %}"><input type="radio" name="shape" value="circle"  {% if shp=='circle' %}checked{% endif %}>Cercle</label>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Persona + Welcome -->
-      <div class="card">
-        <div class="row">
-          <div>
-            <label>Persona</label>
-            <input type="text" name="persona" placeholder="Assistant" value="{{ (bot['persona'] if bot else '') or 'Assistant' }}">
-          </div>
-          <div>
-            <label>Message d’accueil</label>
-            <textarea name="welcome_text" placeholder="Bonjour 👋">{{ (bot['welcome_text'] if bot else '') or 'Bonjour 👋' }}</textarea>
-          </div>
-        </div>
-
-        <div class="footer">
-          <button class="btn" type="submit">Enregistrer / Générer le bot →</button>
-        </div>
+      <div class="row">
+        <a class="btn ghost" href="/preview" title="Voir l’aperçu sans enregistrer">Voir l’aperçu</a>
+        <div class="right"></div>
+        <button type="submit" class="btn primary">Enregistrer &amp; tester</button>
       </div>
     </form>
   </div>
-
-  <script>
-    // Avatar selection -> sync URL field
-    const grid = document.getElementById('avatarGrid');
-    const avatarUrl = document.getElementById('avatar_url');
-    if (grid) {
-      grid.addEventListener('change', (e) => {
-        if (e.target && e.target.name === 'avatar_choice') {
-          avatarUrl.value = e.target.value;
-          grid.querySelectorAll('.avatar').forEach(v => v.classList.remove('active'));
-          e.target.closest('.avatar').classList.add('active');
-        }
-      });
-    }
-
-    // Color sync
-    const colorPicker = document.getElementById('colorPicker');
-    const colorHex = document.getElementById('colorHex');
-    function normHex(v){ v=v.trim(); if(!v.startsWith('#')) v='#'+v; return v.slice(0,7);}
-    if (colorPicker && colorHex){
-      colorPicker.addEventListener('input', ()=>{ colorHex.value = colorPicker.value; });
-      colorHex.addEventListener('input', ()=>{ try{ colorPicker.value = normHex(colorHex.value);}catch{} });
-    }
-
-    // Shape chips styling
-    const shape = document.getElementById('shapeChips');
-    if (shape){
-      shape.addEventListener('change', ()=>{
-        shape.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
-        const sel = shape.querySelector('input:checked');
-        if (sel) sel.closest('.chip').classList.add('active');
-      });
-    }
-  </script>
 </body>
 </html>
