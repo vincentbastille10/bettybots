@@ -13,9 +13,6 @@ from flask_login import (
 )
 import stripe
 import yaml
-import smtplib
-from email.mime.text import MIMEText
-import re
 
 # ---------------------------------------------------------------------
 # Configuration
@@ -24,7 +21,7 @@ import re
 BASE_DIR = Path(__file__).resolve().parent
 
 def pick_db_path() -> Path:
-    """Sur Vercel (serverless), écrire dans /tmp. Local : fichier dans le projet."""
+    """Sur Vercel (serverless), écrire dans /tmp. Local: fichier dans le projet."""
     if os.getenv("DB_PATH"):
         return Path(os.getenv("DB_PATH"))
     if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
@@ -49,14 +46,10 @@ def connect_db() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         return conn
 
-app = Flask(
-    __name__,
-    static_folder="static",
-    template_folder="templates"
-)
+app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", "dev_key")
 
-# Stripe configuration
+# Stripe
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PRICE_CENTS = int(os.getenv("STRIPE_PRICE_CENTS", "999"))  # 9,99 €
 STRIPE_CURRENCY   = os.getenv("STRIPE_CURRENCY", "eur")
@@ -92,19 +85,6 @@ def init_db() -> None:
             shape TEXT,
             persona TEXT,
             welcome_text TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS leads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            bot_id INTEGER,
-            pack_slug TEXT,
-            visitor_name TEXT,
-            visitor_email TEXT,
-            visitor_phone TEXT,
-            visitor_message TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     c.commit()
@@ -154,118 +134,15 @@ def favicon() -> Response:
     return Response(status=204)
 
 # ---------------------------------------------------------------------
-# Packs & Rules
+# Accueil → création INVITÉ + redirection Dashboard
 # ---------------------------------------------------------------------
-
-PACK_DIR = BASE_DIR / "templates" / "packs"
-# Mapping de métier → slug (doit correspondre à tes fichiers YAML)
-METIER_SLUGS = {
-    "Avocate": "avocat_pack",
-    "Agent Immo": "agent_immobilierbilier",
-    "Médecine": "medecine_pack",
-    "Comptable": "comptable_pack",
-    "Psychologue": "psychologue_pack",
-}
-
-def load_pack(slug: str) -> dict | None:
-    """Charge un pack YAML (slug.yaml) et remplit quelques valeurs par défaut."""
-    path = PACK_DIR / f"{slug}.yaml"
-    if not path.exists():
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        data.setdefault("slug", slug)
-        data.setdefault("name", data.get("title") or slug.capitalize())
-        data.setdefault("metier", data.get("metier") or slug)
-        data.setdefault("opening", data.get("opening") or f"Bonjour, je suis Betty {data['name']}.")
-        data.setdefault("color", data.get("color") or "#4F46E5")
-        data.setdefault("avatar_shape", data.get("avatar_shape") or "rounded")
-        # Avatar possible dans /static/avatars/<slug>.ext
-        static_dir = BASE_DIR / "static" / "avatars"
-        for ext in ("png", "jpg", "jpeg", "webp"):
-            fp = static_dir / f"{slug}.{ext}"
-            if fp.exists():
-                data["avatar_url"] = f"/static/avatars/{slug}.{ext}"
-                break
-        return data
-    except Exception:
-        return None
-
-EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
-PHONE_RE = re.compile(r"(\+?\d[\d\s\.\-]{6,})")
-
-def apply_rules(message: str, pack: dict, history: list[str]) -> dict:
-    """Renvoie {reply, ask_lead} selon les règles du YAML + qualification rapide."""
-    msg = (message or "").strip()
-    # Si aucune histoire → message d'ouverture
-    if not history:
-        return {"reply": pack.get("opening", "Bonjour 👋 On fait un essai ?"), "ask_lead": False}
-    lower = msg.lower()
-    email = EMAIL_RE.search(msg)
-    phone = PHONE_RE.search(msg)
-    intents = pack.get("intents") or []
-    # Intents regex
-    for intent in intents:
-        pat = intent.get("match")
-        if not pat:
-            continue
-        try:
-            if re.search(pat, lower):
-                return {
-                    "reply": intent.get("reply") or "Bien noté.",
-                    "ask_lead": bool(intent.get("ask_lead"))
-                }
-        except re.error:
-            if pat in lower:
-                return {
-                    "reply": intent.get("reply") or "Bien noté.",
-                    "ask_lead": bool(intent.get("ask_lead"))
-                }
-    # Qualification
-    qualify = pack.get("qualify") or {}
-    if not any(EMAIL_RE.search(h) for h in history) and not email:
-        return {"reply": qualify.get("ask_email", "Quel est votre email pour le suivi ?"), "ask_lead": True}
-    if not any(PHONE_RE.search(h) for h in history) and not phone:
-        return {"reply": qualify.get("ask_phone", "Souhaitez-vous laisser un numéro pour un rappel ?"), "ask_lead": True}
-    if not any(any(k in h.lower() for k in ["achat","vente","estimation","rdv","devis","consult","urgence"]) for h in history):
-        return {"reply": qualify.get("ask_need", "Pouvez-vous préciser votre besoin (ex: achat, vente, devis, RDV) ?"), "ask_lead": True}
-    return {"reply": pack.get("fallback", "Merci. Je transmets votre demande."), "ask_lead": False}
-
-def send_lead_email(to_email: str, subject: str, html_body: str) -> bool:
-    """Envoie un mail via SMTP. Ne plante pas si SMTP non configuré."""
-    host = os.getenv("SMTP_HOST")
-    port = int(os.getenv("SMTP_PORT", "587"))
-    user = os.getenv("SMTP_USER")
-    pwd  = os.getenv("SMTP_PASS")
-    sender = os.getenv("FROM_EMAIL", user or "no-reply@example.com")
-    if not host or not user or not pwd:
-        app.logger.warning("SMTP non configuré ; envoi d’email désactivé.")
-        return False
-    try:
-        msg = MIMEText(html_body, "html", "utf-8")
-        msg["Subject"] = subject
-        msg["From"] = sender
-        msg["To"] = to_email
-        with smtplib.SMTP(host, port) as s:
-            s.starttls()
-            s.login(user, pwd)
-            s.sendmail(sender, [to_email], msg.as_string())
-        return True
-    except Exception as e:
-        app.logger.error(f"Erreur envoi email: {e}")
-        return False
-
-# ---------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------
-
 @app.get("/")
 def root():
-    # Si déjà connecté → dashboard directement
+    # si déjà connecté, direct dashboard
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
-    # Sinon, créer un invité et le connecter
+
+    # crée/charge un utilisateur invité
     email = f"guest-{secrets.token_hex(4)}@guest.local"
     try:
         db_exec("INSERT INTO users(email) VALUES(?)", (email,))
@@ -277,12 +154,16 @@ def root():
         app.logger.info(f"Guest user created: {email}")
     return redirect(url_for("dashboard"))
 
+# ---------------------------------------------------------------------
+# Page 1 — Dashboard (config du bot)
+# ---------------------------------------------------------------------
 @app.route("/dashboard", methods=["GET", "POST"])
 @login_required
 def dashboard():
     metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue"]
     row = get_bot(int(current_user.id))
     bot = dict(row) if row else None
+
     if request.method == "POST":
         name        = request.form.get("name") or "Mon Betty Bot"
         metier      = request.form.get("metier") or ""
@@ -291,6 +172,7 @@ def dashboard():
         shape       = request.form.get("shape") or "square"
         persona     = request.form.get("persona") or "Assistant"
         welcome_txt = request.form.get("welcome_text") or "Bonjour 👋"
+
         if bot:
             db_exec("""
                 UPDATE bots SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
@@ -301,14 +183,14 @@ def dashboard():
                 INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text)
                 VALUES(?,?,?,?,?,?,?,?)
             """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_txt))
+
         return redirect(url_for("preview"))
+
     return render_template("dashboard.html", metiers=metiers, bot=bot)
 
-@app.post("/dashboard/generate")
-@login_required
-def dashboard_generate():
-    return dashboard()
-
+# ---------------------------------------------------------------------
+# Page 2 — Preview
+# ---------------------------------------------------------------------
 @app.get("/preview")
 @login_required
 def preview():
@@ -316,22 +198,11 @@ def preview():
     if not row:
         flash("Configure d’abord ton bot.", "warning")
         return redirect(url_for("dashboard"))
-    bot = dict(row)
-    metier = bot.get("metier") or ""
-    slug = METIER_SLUGS.get(metier, "agent_immobilierbilier")
-    pack = load_pack(slug) or {}
-    cfg = {
-        "name": bot.get("name") or pack.get("name"),
-        "metier": bot.get("metier") or pack.get("metier"),
-        "avatar_url": bot.get("avatar_url") or pack.get("avatar_url"),
-        "color_hex": bot.get("color_hex") or pack.get("color"),
-        "shape": bot.get("shape") or pack.get("avatar_shape") or "rounded",
-        "paid": False,
-        "slug": slug,
-        "opening": pack.get("opening")
-    }
-    return render_template("preview.html", bot=bot, cfg=cfg)
+    return render_template("preview.html", bot=dict(row), cfg=dict(row))
 
+# ---------------------------------------------------------------------
+# Page 3 — Paiement Stripe (Checkout dynamique)
+# ---------------------------------------------------------------------
 @app.get("/pay")
 @login_required
 def pay():
@@ -344,6 +215,7 @@ def pay_stripe() -> Response:
     if not STRIPE_SECRET_KEY:
         flash("Paiement indisponible pour le moment.", "error")
         return redirect(url_for("pay"))
+
     row = get_bot(int(current_user.id))
     bot = dict(row) if row else {}
     metier = (bot.get("metier") or "Générique").capitalize()
@@ -351,8 +223,10 @@ def pay_stripe() -> Response:
     product_name = f"Abonnement mensuel Betty {metier}"
     amount_cents = STRIPE_PRICE_CENTS
     currency     = STRIPE_CURRENCY
+
     success_url = f"{PUBLIC_BASE_URL}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url  = f"{PUBLIC_BASE_URL}/pay"
+
     session = stripe.checkout.Session.create(
         mode="subscription",
         line_items=[{
@@ -379,76 +253,68 @@ def pay_stripe() -> Response:
     )
     return redirect(session.url, code=303)
 
+# ---------------------------------------------------------------------
+# Page 4 — Confirmation
+# ---------------------------------------------------------------------
 @app.get("/confirm")
 @login_required
 def confirm():
     return render_template("confirm.html")
 
 # ---------------------------------------------------------------------
-# API Endpoints pour la Preview (Chat + Lead)
+# API Chat + Health
 # ---------------------------------------------------------------------
+METIER_SLUGS = {
+    "Avocate": "avocat_pack",
+    "Agent Immo": "agent_immobilierbilier",
+    "Médecine": "medecine_pack",
+    "Comptable": "comptable_pack",
+    "Psychologue": "psychologue_pack",
+}
+
+def load_pack(slug: str) -> dict:
+    path = BASE_DIR / "templates" / "packs" / f"{slug}.yaml"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+def apply_rules(message: str, pack: dict, history: list[str]) -> dict:
+    """Simule une réponse selon le pack YAML."""
+    for rule in pack.get("rules", []):
+        if rule.get("if") and rule["if"].lower() in message.lower():
+            return {"reply": rule.get("then", "Je vous écoute 👂"), "ask_lead": rule.get("ask_lead", False)}
+    return {"reply": pack.get("fallback", "Je n’ai pas bien compris 🤔"), "ask_lead": False}
+
+@app.post("/api/health")
+def api_health():
+    return jsonify({"ok": True})
 
 @app.post("/api/chat")
-@login_required
 def api_chat():
-    """Route de chat preview : renvoie une réponse selon le pack YAML."""
     data = request.get_json(force=True) or {}
     message = data.get("message") or ""
     history = data.get("history") or []
-    slug = data.get("pack")
+    slug = (data.get("pack") or "").strip().lower()
+
     if not slug:
-        row = get_bot(int(current_user.id))
+        row = get_bot(int(current_user.id)) if current_user.is_authenticated else None
         if row:
-            metier = row["metier"]
+            metier = (dict(row).get("metier") or "").strip()
             slug = METIER_SLUGS.get(metier, "agent_immobilierbilier")
         else:
             slug = "agent_immobilierbilier"
+
     pack = load_pack(slug) or {}
+
+    if not history:
+        return jsonify({"reply": pack.get("opening", "Bonjour 👋"), "ask_lead": False})
+
     out = apply_rules(message, pack, history)
     return jsonify(out)
-
-@app.post("/api/lead")
-@login_required
-def api_lead():
-    """Route de capture de leads : enregistre et envoie un mail optionnel."""
-    d = request.get_json(force=True) or {}
-    name  = (d.get("name") or "").strip()
-    email = (d.get("email") or "").strip()
-    phone = (d.get("phone") or "").strip()
-    message = (d.get("message") or "").strip()
-    user_email = (d.get("user_email") or "").strip()
-    if not name or not email:
-        return jsonify({"error": "missing name/email"}), 400
-    row = get_bot(int(current_user.id))
-    slug = None
-    if row:
-        metier = row["metier"]
-        slug = METIER_SLUGS.get(metier)
-    lead_data = {
-        "bot_id": row["id"] if row else None,
-        "user_id": current_user.id,
-        "visitor_name": name,
-        "visitor_email": email,
-        "visitor_phone": phone,
-        "visitor_message": message,
-        "pack_slug": slug,
-    }
-    db_exec(
-        "INSERT INTO leads (user_id, bot_id, pack_slug, visitor_name, visitor_email, visitor_phone, visitor_message) VALUES (?,?,?,?,?,?,?)",
-        (lead_data["user_id"], lead_data["bot_id"], lead_data["pack_slug"], name, email, phone, message)
-    )
-    mailed = False
-    if user_email:
-        subject = f"[Betty] Nouveau lead ({slug or 'bot'})"
-        html = f"""
-        <h2>Nouveau lead — {slug or 'bot'}</h2>
-        <p><b>Nom:</b> {name}<br>
-        <b>Email:</b> {email}<br>
-        <b>Téléphone:</b> {phone or '—'}<br>
-        <b>Message:</b> {message or '—'}</p>
-        """
-        mailed = send_lead_email(user_email, subject, html)
-    return jsonify({"ok": True, "mailed": mailed})
 
 # ---------------------------------------------------------------------
 # Run local
