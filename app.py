@@ -204,10 +204,11 @@ def rate_limit(max_requests: int = 100):
     return decorator
 
 # ---------------------------------------------------------------------
-# Avatars fournis (liens originaux) + mapping slug
+# Avatars fournis (liens originaux Postimg) + mapping slug
 # ---------------------------------------------------------------------
 
 EXTERNAL_AVATARS = {
+    # ⬇️ Liens EXACTS fournis par toi (hébergeur Postimg)
     "agent_immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
     "avocat":     "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
     "medecin":    "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
@@ -224,12 +225,24 @@ METIER_TO_SLUG = {
 }
 
 SLUG_TO_METIER = {v:k for k,v in METIER_TO_SLUG.items()}
-
 DEFAULT_SLUG = "agent_immo"
 
 # ---------------------------------------------------------------------
-# Proxy d'avatars (same-origin)
+# Proxy d'avatars (same-origin) avec User-Agent + fallback SVG
 # ---------------------------------------------------------------------
+
+# petit SVG de secours (2,2 KB)
+_PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+ <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#ddd"/><stop offset="1" stop-color="#bbb"/></linearGradient></defs>
+ <rect width="512" height="512" fill="url(#g)"/>
+ <circle cx="256" cy="196" r="96" fill="#888"/>
+ <rect x="96" y="316" width="320" height="140" rx="28" fill="#888"/>
+</svg>
+"""
+
+# user-agent commun pour éviter les blocages côté hébergeur
+_UA = "Mozilla/5.0 (compatible; BettyBotImageProxy/1.0; +https://bettybots.example)"
 
 @app.get("/avatar/<slug>")
 def avatar_proxy(slug: str):
@@ -238,23 +251,30 @@ def avatar_proxy(slug: str):
 
     try:
         if requests:
-            r = requests.get(url, timeout=10)
-            if r.status_code != 200:
-                logger.warning(f"Avatar fetch non-200 ({r.status_code}) pour {slug}")
-                abort(404)
+            s = requests.Session()
+            headers = {"User-Agent": _UA, "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"}
+            r = s.get(url, headers=headers, timeout=10, allow_redirects=True)
+            if r.status_code != 200 or not r.content:
+                logger.warning(f"Avatar fetch non-200 ({r.status_code}) pour {slug} → placeholder")
+                return _avatar_response(_PLACEHOLDER_SVG, "image/svg+xml")
             data = r.content
-            ctype = r.headers.get("Content-Type", "image/jpeg")
+            ctype = r.headers.get("Content-Type", "image/jpeg") or "image/jpeg"
+            return _avatar_response(data, ctype)
         else:
-            with urllib.request.urlopen(url, timeout=10) as resp:
+            req = urllib.request.Request(url, headers={"User-Agent": _UA})
+            with urllib.request.urlopen(req, timeout=10) as resp:
                 data = resp.read()
-                ctype = resp.headers.get_content_type() if hasattr(resp.headers, "get_content_type") else "image/jpeg"
-        # Cache léger
-        resp = Response(data, mimetype=ctype)
-        resp.headers["Cache-Control"] = "public, max-age=86400"
-        return resp
+                ctype = getattr(getattr(resp, "headers", None), "get_content_type", lambda: "image/jpeg")()
+                return _avatar_response(data, ctype or "image/jpeg")
     except Exception as e:
         logger.error(f"Erreur proxy avatar {slug}: {e}")
-        abort(404)
+        return _avatar_response(_PLACEHOLDER_SVG, "image/svg+xml")
+
+def _avatar_response(data: bytes, ctype: str) -> Response:
+    resp = Response(data, mimetype=ctype)
+    # Cache 24h côté navigateur
+    resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    return resp
 
 # ---------------------------------------------------------------------
 # Favicon
@@ -350,7 +370,7 @@ def dashboard():
     welcome_txt = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
 
     try:
-        existing = bot is not None
+        existing = (bot is not None)
         if existing:
             ok = db_exec("""
                 UPDATE bots 
