@@ -4,21 +4,33 @@
   <meta charset="utf-8">
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  {% set primary = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
-  {% set shape = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
-  {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '') %}
-  {% set metier = (cfg.metier if (cfg and cfg.metier) else '—') %}
-  {% set bot_name = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
-  {% set paid = (cfg.paid if (cfg is defined and cfg is not none and cfg.paid is not none) else False) %}
-  {% set user_id = (current_user.get_id() if (current_user.is_authenticated) else None) %}
-  {% set bot_id = (bot.get('id') if (bot) else None) %}
+
+  {% set primary = (bot.color_hex if bot.color_hex else '#4F46E5') %}
+  {% set shape = (bot.shape if bot.shape else 'rounded') %}
+  {% set avatar_url = (bot.avatar_url if bot.avatar_url else '') %}
+  {% set metier = (bot.metier if bot.metier else '—') %}
+  {% set bot_name = (bot.name if bot.name else 'Mon Betty Bot') %}
+  {% set persona = (bot.persona if bot.persona else 'Assistant') %}
+  {% set welcome_txt = (bot.welcome_text if bot.welcome_text else 'Bonjour 👋') %}
+  {% set user_id = (current_user.get_id() if current_user.is_authenticated else None) %}
+  {% set bot_id = (bot.id if bot else None) %}
 
   <style>
     :root{
-      --bg:#0b0b0c;--card:#111214;--line:#23262d;--text:#e7e9ee;--muted:#a7adbb;--primary:{{ primary }};
+      --bg:#0b0b0c;
+      --card:#111214;
+      --line:#23262d;
+      --text:#e7e9ee;
+      --muted:#a7adbb;
+      --primary:{{ primary }};
     }
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    }
     .wrap{max-width:980px;margin:40px auto;padding:0 20px}
     h1{margin:0 0 8px}
     p.muted{color:var(--muted);margin:0 0 18px}
@@ -30,19 +42,59 @@
     .me{align-self:flex-end;background:#1a1d24}
     .bot{align-self:flex-start;background:#101216}
     .input{display:flex;gap:8px;margin-top:10px}
-    .input input{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
-    .input button{padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
+    .input input{
+      flex:1;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:#0f1012;
+      color:var(--text);
+    }
+    .input button{
+      padding:12px 14px;
+      border-radius:12px;
+      border:0;
+      background:var(--primary);
+      color:#fff;
+      font-weight:600;
+      cursor:pointer;
+    }
     .avatar{
       width:72px;height:72px;
       border-radius:
         {% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
-      border:1px solid var(--line);overflow:hidden;background:#0f1012
+      border:1px solid var(--line);
+      overflow:hidden;
+      background:#0f1012;
     }
     .avatar img{width:100%;height:100%;object-fit:cover}
     .lead{display:flex;flex-direction:column;gap:8px}
-    .lead input, .lead textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
-    .lead button{padding:10px 12px;border-radius:10px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
-    .badge{display:inline-block;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 8px;border-radius:999px;color:var(--muted);font-size:12px}
+    .lead input, .lead textarea{
+      width:100%;
+      padding:10px;
+      border-radius:10px;
+      border:1px solid var(--line);
+      background:#0f1012;
+      color:var(--text);
+    }
+    .lead button{
+      padding:10px 12px;
+      border-radius:10px;
+      border:0;
+      background:var(--primary);
+      color:#fff;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .badge{
+      display:inline-block;
+      background:rgba(255,255,255,.08);
+      border:1px solid var(--line);
+      padding:4px 8px;
+      border-radius:999px;
+      color:var(--muted);
+      font-size:12px;
+    }
     @media (max-width:1000px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -52,15 +104,11 @@
       <div class="avatar">{% if avatar_url %}<img src="{{ avatar_url }}" alt="avatar">{% endif %}</div>
       <div>
         <h1 style="margin:0">{{ bot_name }}</h1>
-        <div class="badge">Pack: {{ metier }}</div>
+        <div class="badge">Pack : {{ metier }}</div>
       </div>
       <div style="flex:1"></div>
       <div>
-        {% if not paid %}
-          <a href="/pay" class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Débloquer l’intégration →</a>
-        {% else %}
-          <span class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Abonnement actif ✅</span>
-        {% endif %}
+        <a href="/pay" class="badge" style="border-color:var(--primary);color:#fff;background:rgba(79,70,229,.2)">Débloquer l’intégration →</a>
       </div>
     </div>
 
@@ -92,9 +140,9 @@
   </div>
 
   <script>
-    // Sérialisation sûre (évite les NameError/undefined dans le JS)
     const USER_ID = {{ user_id|tojson }};
     const BOT_ID  = {{ bot_id|tojson }};
+    const METIER  = {{ metier|tojson }};
     const messages = document.getElementById('messages');
     const msgInput = document.getElementById('msg');
     const sendBtn  = document.getElementById('send');
@@ -117,7 +165,7 @@
         const r = await fetch('/api/chat', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ message:text })
+          body: JSON.stringify({ message:text, metier: METIER })
         });
         const data = await r.json().catch(()=> ({}));
         if (data.reply) addBubble(data.reply, 'bot');
@@ -141,7 +189,7 @@
           body: JSON.stringify({
             user_id: USER_ID, bot_id: BOT_ID,
             name, email, message: msg,
-            extra: { source: 'preview' }
+            extra: { source: 'preview', metier: METIER }
           })
         });
         const d = await res.json().catch(()=> ({}));
@@ -156,18 +204,9 @@
       }
     };
 
-    // Message d’accueil piloté par l’API si historique vide
+    // Message d’accueil du bot
     (async ()=>{
-      try{
-        const r = await fetch('/api/chat', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ message:"" })
-        });
-        const data = await r.json().catch(()=> ({}));
-        if (data.reply) addBubble(data.reply, 'bot');
-      }catch(e){
-        addBubble("⚠️ Échec de connexion à l’API", 'bot');
-      }
+      addBubble({{ welcome_txt|tojson }}, 'bot');
     })();
   </script>
 </body>
