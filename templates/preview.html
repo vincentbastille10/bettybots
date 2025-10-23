@@ -5,7 +5,6 @@
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
-  {# ---- Variables d'affichage sûres ---- #}
   {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
   {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
   {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '') %}
@@ -22,12 +21,13 @@
     }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-    .wrap{max-width:980px;margin:40px auto;padding:0 20px}
-    .row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+    .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
+
+    .row{display:flex;align-items:center;gap:14px;margin-bottom:14px}
     h1{margin:0}
-    .btnbar{display:flex;gap:8px;margin-left:auto}
+    .btnbar{display:flex;gap:10px;margin-left:auto}
     .btn{
-      display:inline-block;padding:8px 12px;border-radius:999px;border:1px solid var(--line);
+      display:inline-block;padding:10px 14px;border-radius:999px;border:1px solid var(--line);
       background:rgba(255,255,255,.08);color:#fff;text-decoration:none;font-size:13px
     }
     .btn.primary{background:rgba(79,70,229,.2);border-color:var(--primary)}
@@ -39,11 +39,13 @@
     .badge{display:inline-block;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 8px;border-radius:999px;color:var(--muted);font-size:12px}
 
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
-    .chat{display:flex;flex-direction:column;height:560px}
+    .chat{display:flex;flex-direction:column;height:62vh;min-height:420px}
     .messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
     .bubble{max-width:80%;padding:10px 12px;border-radius:14px;line-height:1.35;border:1px solid var(--line)}
     .me{align-self:flex-end;background:#1a1d24}
     .bot{align-self:flex-start;background:#101216}
+    .bubble.warn{color:#ffdb6e;border-color:#3b2f0b;background:#1c1606}
+
     .input{display:flex;gap:8px;margin-top:10px}
     .input input{
       flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);
@@ -82,7 +84,7 @@
   </div>
 
   <script>
-    // Contexte (sérialisés pour éviter toute erreur)
+    // Contexte
     const USER_ID  = {{ user_id|tojson }};
     const BOT_ID   = {{ bot_id|tojson }};
     const PACK     = {{ pack_slug|tojson }};
@@ -91,16 +93,15 @@
     const msgInput   = document.getElementById('msg');
     const sendBtn    = document.getElementById('send');
 
-    function addBubble(text, who){
+    function addBubble(text, who, cls){
       const b = document.createElement('div');
-      b.className = 'bubble ' + (who === 'me' ? 'me' : 'bot');
-      b.textContent = String(text || '');
+      b.className = 'bubble ' + (who === 'me' ? 'me' : 'bot') + (cls ? (' ' + cls) : '');
+      b.textContent = String(text ?? '');
       messagesEl.appendChild(b);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
     function userHistory(){
-      // historique minimal côté client (messages utilisateur uniquement)
       return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
     }
 
@@ -109,68 +110,54 @@
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',              // IMPORTANT: garde la session Flask (login_required)
+        credentials: 'same-origin',       // IMPORTANT pour @login_required
         body: JSON.stringify(payload)
       });
-      // Si Flask renvoie une redirection (non connecté), res.ok peut être true mais le JSON ne matche pas → on tente/attrape
-      let data = {};
-      try { data = await res.json(); } catch (_) { data = {}; }
-      return { ok: res.ok, data };
+
+      const ctype = (res.headers.get('content-type')||'').toLowerCase();
+      if (!ctype.includes('application/json')) {
+        const snippet = await res.text().catch(()=>'');
+        console.warn('Réponse non-JSON de /api/chat', {status: res.status, snippet});
+        return { ok:false, data:null, status:res.status, html:snippet };
+      }
+      const data = await res.json().catch(()=>null);
+      return { ok: res.ok && !!data, data, status: res.status };
     }
 
     let sending = false;
     async function send(text){
-      if (sending) return;
       const t = (text || '').trim();
-      if (!t) return;
-      sending = true;
-      sendBtn.disabled = true;
+      if (!t || sending) return;
+      sending = true; sendBtn.disabled = true;
 
-      addBubble(t, 'me');
-      msgInput.value = '';
+      addBubble(t, 'me'); msgInput.value = '';
 
       try{
-        const { ok, data } = await callChatAPI(t);
-        if (!ok || !data || (typeof data.reply !== 'string')) {
-          addBubble('⚠️ Erreur serveur.', 'bot');
+        const { ok, data, status } = await callChatAPI(t);
+        if (!ok || !data || typeof data.reply !== 'string') {
+          addBubble('⚠️ Erreur serveur.', 'bot', 'warn');
         } else {
           addBubble(data.reply, 'bot');
         }
       } catch (e){
-        addBubble('⚠️ Impossible de joindre le serveur.', 'bot');
+        console.error('Erreur fetch /api/chat', e);
+        addBubble('⚠️ Impossible de joindre le serveur.', 'bot', 'warn');
       } finally {
-        sending = false;
-        sendBtn.disabled = false;
-        msgInput.focus();
+        sending = false; sendBtn.disabled = false; msgInput.focus();
       }
     }
 
-    // UI events
-    sendBtn.addEventListener('click', () => {
-      const text = msgInput.value;
-      send(text);
+    // UI
+    sendBtn.addEventListener('click', ()=> send(msgInput.value));
+    msgInput.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); }
     });
 
-    msgInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const text = msgInput.value;
-        send(text);
-      }
-    });
-
-    // Message d’accueil automatique (history vide -> opening du pack)
-    (async () => {
-      try{
-        const { ok, data } = await callChatAPI('');
-        if (ok && data && typeof data.reply === 'string') {
-          addBubble(data.reply, 'bot');
-        } else {
-          addBubble('Bonjour 👋', 'bot');
-        }
-      } catch {
-        addBubble('Bonjour 👋', 'bot');
-      }
+    // Welcome (history vide => opening du pack)
+    (async ()=>{
+      const { ok, data } = await callChatAPI('');
+      if (ok && data && typeof data.reply === 'string') addBubble(data.reply, 'bot');
+      else addBubble('Bonjour 👋', 'bot');
       msgInput.focus();
     })();
   </script>
