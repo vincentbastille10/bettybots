@@ -5,14 +5,25 @@
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
+  {# ----- CONFIG SAFE DEFAULTS ----- #}
   {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
   {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
-  {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '') %}
   {% set metier     = (cfg.metier if (cfg and cfg.metier) else '—') %}
   {% set bot_name   = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
-  {% set pack_slug  = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilierbilier') %}
+  {% set pack_slug  = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilier') %}
   {% set user_id    = (current_user.get_id() if current_user.is_authenticated else None) %}
   {% set bot_id     = (bot.get('id') if bot else None) %}
+  {% set persona    = (cfg.persona if (cfg and cfg.persona) else 'neutre') %}
+
+  {# 3 avatars prédéfinis, plus d’URL libre #}
+  {% set avatars = [
+      url_for('static', filename='img/betty_avatar1.png'),
+      url_for('static', filename='img/betty_avatar2.png'),
+      url_for('static', filename='img/betty_avatar3.png')
+  ] %}
+  {% set avatar_key = (cfg.avatar_key if (cfg and (cfg.avatar_key is not none)) else 0) %}
+  {% if avatar_key < 0 or avatar_key > 2 %}{% set avatar_key = 0 %}{% endif %}
+  {% set avatar_url = avatars[avatar_key] %}
 
   <style>
     :root{
@@ -23,8 +34,16 @@
     body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
 
-    .row{display:flex;align-items:center;gap:14px;margin-bottom:14px}
-    h1{margin:0}
+    /* Bandeau annonce */
+    .promo{
+      background:linear-gradient( to right, rgba(255,255,255,.06), rgba(255,255,255,.02) );
+      border-bottom:1px solid var(--line);
+      padding:10px 20px; text-align:center; font-size:14px; color:var(--muted);
+    }
+    .promo b{color:#fff}
+
+    .row{display:flex;align-items:center;gap:14px;margin:18px 0}
+    h1{margin:0;font-size:20px}
     .btnbar{display:flex;gap:10px;margin-left:auto}
     .btn{
       display:inline-block;padding:10px 14px;border-radius:999px;border:1px solid var(--line);
@@ -36,7 +55,8 @@
       border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
     }
     .avatar img{width:100%;height:100%;object-fit:cover}
-    .badge{display:inline-block;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 8px;border-radius:999px;color:var(--muted);font-size:12px}
+    .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 10px;border-radius:999px;color:var(--muted);font-size:12px}
+    .chip{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--primary);border:1px solid var(--line)}
 
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
     .chat{display:flex;flex-direction:column;height:62vh;min-height:420px}
@@ -45,6 +65,13 @@
     .me{align-self:flex-end;background:#1a1d24}
     .bot{align-self:flex-start;background:#101216}
     .bubble.warn{color:#ffdb6e;border-color:#3b2f0b;background:#1c1606}
+
+    .toolbar{display:flex;align-items:center;gap:10px;margin:0 0 14px 0}
+    .seg{display:flex;background:#0f1012;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    .seg button{
+      border:0;background:transparent;color:var(--muted);padding:8px 12px;font-size:12px;cursor:pointer
+    }
+    .seg button.active{background:rgba(79,70,229,.15);color:#fff}
 
     .input{display:flex;gap:8px;margin-top:10px}
     .input input{
@@ -59,16 +86,35 @@
 </head>
 
 <body>
+  <!-- Bandeau présentation + prix -->
+  <div class="promo">
+    <b>Betty</b> — votre assistante AI pour votre activité. <b>9,99 € / mois</b>, sans engagement.
+  </div>
+
   <div class="wrap">
     <div class="row">
-      <div class="avatar">{% if avatar_url %}<img src="{{ avatar_url }}" alt="avatar">{% endif %}</div>
+      <div class="avatar"><img src="{{ avatar_url }}" alt="avatar"></div>
       <div>
         <h1>{{ bot_name }}</h1>
-        <div class="badge">Pack : {{ metier }}</div>
+        <div class="badge">
+          <span>Pack : {{ metier }}</span>
+          <span class="chip" title="{{ primary }}"></span>
+          <span>{{ primary }}</span>
+        </div>
       </div>
       <div class="btnbar">
         <a class="btn" href="/dashboard">← Retour à la configuration</a>
-        <a class="btn primary" href="/pay">Aller au paiement →</a>
+        <a class="btn primary" href="/preview">Enregistrer & tester →</a>
+      </div>
+    </div>
+
+    <!-- Choix des 4 personnalités -->
+    <div class="toolbar">
+      <div class="seg" id="personaSeg">
+        <button data-val="neutre">Neutre</button>
+        <button data-val="chaleureuse">Chaleureuse</button>
+        <button data-val="directe">Directe</button>
+        <button data-val="experte">Experte</button>
       </div>
     </div>
 
@@ -87,10 +133,28 @@
     const USER_ID  = {{ user_id|tojson }};
     const BOT_ID   = {{ bot_id|tojson }};
     const PACK     = {{ pack_slug|tojson }};
+    const AVATAR   = {{ avatar_key|tojson }};
+    const PRIMARY  = {{ primary|tojson }};
+    const START_GREETING = "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?";
 
     const messagesEl = document.getElementById('messages');
     const msgInput   = document.getElementById('msg');
     const sendBtn    = document.getElementById('send');
+
+    // Personnalités
+    const personaSeg = document.getElementById('personaSeg');
+    const personaButtons = Array.from(personaSeg.querySelectorAll('button'));
+    let persona = {{ persona|tojson }};
+    function renderPersona(){
+      personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona));
+    }
+    personaButtons.forEach(b=>{
+      b.addEventListener('click', ()=>{
+        persona = b.dataset.val;
+        renderPersona();
+      });
+    });
+    renderPersona();
 
     function addBubble(text, who, cls){
       const b = document.createElement('div');
@@ -105,7 +169,16 @@
     }
 
     async function callChatAPI(text){
-      const payload = { message: text, pack: PACK, history: userHistory() };
+      const payload = {
+        message: text,
+        pack: PACK,
+        history: userHistory(),
+        persona,
+        color: PRIMARY,
+        avatar_key: AVATAR,
+        bot_id: BOT_ID,
+        user_id: USER_ID
+      };
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,10 +221,9 @@
       if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); }
     });
 
-    (async ()=>{
-      const { ok, data } = await callChatAPI('');
-      if (ok && data && typeof data.reply === 'string') addBubble(data.reply, 'bot');
-      else addBubble('Bonjour 👋', 'bot');
+    // Message d’accueil imposé (pas d’appel API à vide)
+    (()=>{
+      addBubble(START_GREETING, 'bot');
       msgInput.focus();
     })();
   </script>
