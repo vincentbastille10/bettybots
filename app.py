@@ -212,6 +212,17 @@ def rate_limit(max_requests: int = 100):
     return decorator
 
 # ---------------------------------------------------------------------
+# Avatars (liens fournis par Vincent)
+# ---------------------------------------------------------------------
+
+AVATAR_URLS = {
+    "Agent Immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
+    "Avocate":    "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
+    "Médecine":   "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
+}
+DEFAULT_AVATAR = AVATAR_URLS["Agent Immo"]
+
+# ---------------------------------------------------------------------
 # Routes - Favicon
 # ---------------------------------------------------------------------
 
@@ -235,7 +246,6 @@ def root():
 
     # Crée un utilisateur invité unique
     email = f"guest-{secrets.token_urlsafe(8)}@guest.local"
-    
     if db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (email,)):
         row = db_one("SELECT * FROM users WHERE email=?", (email,))
         if row:
@@ -244,7 +254,6 @@ def root():
         else:
             logger.error("❌ Échec création utilisateur invité")
             flash("Erreur lors de la création du compte invité", "error")
-    
     return redirect(url_for("dashboard"))
 
 # ---------------------------------------------------------------------
@@ -260,11 +269,10 @@ def dashboard():
     try:
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else None
-        
-        # Préparer cfg pour le template (conversion inverse)
+
+        # cfg pour pré-remplir le template sans changer le HTML
         cfg = None
         if bot:
-            # Conversion metier → pack_slug
             metier_to_pack = {
                 "Agent Immo": "agent_immobilier",
                 "Avocate": "avocat",
@@ -272,18 +280,16 @@ def dashboard():
                 "Coiffeur": "coiffeur",
                 "Coach sportif": "coach_sportif"
             }
-            
-            # Extraction avatar_key depuis avatar_url
-            avatar_url = bot.get("avatar_url", "") or ""
-            avatar_key = 0
-            if "betty_avatar2" in avatar_url:
+            avatar_url = bot.get("avatar_url") or ""
+            # Déduire avatar_key: 0/1/2 pour compat HTML (optionnel)
+            if avatar_url == AVATAR_URLS.get("Avocate"):
                 avatar_key = 1
-            elif "betty_avatar3" in avatar_url:
+            elif avatar_url == AVATAR_URLS.get("Médecine"):
                 avatar_key = 2
-            
-            # Conversion shape → widget_size
+            else:
+                avatar_key = 0
+
             shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
-            
             cfg = {
                 "name": bot.get("name", "Mon Betty Bot"),
                 "slug": metier_to_pack.get(bot.get("metier", ""), "agent_immobilier"),
@@ -302,11 +308,10 @@ def dashboard():
 
     # ---------- POST ----------
     logger.info(f"📝 POST /dashboard par user {current_user.id} — form={dict(request.form)}")
-    
-    # Récupération et validation des données (adaptées au template HTML)
+
     name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
-    
-    # Conversion pack_slug → metier
+
+    # pack_slug → métier (tu ne changes pas le HTML)
     pack_slug = (request.form.get("pack_slug") or "agent_immobilier").strip()
     pack_to_metier = {
         "agent_immobilier": "Agent Immo",
@@ -316,32 +321,17 @@ def dashboard():
         "coach_sportif": "Coach sportif"
     }
     metier = pack_to_metier.get(pack_slug, "Agent Immo")
-    
-    # Conversion avatar_key (0,1,2) → avatar_url
-    try:
-        avatar_key = int(request.form.get("avatar_key") or 0)
-        avatars = [
-            url_for('static', filename='img/betty_avatar1.png', _external=True),
-            url_for('static', filename='img/betty_avatar2.png', _external=True),
-            url_for('static', filename='img/betty_avatar3.png', _external=True)
-        ]
-        avatar_url = avatars[avatar_key] if 0 <= avatar_key < len(avatars) else avatars[0]
-    except (ValueError, IndexError):
-        avatar_url = ""
-    
+
+    # Avatar: on force l'URL externe selon le métier (plus robuste que des fichiers statiques)
+    avatar_url = AVATAR_URLS.get(metier, DEFAULT_AVATAR)
+
     color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
     persona = (request.form.get("persona") or "neutre").strip()[:500]
-    
-    # widget_size → shape pour la cohérence
     widget_size = (request.form.get("widget_size") or "m").strip()
     shape_map = {"s": "circle", "m": "square", "l": "rounded"}
     shape = shape_map.get(widget_size, "square")
-    
     welcome_txt = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
 
-    logger.info(f"✅ Données traitées: name={name}, metier={metier}, pack={pack_slug}")
-
-    # Validation du métier (étendu)
     valid_metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
     if metier not in valid_metiers:
         logger.warning(f"⚠️ Métier invalide: {metier}")
@@ -349,39 +339,31 @@ def dashboard():
 
     try:
         if bot:
-            logger.info(f"🔄 UPDATE bot existant (id={bot['id']})")
-            success = db_exec("""
+            ok = db_exec("""
                 UPDATE bots 
                 SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
                 WHERE user_id=?
             """, (name, metier, avatar_url, color_hex, shape, persona, welcome_txt, current_user.id))
         else:
-            logger.info(f"➕ INSERT nouveau bot pour user {current_user.id}")
-            success = db_exec("""
+            ok = db_exec("""
                 INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text)
                 VALUES(?,?,?,?,?,?,?,?)
             """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_txt))
-        
-        if not success:
-            logger.error("❌ db_exec a retourné False")
+
+        if not ok:
             flash("❌ Erreur lors de la sauvegarde", "error")
             return render_template("dashboard.html", metiers=metiers, bot=bot), 400
 
-        logger.info("✅ Sauvegarde réussie, redirection vers preview")
         flash("✅ Configuration sauvegardée !", "success")
 
-        # --- Redirection robuste vers /preview ---
+        # Redirection robuste vers /preview
         target = url_for("preview")
-
-        # 1) Si c'est une requête HTMX, forcer HX-Redirect
         if request.headers.get("HX-Request") == "true":
             resp = make_response("", 204)
             resp.headers["HX-Redirect"] = target
             return resp
 
-        # 2) Redirection HTTP standard
-        resp = redirect(target, code=303)  # 303 See Other → GET /preview
-        # 3) Fallback : header Refresh + body auto-redirect (pour intercepteurs JS)
+        resp = redirect(target, code=303)
         resp.headers["Refresh"] = f'0; url={target}'
         resp.set_data(
             f'<!doctype html><meta http-equiv="refresh" content="0;url={target}">'
@@ -410,7 +392,7 @@ def preview():
         
         bot = dict(row)
 
-        # mapping pour les templates qui attendent cfg.*
+        # mapping cfg attendu par le template
         shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
         metier_to_pack = {
             "Agent Immo": "agent_immobilier",
@@ -419,10 +401,11 @@ def preview():
             "Coiffeur": "coiffeur",
             "Coach sportif": "coach_sportif"
         }
-        avatar_url = bot.get("avatar_url") or ""
-        if "betty_avatar2" in avatar_url:
+
+        avatar_url = bot.get("avatar_url") or DEFAULT_AVATAR
+        if avatar_url == AVATAR_URLS.get("Avocate"):
             avatar_key = 1
-        elif "betty_avatar3" in avatar_url:
+        elif avatar_url == AVATAR_URLS.get("Médecine"):
             avatar_key = 2
         else:
             avatar_key = 0
@@ -434,10 +417,10 @@ def preview():
             "color_hex": bot.get("color_hex", "#4F46E5"),
             "persona": bot.get("persona", "neutre"),
             "widget_size": shape_to_size.get(bot.get("shape", "square"), "m"),
-            "greeting": bot.get("welcome_text", "Bonjour 👋")
+            "greeting": bot.get("welcome_text", "Bonjour 👋"),
+            "avatar_url": avatar_url,  # au cas où le template l'affiche directement
         }
 
-        # on passe à la fois bot (brut) et cfg (clé/valeurs attendues par le HTML)
         return render_template("preview.html", bot=bot, cfg=cfg)
     
     except Exception as e:
@@ -485,7 +468,6 @@ def pay_stripe() -> Response:
         success_url = f"{PUBLIC_BASE_URL.rstrip('/')}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{PUBLIC_BASE_URL.rstrip('/')}/pay"
 
-        # Création session Stripe
         session_params = {
             "mode": "subscription",
             "line_items": [{
@@ -493,9 +475,7 @@ def pay_stripe() -> Response:
                     "currency": STRIPE_CURRENCY,
                     "recurring": {"interval": "month"},
                     "unit_amount": STRIPE_PRICE_CENTS,
-                    "product_data": {
-                        "name": product_name,
-                    }
+                    "product_data": {"name": product_name}
                 },
                 "quantity": 1
             }],
@@ -510,7 +490,6 @@ def pay_stripe() -> Response:
             }
         }
 
-        # Ajout de l'image si disponible
         if avatar:
             session_params["line_items"][0]["price_data"]["product_data"]["images"] = [avatar]
 
@@ -537,11 +516,8 @@ def pay_stripe() -> Response:
 def confirm():
     """Page de confirmation après paiement - Page 4."""
     session_id = request.args.get("session_id")
-    
-    # TODO: Vérifier le paiement avec Stripe
     if session_id:
         logger.info(f"✅ Confirmation paiement - Session : {session_id}")
-    
     return render_template("confirm.html", session_id=session_id)
 
 # ---------------------------------------------------------------------
@@ -550,7 +526,7 @@ def confirm():
 
 METIER_SLUGS = {
     "Avocate": "avocat_pack",
-    "Agent Immo": "agent_immobilier_pack",  # ✅ Corrigé
+    "Agent Immo": "agent_immobilier_pack",
     "Médecine": "medecine_pack",
     "Comptable": "comptable_pack",
     "Psychologue": "psychologue_pack",
@@ -559,11 +535,9 @@ METIER_SLUGS = {
 def load_pack(slug: str) -> dict:
     """Charge un pack YAML de règles conversationnelles."""
     path = BASE_DIR / "templates" / "packs" / f"{slug}.yaml"
-    
     if not path.exists():
         logger.warning(f"⚠️ Pack inexistant : {slug}")
         return {}
-    
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -575,26 +549,20 @@ def load_pack(slug: str) -> dict:
 def apply_rules(message: str, pack: dict, history: list) -> dict:
     """Applique les règles conversationnelles du pack."""
     message_lower = message.lower().strip()
-    
     for rule in pack.get("rules", []):
         trigger = rule.get("if", "").lower()
         if trigger and trigger in message_lower:
-            return {
-                "reply": rule.get("then", "Je vous écoute 👂"),
-                "ask_lead": rule.get("ask_lead", False)
-            }
-    
-    return {
-        "reply": pack.get("fallback", "Je n'ai pas bien compris 🤔"),
-        "ask_lead": False
-    }
+            return {"reply": rule.get("then", "Je vous écoute 👂"),
+                    "ask_lead": rule.get("ask_lead", False)}
+    return {"reply": pack.get("fallback", "Je n'ai pas bien compris 🤔"),
+            "ask_lead": False}
 
 @app.post("/api/health")
 def api_health():
     """Endpoint de santé de l'API."""
     return jsonify({
         "ok": True,
-        "timestamp": None,  # Ajoutez datetime si nécessaire
+        "timestamp": None,
         "database": "connected" if g.get('db') else "disconnected"
     })
 
@@ -608,7 +576,6 @@ def api_chat():
         history = data.get("history") or []
         slug = (data.get("pack") or "").strip().lower()
 
-        # Détermination du pack à utiliser
         if not slug:
             if current_user.is_authenticated:
                 try:
@@ -625,24 +592,16 @@ def api_chat():
 
         pack = load_pack(slug) or {}
 
-        # Message d'ouverture
         if not history or not message:
-            return jsonify({
-                "reply": pack.get("opening", "Bonjour 👋"),
-                "ask_lead": False
-            })
+            return jsonify({"reply": pack.get("opening", "Bonjour 👋"), "ask_lead": False})
 
-        # Traitement du message
         response = apply_rules(message, pack, history)
         return jsonify(response)
     
     except Exception as e:
         logger.error(f"Erreur API chat : {e}", exc_info=True)
-        return jsonify({
-            "reply": "Désolé, une erreur est survenue 😔",
-            "ask_lead": False,
-            "error": True
-        }), 500
+        return jsonify({"reply": "Désolé, une erreur est survenue 😔",
+                        "ask_lead": False, "error": True}), 500
 
 # ---------------------------------------------------------------------
 # Gestion des erreurs
@@ -650,7 +609,6 @@ def api_chat():
 
 @app.errorhandler(404)
 def not_found(e):
-    """Page 404."""
     tpl_404 = Path(app.template_folder or "", "404.html")
     if tpl_404.exists():
         return render_template("404.html"), 404
@@ -658,7 +616,6 @@ def not_found(e):
 
 @app.errorhandler(500)
 def server_error(e):
-    """Page 500."""
     logger.error(f"Erreur 500 : {e}", exc_info=True)
     tpl_500 = Path(app.template_folder or "", "500.html")
     if tpl_500.exists():
