@@ -208,7 +208,6 @@ def rate_limit(max_requests: int = 100):
 # ---------------------------------------------------------------------
 
 EXTERNAL_AVATARS = {
-    # ⬇️ Liens EXACTS fournis par toi (hébergeur Postimg)
     "agent_immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
     "avocat":     "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
     "medecin":    "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
@@ -219,19 +218,18 @@ METIER_TO_SLUG = {
     "Avocate": "avocat",
     "Médecine": "medecin",
     "Comptable": "agent_immo",   # fallback
-    "Psychologue": "agent_immo", # fallback
-    "Coiffeur": "agent_immo",    # fallback
-    "Coach sportif": "agent_immo" # fallback
+    "Psychologue": "agent_immo",
+    "Coiffeur": "agent_immo",
+    "Coach sportif": "agent_immo"
 }
 
-SLUG_TO_METIER = {v:k for k,v in METIER_TO_SLUG.items()}
+SLUG_TO_METIER = {v: k for k, v in METIER_TO_SLUG.items()}
 DEFAULT_SLUG = "agent_immo"
 
 # ---------------------------------------------------------------------
-# Proxy d'avatars (same-origin) avec User-Agent + fallback SVG
+# Proxy d'avatars (same-origin) avec User-Agent + Referer + fallback SVG
 # ---------------------------------------------------------------------
 
-# petit SVG de secours (2,2 KB)
 _PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#ddd"/><stop offset="1" stop-color="#bbb"/></linearGradient></defs>
@@ -241,27 +239,29 @@ _PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
 </svg>
 """
 
-# user-agent commun pour éviter les blocages côté hébergeur
-_UA = "Mozilla/5.0 (compatible; BettyBotImageProxy/1.0; +https://bettybots.example)"
+_UA = "Mozilla/5.0 (compatible; BettyBotImageProxy/1.0)"
+_REF = "https://postimg.cc/"
 
 @app.get("/avatar/<slug>")
 def avatar_proxy(slug: str):
     slug = (slug or "").lower().strip()
     url = EXTERNAL_AVATARS.get(slug, EXTERNAL_AVATARS[DEFAULT_SLUG])
-
     try:
         if requests:
             s = requests.Session()
-            headers = {"User-Agent": _UA, "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"}
+            headers = {
+                "User-Agent": _UA,
+                "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                "Referer": _REF,
+            }
             r = s.get(url, headers=headers, timeout=10, allow_redirects=True)
             if r.status_code != 200 or not r.content:
                 logger.warning(f"Avatar fetch non-200 ({r.status_code}) pour {slug} → placeholder")
                 return _avatar_response(_PLACEHOLDER_SVG, "image/svg+xml")
-            data = r.content
-            ctype = r.headers.get("Content-Type", "image/jpeg") or "image/jpeg"
-            return _avatar_response(data, ctype)
+            ctype = r.headers.get("Content-Type") or "image/jpeg"
+            return _avatar_response(r.content, ctype)
         else:
-            req = urllib.request.Request(url, headers={"User-Agent": _UA})
+            req = urllib.request.Request(url, headers={"User-Agent": _UA, "Referer": _REF})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = resp.read()
                 ctype = getattr(getattr(resp, "headers", None), "get_content_type", lambda: "image/jpeg")()
@@ -272,7 +272,6 @@ def avatar_proxy(slug: str):
 
 def _avatar_response(data: bytes, ctype: str) -> Response:
     resp = Response(data, mimetype=ctype)
-    # Cache 24h côté navigateur
     resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
     return resp
 
@@ -314,24 +313,17 @@ def root():
 @login_required
 def dashboard():
     metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
+
     try:
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else None
 
-        cfg = None
+        # --- prépare un cfg même si aucun bot encore (important pour les images)
+        shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
         if bot:
-            shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
-            # déduire slug depuis metier
             slug = METIER_TO_SLUG.get(bot.get("metier") or "", DEFAULT_SLUG)
-            # avatar_url interne same-origin
             avatar_url = f"/avatar/{slug}"
-            # avatar_key (si le HTML l'utilise)
-            avatar_key = 0
-            if slug == "avocat":
-                avatar_key = 1
-            elif slug == "medecin":
-                avatar_key = 2
-
+            avatar_key = 0 if slug == "agent_immo" else (1 if slug == "avocat" else 2)
             cfg = {
                 "name": bot.get("name", "Mon Betty Bot"),
                 "slug": {"agent_immo":"agent_immobilier","avocat":"avocat","medecin":"medecin"}.get(slug,"agent_immobilier"),
@@ -340,28 +332,53 @@ def dashboard():
                 "persona": bot.get("persona", "neutre"),
                 "widget_size": shape_to_size.get(bot.get("shape", "square"), "m"),
                 "greeting": bot.get("welcome_text", "Bonjour 👋"),
-                "avatar_url": avatar_url
+                "avatar_url": avatar_url,
             }
+        else:
+            # valeurs par défaut → IMMO + avatar 1 pour que ça s’affiche tout de suite
+            cfg = {
+                "name": "Mon Betty Bot",
+                "slug": "agent_immobilier",
+                "avatar_key": 0,
+                "color_hex": "#4F46E5",
+                "persona": "neutre",
+                "widget_size": "m",
+                "greeting": "Bonjour 👋",
+                "avatar_url": "/avatar/agent_immo",
+            }
+
     except Exception:
-        bot, cfg = None, None
+        bot, cfg = None, {
+            "name": "Mon Betty Bot",
+            "slug": "agent_immobilier",
+            "avatar_key": 0,
+            "color_hex": "#4F46E5",
+            "persona": "neutre",
+            "widget_size": "m",
+            "greeting": "Bonjour 👋",
+            "avatar_url": "/avatar/agent_immo",
+        }
 
     if request.method == "GET":
-        return render_template("dashboard.html", metiers=metiers, bot=bot)
+        # 🔧 BUG FIX: on PASSAIT PAS cfg au template → pas d’images.
+        return render_template("dashboard.html", metiers=metiers, bot=bot, cfg=cfg)
 
     # --- POST : sauvegarde + redirection robuste /preview
     logger.info(f"📝 POST /dashboard par user {current_user.id} — form={dict(request.form)}")
 
     name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
     pack_slug = (request.form.get("pack_slug") or "agent_immobilier").strip()
-    # normalisation vers nos slugs internes
-    pack_to_internal = {"agent_immobilier":"agent_immo","avocat":"avocat","medecin":"medecin",
-                        "coiffeur":"agent_immo","coach_sportif":"agent_immo"}
+    pack_to_internal = {
+        "agent_immobilier":"agent_immo",
+        "avocat":"avocat",
+        "medecin":"medecin",
+        "coiffeur":"agent_immo",
+        "coach_sportif":"agent_immo"
+    }
     internal_slug = pack_to_internal.get(pack_slug, DEFAULT_SLUG)
     metier = SLUG_TO_METIER.get(internal_slug, "Agent Immo")
 
-    # avatar same-origin stocké
     avatar_url = f"/avatar/{internal_slug}"
-
     color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
     persona = (request.form.get("persona") or "neutre").strip()[:500]
     widget_size = (request.form.get("widget_size") or "m").strip()
@@ -370,7 +387,7 @@ def dashboard():
     welcome_txt = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
 
     try:
-        existing = (bot is not None)
+        existing = bot is not None
         if existing:
             ok = db_exec("""
                 UPDATE bots 
@@ -385,11 +402,11 @@ def dashboard():
 
         if not ok:
             flash("❌ Erreur lors de la sauvegarde", "error")
-            return render_template("dashboard.html", metiers=metiers, bot=bot), 400
+            return render_template("dashboard.html", metiers=metiers, bot=bot, cfg=cfg), 400
 
         flash("✅ Configuration sauvegardée !", "success")
-
         target = url_for("preview")
+
         if request.headers.get("HX-Request") == "true":
             resp = make_response("", 204)
             resp.headers["HX-Redirect"] = target
@@ -406,7 +423,7 @@ def dashboard():
     except Exception as e:
         logger.error(f"❌ Exception sauvegarde bot : {e}", exc_info=True)
         flash("❌ Erreur inattendue lors de la sauvegarde", "error")
-        return render_template("dashboard.html", metiers=metiers, bot=bot), 500
+        return render_template("dashboard.html", metiers=metiers, bot=bot, cfg=cfg), 500
 
 # ---------------------------------------------------------------------
 # Preview (Page 2)
@@ -424,16 +441,8 @@ def preview():
 
         shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
         internal_slug = METIER_TO_SLUG.get(bot.get("metier") or "", DEFAULT_SLUG)
-
-        # avatar same-origin assuré
         avatar_url = f"/avatar/{internal_slug}"
-
-        # avatar_key si ton HTML s’en sert encore
-        avatar_key = 0
-        if internal_slug == "avocat":
-            avatar_key = 1
-        elif internal_slug == "medecin":
-            avatar_key = 2
+        avatar_key = 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2)
 
         cfg = {
             "name": bot.get("name", "Mon Betty Bot"),
@@ -446,7 +455,6 @@ def preview():
             "avatar_url": avatar_url
         }
 
-        # on fournit à la fois bot (brut) et cfg (clé/valeurs utilisées par les templates)
         bot["avatar_url"] = avatar_url
         return render_template("preview.html", bot=bot, cfg=cfg)
 
@@ -513,7 +521,6 @@ def pay_stripe() -> Response:
             }
         }
         if avatar:
-            # Stripe accepte les URLs absolues; si besoin, convertir en absolu
             if avatar.startswith("/"):
                 base = (PUBLIC_BASE_URL or "").rstrip("/")
                 if base:
