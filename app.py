@@ -1,22 +1,32 @@
 from __future__ import annotations
 import os
+import io
 import sqlite3
 import secrets
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
+from functools import wraps
+import logging
+
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, flash, Response, send_from_directory, jsonify, g, make_response
+    url_for, flash, Response, send_from_directory, jsonify, g, make_response, abort
 )
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     current_user, login_required
 )
+
+# --- réseau pour proxy images
+try:
+    import requests  # Render l’a en général
+except Exception:  # fallback sans requests
+    requests = None
+import urllib.request
+
 import stripe
 import yaml
-from functools import wraps
-import logging
 
 # ---------------------------------------------------------------------
 # Configuration et Logging
@@ -44,7 +54,6 @@ app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
 
 # Stripe - Validation robuste
 def get_env_int(key: str, default: int) -> int:
-    """Récupère une variable d'environnement entière avec fallback."""
     try:
         return int(os.getenv(key, str(default)))
     except (ValueError, TypeError):
@@ -72,7 +81,6 @@ login_manager.login_view = "root"
 
 @contextmanager
 def get_db():
-    """Context manager pour connexions DB thread-safe."""
     if 'db' not in g:
         try:
             DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -84,21 +92,18 @@ def get_db():
             tmp.parent.mkdir(parents=True, exist_ok=True)
             g.db = sqlite3.connect(str(tmp), timeout=10)
             g.db.row_factory = sqlite3.Row
-    
     try:
         yield g.db
     finally:
-        pass  # Connexion fermée dans teardown_appcontext
+        pass
 
 @app.teardown_appcontext
 def close_db(error):
-    """Ferme la connexion DB à la fin de chaque requête."""
     db = g.pop('db', None)
     if db is not None:
         db.close()
 
 def init_db() -> None:
-    """Initialise les tables de la base de données."""
     with get_db() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -122,14 +127,11 @@ def init_db() -> None:
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id)
-        """)
+        conn.execute("""CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id)""")
         conn.commit()
         logger.info("✅ Base de données initialisée")
 
 def db_one(sql: str, params: tuple = ()) -> Optional[sqlite3.Row]:
-    """Exécute une requête et retourne une seule ligne."""
     try:
         with get_db() as conn:
             cur = conn.execute(sql, params)
@@ -139,7 +141,6 @@ def db_one(sql: str, params: tuple = ()) -> Optional[sqlite3.Row]:
         return None
 
 def db_exec(sql: str, params: tuple = ()) -> bool:
-    """Exécute une requête avec commit."""
     try:
         with get_db() as conn:
             conn.execute(sql, params)
@@ -150,10 +151,8 @@ def db_exec(sql: str, params: tuple = ()) -> bool:
         return False
 
 def get_bot(user_id: int) -> Optional[sqlite3.Row]:
-    """Récupère le bot associé à un utilisateur."""
     return db_one("SELECT * FROM bots WHERE user_id=? LIMIT 1", (user_id,))
 
-# Initialisation DB au démarrage
 with app.app_context():
     init_db()
 
@@ -165,13 +164,11 @@ class User(UserMixin):
     def __init__(self, id_: int, email: str):
         self.id = id_
         self.email = email
-    
     def __repr__(self):
         return f"<User {self.id}: {self.email}>"
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    """Charge un utilisateur depuis son ID."""
     try:
         row = db_one("SELECT * FROM users WHERE id=?", (int(user_id),))
         if row:
@@ -181,70 +178,103 @@ def load_user(user_id: str):
     return None
 
 # ---------------------------------------------------------------------
-# Utilitaires et validation
+# Utilitaires
 # ---------------------------------------------------------------------
 
 def sanitize_color(color: str) -> str:
-    """Valide et nettoie un code couleur hexadécimal."""
-    color = color.strip()
+    color = (color or "").strip()
     if not color.startswith('#'):
         color = '#' + color
-    # Validation simple : #XXX ou #XXXXXX
-    if len(color) in (4, 7) and all(c in '0123456789ABCDEFabcdef#' for c in color):
+    if len(color) in (4,7) and all(c in '0123456789ABCDEFabcdef#' for c in color):
         return color
-    return '#4F46E5'  # Couleur par défaut
+    return '#4F46E5'
 
 def sanitize_url(url: str) -> str:
-    """Valide une URL (basique)."""
-    url = url.strip()
+    url = (url or "").strip()
     if url and (url.startswith('http://') or url.startswith('https://')):
-        return url[:500]  # Limite de longueur
+        return url[:500]
     return ""
 
 def rate_limit(max_requests: int = 100):
-    """Décorateur de rate limiting simple (à améliorer en production)."""
     def decorator(f):
         @wraps(f)
         def wrapped(*args, **kwargs):
-            # TODO: Implémenter avec Redis ou Flask-Limiter
             return f(*args, **kwargs)
         return wrapped
     return decorator
 
 # ---------------------------------------------------------------------
-# Avatars (liens fournis par Vincent)
+# Avatars fournis (liens originaux) + mapping slug
 # ---------------------------------------------------------------------
 
-AVATAR_URLS = {
-    "Agent Immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
-    "Avocate":    "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
-    "Médecine":   "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
+EXTERNAL_AVATARS = {
+    "agent_immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
+    "avocat":     "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
+    "medecin":    "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
 }
-DEFAULT_AVATAR = AVATAR_URLS["Agent Immo"]
+
+METIER_TO_SLUG = {
+    "Agent Immo": "agent_immo",
+    "Avocate": "avocat",
+    "Médecine": "medecin",
+    "Comptable": "agent_immo",   # fallback
+    "Psychologue": "agent_immo", # fallback
+    "Coiffeur": "agent_immo",    # fallback
+    "Coach sportif": "agent_immo" # fallback
+}
+
+SLUG_TO_METIER = {v:k for k,v in METIER_TO_SLUG.items()}
+
+DEFAULT_SLUG = "agent_immo"
 
 # ---------------------------------------------------------------------
-# Routes - Favicon
+# Proxy d'avatars (same-origin)
+# ---------------------------------------------------------------------
+
+@app.get("/avatar/<slug>")
+def avatar_proxy(slug: str):
+    slug = (slug or "").lower().strip()
+    url = EXTERNAL_AVATARS.get(slug, EXTERNAL_AVATARS[DEFAULT_SLUG])
+
+    try:
+        if requests:
+            r = requests.get(url, timeout=10)
+            if r.status_code != 200:
+                logger.warning(f"Avatar fetch non-200 ({r.status_code}) pour {slug}")
+                abort(404)
+            data = r.content
+            ctype = r.headers.get("Content-Type", "image/jpeg")
+        else:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                data = resp.read()
+                ctype = resp.headers.get_content_type() if hasattr(resp.headers, "get_content_type") else "image/jpeg"
+        # Cache léger
+        resp = Response(data, mimetype=ctype)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+    except Exception as e:
+        logger.error(f"Erreur proxy avatar {slug}: {e}")
+        abort(404)
+
+# ---------------------------------------------------------------------
+# Favicon
 # ---------------------------------------------------------------------
 
 @app.get("/favicon.ico")
 def favicon() -> Response:
-    """Sert le favicon ou retourne 204."""
     fav_dir = BASE_DIR / "static"
     if (fav_dir / "favicon.ico").exists():
         return send_from_directory(fav_dir, "favicon.ico")
     return Response(status=204)
 
 # ---------------------------------------------------------------------
-# Routes - Accueil
+# Accueil
 # ---------------------------------------------------------------------
 
 @app.get("/")
 def root():
-    """Page d'accueil - crée un utilisateur invité si nécessaire."""
     if current_user.is_authenticated:
         return redirect(url_for("dashboard"))
-
-    # Crée un utilisateur invité unique
     email = f"guest-{secrets.token_urlsafe(8)}@guest.local"
     if db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (email,)):
         row = db_one("SELECT * FROM users WHERE email=?", (email,))
@@ -257,73 +287,60 @@ def root():
     return redirect(url_for("dashboard"))
 
 # ---------------------------------------------------------------------
-# Routes - Dashboard (Page 1)
+# Dashboard (Page 1)
 # ---------------------------------------------------------------------
 
 @app.route("/dashboard", methods=["GET", "POST"])
 @login_required
 def dashboard():
-    """Configuration du bot - Page 1."""
     metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
-    
     try:
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else None
 
-        # cfg pour pré-remplir le template sans changer le HTML
         cfg = None
         if bot:
-            metier_to_pack = {
-                "Agent Immo": "agent_immobilier",
-                "Avocate": "avocat",
-                "Médecine": "medecin",
-                "Coiffeur": "coiffeur",
-                "Coach sportif": "coach_sportif"
-            }
-            avatar_url = bot.get("avatar_url") or ""
-            # Déduire avatar_key: 0/1/2 pour compat HTML (optionnel)
-            if avatar_url == AVATAR_URLS.get("Avocate"):
-                avatar_key = 1
-            elif avatar_url == AVATAR_URLS.get("Médecine"):
-                avatar_key = 2
-            else:
-                avatar_key = 0
-
             shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
+            # déduire slug depuis metier
+            slug = METIER_TO_SLUG.get(bot.get("metier") or "", DEFAULT_SLUG)
+            # avatar_url interne same-origin
+            avatar_url = f"/avatar/{slug}"
+            # avatar_key (si le HTML l'utilise)
+            avatar_key = 0
+            if slug == "avocat":
+                avatar_key = 1
+            elif slug == "medecin":
+                avatar_key = 2
+
             cfg = {
                 "name": bot.get("name", "Mon Betty Bot"),
-                "slug": metier_to_pack.get(bot.get("metier", ""), "agent_immobilier"),
+                "slug": {"agent_immo":"agent_immobilier","avocat":"avocat","medecin":"medecin"}.get(slug,"agent_immobilier"),
                 "avatar_key": avatar_key,
                 "color_hex": bot.get("color_hex", "#4F46E5"),
                 "persona": bot.get("persona", "neutre"),
                 "widget_size": shape_to_size.get(bot.get("shape", "square"), "m"),
-                "greeting": bot.get("welcome_text", "Bonjour 👋")
+                "greeting": bot.get("welcome_text", "Bonjour 👋"),
+                "avatar_url": avatar_url
             }
-    except (ValueError, TypeError):
-        bot = None
-        cfg = None
+    except Exception:
+        bot, cfg = None, None
 
     if request.method == "GET":
         return render_template("dashboard.html", metiers=metiers, bot=bot)
 
-    # ---------- POST ----------
+    # --- POST : sauvegarde + redirection robuste /preview
     logger.info(f"📝 POST /dashboard par user {current_user.id} — form={dict(request.form)}")
 
     name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
-
-    # pack_slug → métier (tu ne changes pas le HTML)
     pack_slug = (request.form.get("pack_slug") or "agent_immobilier").strip()
-    pack_to_metier = {
-        "agent_immobilier": "Agent Immo",
-        "avocat": "Avocate",
-        "medecin": "Médecine",
-        "coiffeur": "Coiffeur",
-        "coach_sportif": "Coach sportif"
-    }
-    metier = pack_to_metier.get(pack_slug, "Agent Immo")
+    # normalisation vers nos slugs internes
+    pack_to_internal = {"agent_immobilier":"agent_immo","avocat":"avocat","medecin":"medecin",
+                        "coiffeur":"agent_immo","coach_sportif":"agent_immo"}
+    internal_slug = pack_to_internal.get(pack_slug, DEFAULT_SLUG)
+    metier = SLUG_TO_METIER.get(internal_slug, "Agent Immo")
 
-    # Avatar: on force l'URL externe selon le métier (plus robuste que des fichiers statiques)
-    avatar_url = AVATAR_URLS.get(metier, DEFAULT_AVATAR)
+    # avatar same-origin stocké
+    avatar_url = f"/avatar/{internal_slug}"
 
     color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
     persona = (request.form.get("persona") or "neutre").strip()[:500]
@@ -332,13 +349,9 @@ def dashboard():
     shape = shape_map.get(widget_size, "square")
     welcome_txt = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
 
-    valid_metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
-    if metier not in valid_metiers:
-        logger.warning(f"⚠️ Métier invalide: {metier}")
-        metier = "Agent Immo"
-
     try:
-        if bot:
+        existing = bot is not None
+        if existing:
             ok = db_exec("""
                 UPDATE bots 
                 SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
@@ -356,7 +369,6 @@ def dashboard():
 
         flash("✅ Configuration sauvegardée !", "success")
 
-        # Redirection robuste vers /preview
         target = url_for("preview")
         if request.headers.get("HX-Request") == "true":
             resp = make_response("", 204)
@@ -377,81 +389,72 @@ def dashboard():
         return render_template("dashboard.html", metiers=metiers, bot=bot), 500
 
 # ---------------------------------------------------------------------
-# Routes - Preview (Page 2)
+# Preview (Page 2)
 # ---------------------------------------------------------------------
 
 @app.get("/preview")
 @login_required
 def preview():
-    """Prévisualisation du bot - Page 2."""
     try:
         row = get_bot(int(current_user.id))
         if not row:
             flash("⚠️ Configure d'abord ton bot", "warning")
             return redirect(url_for("dashboard"))
-        
         bot = dict(row)
 
-        # mapping cfg attendu par le template
         shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
-        metier_to_pack = {
-            "Agent Immo": "agent_immobilier",
-            "Avocate": "avocat",
-            "Médecine": "medecin",
-            "Coiffeur": "coiffeur",
-            "Coach sportif": "coach_sportif"
-        }
+        internal_slug = METIER_TO_SLUG.get(bot.get("metier") or "", DEFAULT_SLUG)
 
-        avatar_url = bot.get("avatar_url") or DEFAULT_AVATAR
-        if avatar_url == AVATAR_URLS.get("Avocate"):
+        # avatar same-origin assuré
+        avatar_url = f"/avatar/{internal_slug}"
+
+        # avatar_key si ton HTML s’en sert encore
+        avatar_key = 0
+        if internal_slug == "avocat":
             avatar_key = 1
-        elif avatar_url == AVATAR_URLS.get("Médecine"):
+        elif internal_slug == "medecin":
             avatar_key = 2
-        else:
-            avatar_key = 0
 
         cfg = {
             "name": bot.get("name", "Mon Betty Bot"),
-            "slug": metier_to_pack.get(bot.get("metier", ""), "agent_immobilier"),
+            "slug": {"agent_immo":"agent_immobilier","avocat":"avocat","medecin":"medecin"}.get(internal_slug,"agent_immobilier"),
             "avatar_key": avatar_key,
             "color_hex": bot.get("color_hex", "#4F46E5"),
             "persona": bot.get("persona", "neutre"),
             "widget_size": shape_to_size.get(bot.get("shape", "square"), "m"),
             "greeting": bot.get("welcome_text", "Bonjour 👋"),
-            "avatar_url": avatar_url,  # au cas où le template l'affiche directement
+            "avatar_url": avatar_url
         }
 
+        # on fournit à la fois bot (brut) et cfg (clé/valeurs utilisées par les templates)
+        bot["avatar_url"] = avatar_url
         return render_template("preview.html", bot=bot, cfg=cfg)
-    
+
     except Exception as e:
         logger.error(f"Erreur preview : {e}", exc_info=True)
         flash("❌ Erreur lors du chargement de la prévisualisation", "error")
         return redirect(url_for("dashboard"))
 
 # ---------------------------------------------------------------------
-# Routes - Paiement (Page 3)
+# Paiement (Page 3)
 # ---------------------------------------------------------------------
 
 @app.get("/pay")
 @login_required
 def pay():
-    """Page de paiement - Page 3."""
     try:
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else None
     except Exception:
         bot = None
-    
     return render_template("pay.html", bot=bot, stripe_enabled=bool(STRIPE_SECRET_KEY))
 
 @app.post("/pay/stripe")
 @login_required
 def pay_stripe() -> Response:
-    """Crée une session Stripe Checkout."""
     if not STRIPE_SECRET_KEY:
         flash("❌ Paiement indisponible pour le moment", "error")
         return redirect(url_for("pay"))
-    
     if not PUBLIC_BASE_URL:
         flash("❌ Configuration serveur incomplète", "error")
         logger.error("PUBLIC_BASE_URL non configurée")
@@ -460,7 +463,7 @@ def pay_stripe() -> Response:
     try:
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else {}
-        
+
         metier = (bot.get("metier") or "Générique").capitalize()
         avatar = sanitize_url(bot.get("avatar_url") or "")
         product_name = f"Abonnement mensuel Betty {metier}"
@@ -489,32 +492,35 @@ def pay_stripe() -> Response:
                 }
             }
         }
-
         if avatar:
-            session_params["line_items"][0]["price_data"]["product_data"]["images"] = [avatar]
+            # Stripe accepte les URLs absolues; si besoin, convertir en absolu
+            if avatar.startswith("/"):
+                base = (PUBLIC_BASE_URL or "").rstrip("/")
+                if base:
+                    session_params["line_items"][0]["price_data"]["product_data"]["images"] = [f"{base}{avatar}"]
+            else:
+                session_params["line_items"][0]["price_data"]["product_data"]["images"] = [avatar]
 
         session = stripe.checkout.Session.create(**session_params)
         logger.info(f"✅ Session Stripe créée pour user {current_user.id}")
         return redirect(session.url, code=303)
-    
+
     except stripe.error.StripeError as e:
         logger.error(f"Erreur Stripe : {e}")
         flash(f"❌ Erreur de paiement : {str(e)}", "error")
         return redirect(url_for("pay"))
-    
     except Exception as e:
         logger.error(f"Erreur inattendue paiement : {e}", exc_info=True)
         flash("❌ Erreur inattendue lors du paiement", "error")
         return redirect(url_for("pay"))
 
 # ---------------------------------------------------------------------
-# Routes - Confirmation (Page 4)
+# Confirmation (Page 4)
 # ---------------------------------------------------------------------
 
 @app.get("/confirm")
 @login_required
 def confirm():
-    """Page de confirmation après paiement - Page 4."""
     session_id = request.args.get("session_id")
     if session_id:
         logger.info(f"✅ Confirmation paiement - Session : {session_id}")
@@ -533,7 +539,6 @@ METIER_SLUGS = {
 }
 
 def load_pack(slug: str) -> dict:
-    """Charge un pack YAML de règles conversationnelles."""
     path = BASE_DIR / "templates" / "packs" / f"{slug}.yaml"
     if not path.exists():
         logger.warning(f"⚠️ Pack inexistant : {slug}")
@@ -547,10 +552,9 @@ def load_pack(slug: str) -> dict:
         return {}
 
 def apply_rules(message: str, pack: dict, history: list) -> dict:
-    """Applique les règles conversationnelles du pack."""
-    message_lower = message.lower().strip()
+    message_lower = (message or "").lower().strip()
     for rule in pack.get("rules", []):
-        trigger = rule.get("if", "").lower()
+        trigger = (rule.get("if") or "").lower()
         if trigger and trigger in message_lower:
             return {"reply": rule.get("then", "Je vous écoute 👂"),
                     "ask_lead": rule.get("ask_lead", False)}
@@ -559,7 +563,6 @@ def apply_rules(message: str, pack: dict, history: list) -> dict:
 
 @app.post("/api/health")
 def api_health():
-    """Endpoint de santé de l'API."""
     return jsonify({
         "ok": True,
         "timestamp": None,
@@ -569,7 +572,6 @@ def api_health():
 @app.post("/api/chat")
 @rate_limit(max_requests=100)
 def api_chat():
-    """Endpoint de chat conversationnel."""
     try:
         data = request.get_json(force=True) or {}
         message = (data.get("message") or "").strip()
@@ -597,14 +599,14 @@ def api_chat():
 
         response = apply_rules(message, pack, history)
         return jsonify(response)
-    
+
     except Exception as e:
         logger.error(f"Erreur API chat : {e}", exc_info=True)
         return jsonify({"reply": "Désolé, une erreur est survenue 😔",
                         "ask_lead": False, "error": True}), 500
 
 # ---------------------------------------------------------------------
-# Gestion des erreurs
+# Erreurs
 # ---------------------------------------------------------------------
 
 @app.errorhandler(404)
