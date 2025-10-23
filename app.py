@@ -7,7 +7,7 @@ from typing import Optional
 from contextlib import contextmanager
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, flash, Response, send_from_directory, jsonify, g
+    url_for, flash, Response, send_from_directory, jsonify, g, make_response
 )
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
@@ -274,7 +274,7 @@ def dashboard():
             }
             
             # Extraction avatar_key depuis avatar_url
-            avatar_url = bot.get("avatar_url", "")
+            avatar_url = bot.get("avatar_url", "") or ""
             avatar_key = 0
             if "betty_avatar2" in avatar_url:
                 avatar_key = 1
@@ -297,82 +297,102 @@ def dashboard():
         bot = None
         cfg = None
 
-    if request.method == "POST":
-        logger.info(f"📝 POST reçu sur /dashboard pour user {current_user.id}")
-        logger.info(f"Form data: {dict(request.form)}")
-        
-        # Récupération et validation des données (adaptées au template HTML)
-        name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
-        
-        # Conversion pack_slug → metier
-        pack_slug = (request.form.get("pack_slug") or "agent_immobilier").strip()
-        pack_to_metier = {
-            "agent_immobilier": "Agent Immo",
-            "avocat": "Avocate",
-            "medecin": "Médecine",
-            "coiffeur": "Coiffeur",  # Nouveau
-            "coach_sportif": "Coach sportif"  # Nouveau
-        }
-        metier = pack_to_metier.get(pack_slug, "Agent Immo")
-        
-        # Conversion avatar_key (0,1,2) → avatar_url
-        try:
-            avatar_key = int(request.form.get("avatar_key") or 0)
-            avatars = [
-                url_for('static', filename='img/betty_avatar1.png', _external=True),
-                url_for('static', filename='img/betty_avatar2.png', _external=True),
-                url_for('static', filename='img/betty_avatar3.png', _external=True)
-            ]
-            avatar_url = avatars[avatar_key] if 0 <= avatar_key < len(avatars) else avatars[0]
-        except (ValueError, IndexError):
-            avatar_url = ""
-        
-        color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
-        persona = (request.form.get("persona") or "neutre").strip()[:500]
-        
-        # widget_size → shape pour la cohérence
-        widget_size = (request.form.get("widget_size") or "m").strip()
-        shape_map = {"s": "circle", "m": "square", "l": "rounded"}
-        shape = shape_map.get(widget_size, "square")
-        
-        welcome_txt = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
+    if request.method == "GET":
+        return render_template("dashboard.html", metiers=metiers, bot=bot)
 
-        logger.info(f"✅ Données traitées: name={name}, metier={metier}, pack={pack_slug}")
+    # ---------- POST ----------
+    logger.info(f"📝 POST /dashboard par user {current_user.id} — form={dict(request.form)}")
+    
+    # Récupération et validation des données (adaptées au template HTML)
+    name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
+    
+    # Conversion pack_slug → metier
+    pack_slug = (request.form.get("pack_slug") or "agent_immobilier").strip()
+    pack_to_metier = {
+        "agent_immobilier": "Agent Immo",
+        "avocat": "Avocate",
+        "medecin": "Médecine",
+        "coiffeur": "Coiffeur",
+        "coach_sportif": "Coach sportif"
+    }
+    metier = pack_to_metier.get(pack_slug, "Agent Immo")
+    
+    # Conversion avatar_key (0,1,2) → avatar_url
+    try:
+        avatar_key = int(request.form.get("avatar_key") or 0)
+        avatars = [
+            url_for('static', filename='img/betty_avatar1.png', _external=True),
+            url_for('static', filename='img/betty_avatar2.png', _external=True),
+            url_for('static', filename='img/betty_avatar3.png', _external=True)
+        ]
+        avatar_url = avatars[avatar_key] if 0 <= avatar_key < len(avatars) else avatars[0]
+    except (ValueError, IndexError):
+        avatar_url = ""
+    
+    color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
+    persona = (request.form.get("persona") or "neutre").strip()[:500]
+    
+    # widget_size → shape pour la cohérence
+    widget_size = (request.form.get("widget_size") or "m").strip()
+    shape_map = {"s": "circle", "m": "square", "l": "rounded"}
+    shape = shape_map.get(widget_size, "square")
+    
+    welcome_txt = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
 
-        # Validation du métier (étendu)
-        valid_metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
-        if metier not in valid_metiers:
-            logger.warning(f"⚠️ Métier invalide: {metier}")
-            metier = "Agent Immo"
+    logger.info(f"✅ Données traitées: name={name}, metier={metier}, pack={pack_slug}")
 
-        try:
-            if bot:
-                logger.info(f"🔄 UPDATE bot existant (id={bot['id']})")
-                success = db_exec("""
-                    UPDATE bots 
-                    SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
-                    WHERE user_id=?
-                """, (name, metier, avatar_url, color_hex, shape, persona, welcome_txt, current_user.id))
-            else:
-                logger.info(f"➕ INSERT nouveau bot pour user {current_user.id}")
-                success = db_exec("""
-                    INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text)
-                    VALUES(?,?,?,?,?,?,?,?)
-                """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_txt))
-            
-            if success:
-                logger.info(f"✅ Sauvegarde réussie, redirection vers preview")
-                flash("✅ Configuration sauvegardée !", "success")
-                return redirect(url_for("preview"))
-            else:
-                logger.error(f"❌ db_exec a retourné False")
-                flash("❌ Erreur lors de la sauvegarde", "error")
+    # Validation du métier (étendu)
+    valid_metiers = ["Avocate", "Agent Immo", "Médecine", "Comptable", "Psychologue", "Coiffeur", "Coach sportif"]
+    if metier not in valid_metiers:
+        logger.warning(f"⚠️ Métier invalide: {metier}")
+        metier = "Agent Immo"
+
+    try:
+        if bot:
+            logger.info(f"🔄 UPDATE bot existant (id={bot['id']})")
+            success = db_exec("""
+                UPDATE bots 
+                SET name=?, metier=?, avatar_url=?, color_hex=?, shape=?, persona=?, welcome_text=?
+                WHERE user_id=?
+            """, (name, metier, avatar_url, color_hex, shape, persona, welcome_txt, current_user.id))
+        else:
+            logger.info(f"➕ INSERT nouveau bot pour user {current_user.id}")
+            success = db_exec("""
+                INSERT INTO bots(user_id,name,metier,avatar_url,color_hex,shape,persona,welcome_text)
+                VALUES(?,?,?,?,?,?,?,?)
+            """, (current_user.id, name, metier, avatar_url, color_hex, shape, persona, welcome_txt))
         
-        except Exception as e:
-            logger.error(f"❌ Exception sauvegarde bot : {e}", exc_info=True)
-            flash("❌ Erreur inattendue lors de la sauvegarde", "error")
+        if not success:
+            logger.error("❌ db_exec a retourné False")
+            flash("❌ Erreur lors de la sauvegarde", "error")
+            return render_template("dashboard.html", metiers=metiers, bot=bot), 400
 
-    return render_template("dashboard.html", metiers=metiers, bot=bot)
+        logger.info("✅ Sauvegarde réussie, redirection vers preview")
+        flash("✅ Configuration sauvegardée !", "success")
+
+        # --- Redirection robuste vers /preview ---
+        target = url_for("preview")
+
+        # 1) Si c'est une requête HTMX, forcer HX-Redirect
+        if request.headers.get("HX-Request") == "true":
+            resp = make_response("", 204)
+            resp.headers["HX-Redirect"] = target
+            return resp
+
+        # 2) Redirection HTTP standard
+        resp = redirect(target, code=303)  # 303 See Other → GET /preview
+        # 3) Fallback : header Refresh + body auto-redirect (pour intercepteurs JS)
+        resp.headers["Refresh"] = f'0; url={target}'
+        resp.set_data(
+            f'<!doctype html><meta http-equiv="refresh" content="0;url={target}">'
+            f'<script>try{{window.top.location.href="{target}";}}catch(e){{location.href="{target}";}}</script>'
+        )
+        return resp
+
+    except Exception as e:
+        logger.error(f"❌ Exception sauvegarde bot : {e}", exc_info=True)
+        flash("❌ Erreur inattendue lors de la sauvegarde", "error")
+        return render_template("dashboard.html", metiers=metiers, bot=bot), 500
 
 # ---------------------------------------------------------------------
 # Routes - Preview (Page 2)
@@ -388,11 +408,40 @@ def preview():
             flash("⚠️ Configure d'abord ton bot", "warning")
             return redirect(url_for("dashboard"))
         
-        bot_data = dict(row)
-        return render_template("preview.html", bot=bot_data, cfg=bot_data)
+        bot = dict(row)
+
+        # mapping pour les templates qui attendent cfg.*
+        shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
+        metier_to_pack = {
+            "Agent Immo": "agent_immobilier",
+            "Avocate": "avocat",
+            "Médecine": "medecin",
+            "Coiffeur": "coiffeur",
+            "Coach sportif": "coach_sportif"
+        }
+        avatar_url = bot.get("avatar_url") or ""
+        if "betty_avatar2" in avatar_url:
+            avatar_key = 1
+        elif "betty_avatar3" in avatar_url:
+            avatar_key = 2
+        else:
+            avatar_key = 0
+
+        cfg = {
+            "name": bot.get("name", "Mon Betty Bot"),
+            "slug": metier_to_pack.get(bot.get("metier", ""), "agent_immobilier"),
+            "avatar_key": avatar_key,
+            "color_hex": bot.get("color_hex", "#4F46E5"),
+            "persona": bot.get("persona", "neutre"),
+            "widget_size": shape_to_size.get(bot.get("shape", "square"), "m"),
+            "greeting": bot.get("welcome_text", "Bonjour 👋")
+        }
+
+        # on passe à la fois bot (brut) et cfg (clé/valeurs attendues par le HTML)
+        return render_template("preview.html", bot=bot, cfg=cfg)
     
     except Exception as e:
-        logger.error(f"Erreur preview : {e}")
+        logger.error(f"Erreur preview : {e}", exc_info=True)
         flash("❌ Erreur lors du chargement de la prévisualisation", "error")
         return redirect(url_for("dashboard"))
 
@@ -475,7 +524,7 @@ def pay_stripe() -> Response:
         return redirect(url_for("pay"))
     
     except Exception as e:
-        logger.error(f"Erreur inattendue paiement : {e}")
+        logger.error(f"Erreur inattendue paiement : {e}", exc_info=True)
         flash("❌ Erreur inattendue lors du paiement", "error")
         return redirect(url_for("pay"))
 
@@ -588,7 +637,7 @@ def api_chat():
         return jsonify(response)
     
     except Exception as e:
-        logger.error(f"Erreur API chat : {e}")
+        logger.error(f"Erreur API chat : {e}", exc_info=True)
         return jsonify({
             "reply": "Désolé, une erreur est survenue 😔",
             "ask_lead": False,
@@ -602,13 +651,19 @@ def api_chat():
 @app.errorhandler(404)
 def not_found(e):
     """Page 404."""
-    return render_template("404.html"), 404 if Path(app.template_folder, "404.html").exists() else ("Page non trouvée", 404)
+    tpl_404 = Path(app.template_folder or "", "404.html")
+    if tpl_404.exists():
+        return render_template("404.html"), 404
+    return "Page non trouvée", 404
 
 @app.errorhandler(500)
 def server_error(e):
     """Page 500."""
-    logger.error(f"Erreur 500 : {e}")
-    return render_template("500.html"), 500 if Path(app.template_folder, "500.html").exists() else ("Erreur serveur", 500)
+    logger.error(f"Erreur 500 : {e}", exc_info=True)
+    tpl_500 = Path(app.template_folder or "", "500.html")
+    if tpl_500.exists():
+        return render_template("500.html"), 500
+    return "Erreur serveur", 500
 
 # ---------------------------------------------------------------------
 # Run local
