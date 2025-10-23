@@ -8,17 +8,14 @@
     { "src": "^/static/(.*)$", "dest": "/static/$1" },
     { "src": "^/favicon\\.ico$", "dest": "/favicon.ico" },
 
-    ## Toutes les API Flask (dont /api/chat) sont servies par app.py
     { "src": "^/api/(.*)$", "dest": "/app.py" },
 
-    ## Pages de l’app
     { "src": "^/dashboard$", "dest": "/app.py" },
     { "src": "^/preview$", "dest": "/app.py" },
     { "src": "^/pay$", "dest": "/app.py" },
     { "src": "^/confirm$", "dest": "/app.py" },
     { "src": "^/bot$", "dest": "/app.py" },
 
-    ## Catch-all
     { "src": ".*", "dest": "/app.py" }
   ]
 }
