@@ -5,7 +5,7 @@
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
-  {# ----- CONFIG (safe defaults) ----- #}
+  {# ====== CONFIG (reçue depuis app.py) ====== #}
   {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
   {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
   {% set bot_name   = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
@@ -22,55 +22,80 @@
     'coiffeur':'Coiffeur',
     'coach_sportif':'Coach sportif'
   } %}
-  {% set pack_label = pack_labels.get(pack_slug, '—') %}
+  {% set pack_label = pack_labels.get(pack_slug, pack_slug) %}
 
-  {# 3 avatars via /avatar/... #}
-  {% set avatar_key = (cfg.avatar_key if (cfg and (cfg.avatar_key is not none)) else 0) %}
-  {% if avatar_key < 0 or avatar_key > 2 %}{% set avatar_key = 0 %}{% endif %}
-  {% set avatar_choices = ['/avatar/agent_immo','/avatar/avocat','/avatar/medecin'] %}
-
-  {% if cfg and cfg.avatar_url %}
-    {% set avatar_url = cfg.avatar_url %}
-  {% else %}
-    {% set avatar_url = avatar_choices[avatar_key] %}
-  {% endif %}
+  {# Avatar final (prend ce qui vient d’app.py : /avatar/agent_immo|avocat|medecin) #}
+  {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '/avatar/agent_immo') %}
 
   <style>
-    :root{ --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb; --primary:{{ primary }}; }
+    :root{
+      --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb; --primary:{{ primary }};
+    }
     *{box-sizing:border-box}
+    html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
-    .promo{background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));border-bottom:1px solid var(--line);padding:10px 20px;text-align:center;font-size:14px;color:var(--muted)}
+
+    /* Bandeau annonce */
+    .promo{
+      background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border-bottom:1px solid var(--line);
+      padding:10px 20px; text-align:center; font-size:14px; color:var(--muted);
+    }
     .promo b{color:#fff}
+
     .row{display:flex;align-items:center;gap:14px;margin:18px 0}
     h1{margin:0;font-size:20px}
     .btnbar{display:flex;gap:10px;margin-left:auto}
-    .btn{display:inline-block;padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:#fff;text-decoration:none;font-size:13px}
+    .btn{
+      display:inline-block;padding:10px 14px;border-radius:999px;border:1px solid var(--line);
+      background:rgba(255,255,255,.08);color:#fff;text-decoration:none;font-size:13px
+    }
     .btn.primary{background:rgba(79,70,229,.2);border-color:var(--primary)}
-    .avatar{width:72px;height:72px;border:1px solid var(--line);overflow:hidden;background:#0f1012;border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};}
+
+    .avatar{
+      width:72px;height:72px;border:1px solid var(--line);overflow:hidden;background:#0f1012;
+      border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
+    }
     .avatar img{width:100%;height:100%;object-fit:cover}
-    .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 10px;border-radius:999px;color:var(--muted);font-size:12px}
+
+    .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);
+      border:1px solid var(--line);padding:4px 10px;border-radius:999px;color:var(--muted);font-size:12px}
     .chip{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--primary);border:1px solid var(--line)}
+
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
     .chat{display:flex;flex-direction:column;height:62vh;min-height:420px}
     .messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
-    .bubble{max-width:80%;padding:10px 12px;border-radius:14px;line-height:1.35;border:1px solid var(--line)}
+    .bubble{max-width:80%;padding:10px 12px;border-radius:14px;line-height:1.35;border:1px solid var(--line);white-space:pre-wrap}
     .me{align-self:flex-end;background:#1a1d24}
     .bot{align-self:flex-start;background:#101216}
     .bubble.warn{color:#ffdb6e;border-color:#3b2f0b;background:#1c1606}
+
     .toolbar{display:flex;align-items:center;gap:10px;margin:0 0 14px 0}
     .seg{display:flex;background:#0f1012;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-    .seg button{border:0;background:transparent;color:var(--muted);padding:8px 12px;font-size:12px;cursor:pointer}
+    .seg button{
+      border:0;background:transparent;color:var(--muted);padding:8px 12px;font-size:12px;cursor:pointer
+    }
     .seg button.active{background:rgba(79,70,229,.15);color:#fff}
+
     .input{display:flex;gap:8px;margin-top:10px}
-    .input input{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
-    .input button{padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
+    .input input{
+      flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);
+      background:#0f1012;color:var(--text)
+    }
+    .input button{
+      padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer
+    }
     .input button[disabled]{opacity:.6;cursor:not-allowed}
-    .small{font-size:12px;color:var(--muted)}
+
+    .small{color:var(--muted);font-size:12px;margin-top:6px}
+    .hint{color:var(--muted);font-size:13px;margin:10px 0 0 2px}
+    .kbd{display:inline-block;background:#0f1012;border:1px solid var(--line);padding:0 6px;border-radius:6px}
   </style>
 </head>
 
 <body>
+  <!-- Bandeau présentation + prix -->
   <div class="promo">
     <b>Betty</b> — votre assistante AI pour votre activité. <b>9,99 € / mois</b>, sans engagement.
   </div>
@@ -87,8 +112,8 @@
         </div>
       </div>
       <div class="btnbar">
-        <a class="btn" href="/dashboard">← Retour</a>
-        <a class="btn primary" href="/pay">Aller au paiement →</a>
+        <a class="btn" href="{{ url_for('dashboard') }}">← Retour</a>
+        <a class="btn primary" href="{{ url_for('pay') }}">Aller au paiement →</a>
       </div>
     </div>
 
@@ -109,20 +134,20 @@
           <input id="msg" placeholder="Écrivez votre message…" autocomplete="off">
           <button id="send">Envoyer</button>
         </div>
-        <div class="small" style="margin-top:6px">Conseil : écrivez quelques mots-clés (“rendez-vous demain”, “aide juridique”, “visite”, etc.).</div>
+        <div class="small">Astuce : tapez <span class="kbd">Entrée</span> pour envoyer. Exemple : “je veux un rendez-vous demain”.</div>
       </div>
     </div>
   </div>
 
   <script>
-    // --- Contexte ---
+    // -------- Contexte transmis par le serveur --------
     const USER_ID  = {{ user_id|tojson }};
     const BOT_ID   = {{ bot_id|tojson }};
     const PACK     = {{ pack_slug|tojson }};
     const PRIMARY  = {{ primary|tojson }};
     let persona    = {{ persona|tojson }};
 
-    // --- Amorce métier (premier échange) ---
+    // -------- Amorce par pack (pour guider la qualif) --------
     const LEAD_PROMPTS = {
       agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ? Sur quelle zone ?",
       avocat:           "Pouvez-vous préciser le type de dossier (famille, travail, pénal...) et l’urgence ?",
@@ -132,10 +157,11 @@
     };
     const START_GREETING = "Bonjour, je suis Betty. Pour être rappelé(e) rapidement, je prends vos coordonnées.";
 
-    // --- UI de chat ---
+    // -------- UI minimale --------
     const messagesEl = document.getElementById('messages');
     const msgInput   = document.getElementById('msg');
     const sendBtn    = document.getElementById('send');
+
     const personaSeg = document.getElementById('personaSeg');
     const personaButtons = Array.from(personaSeg.querySelectorAll('button'));
     function renderPersona(){ personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona)); }
@@ -151,10 +177,11 @@
     }
 
     function userHistory(){
+      // historique côté utilisateur (on ne renvoie pas les réponses bot)
       return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
     }
 
-    // --- Qualification LEAD (tous métiers) ---
+    // -------- Qualification LEAD (toujours active, tous métiers) --------
     const lead = { nom:"", prenom:"", telephone:"", email:"" };
     let leadStep = 0; // 0:nom,1:prenom,2:tel,3:email,4:done
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
@@ -203,7 +230,7 @@
         "bot"
       );
 
-      // ----- IMPORTANT : format attendu par ton /api/lead -----
+      // Format attendu par ton /api/lead :
       // { name, email, message, extra: { metier } }
       const payload = {
         name: `${lead.prenom} ${lead.nom}`,
@@ -229,7 +256,7 @@
       }
     }
 
-    // --- Appel API contenu/metier (conversation) ---
+    // -------- Appel API “métier” --------
     async function callChatAPI(text){
       const payload = {
         message: text,
@@ -252,7 +279,7 @@
       return { ok: res.ok && !!data, data, status: res.status };
     }
 
-    // --- Envoi d’un message ---
+    // -------- Envoi d’un message --------
     let sending = false;
     async function send(text){
       const t = (text || '').trim();
@@ -261,7 +288,7 @@
 
       addBubble(t, 'me'); msgInput.value = '';
 
-      // 1) Phase “lead” : on collecte d’abord les coordonnées
+      // 1) Phase “lead” : on capture d’abord les coordonnées
       const progressed = acceptLeadAnswer(t);
       if (progressed) {
         if (leadStep < 4) {
@@ -281,6 +308,7 @@
           addBubble('⚠️ Erreur serveur.', 'bot', 'warn');
         } else {
           addBubble(data.reply, 'bot');
+          // Si l’API reste generique, on relance la qualif métier
           if ((data.reply || '').trim().toLowerCase().startsWith('bonjour')) {
             const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
             addBubble(hint, 'bot');
@@ -296,7 +324,7 @@
     sendBtn.addEventListener('click', ()=> send(msgInput.value));
     msgInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); } });
 
-    // --- Démarrage : salutation + collecte lead + amorce métier ---
+    // -------- Démarrage : salutation + collecte lead + amorce métier --------
     (()=>{
       addBubble(START_GREETING, 'bot');
       nextLeadQuestion(); // NOM en premier
