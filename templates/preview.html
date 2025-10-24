@@ -122,7 +122,7 @@
     const PRIMARY  = {{ primary|tojson }};
     let persona    = {{ persona|tojson }};
 
-    // --- Amorce métier (pour le tout 1er échange) ---
+    // --- Amorce métier (premier échange) ---
     const LEAD_PROMPTS = {
       agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ? Sur quelle zone ?",
       avocat:           "Pouvez-vous préciser le type de dossier (famille, travail, pénal...) et l’urgence ?",
@@ -130,7 +130,7 @@
       coiffeur:         "Quel service souhaitez-vous et quand êtes-vous disponible ?",
       coach_sportif:    "Quel objectif (perte de poids, performance, remise en forme) et quels créneaux ?"
     };
-    const START_GREETING = "Bonjour, je suis Betty, votre assistante AI. Pour que l’on vous rappelle rapidement, je prends vos coordonnées.";
+    const START_GREETING = "Bonjour, je suis Betty. Pour être rappelé(e) rapidement, je prends vos coordonnées.";
 
     // --- UI de chat ---
     const messagesEl = document.getElementById('messages');
@@ -154,7 +154,7 @@
       return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
     }
 
-    // --- Qualification LEAD (toujours, tous métiers) ---
+    // --- Qualification LEAD (tous métiers) ---
     const lead = { nom:"", prenom:"", telephone:"", email:"" };
     let leadStep = 0; // 0:nom,1:prenom,2:tel,3:email,4:done
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
@@ -197,23 +197,27 @@
     async function submitLeadIfComplete(){
       if (!isLeadComplete(lead)) return;
 
-      // Récapitulatif clair
+      // Récapitulatif clair à l'écran
       addBubble(
         `Merci ${lead.prenom} ${lead.nom}. J’ai bien noté :\n- Téléphone : ${lead.telephone}\n- Email : ${lead.email}\nUn conseiller vous rappellera rapidement.`,
         "bot"
       );
 
-      // Tentative d’envoi au backend (si /api/lead existe)
+      // ----- IMPORTANT : format attendu par ton /api/lead -----
+      // { name, email, message, extra: { metier } }
+      const payload = {
+        name: `${lead.prenom} ${lead.nom}`,
+        email: lead.email,
+        message: `Lead ${PACK}\nNom: ${lead.nom}\nPrénom: ${lead.prenom}\nTéléphone: ${lead.telephone}\nEmail: ${lead.email}`,
+        extra: { metier: PACK }
+      };
+
       try{
         const res = await fetch('/api/lead', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({
-            pack: PACK, persona, color: PRIMARY,
-            bot_id: BOT_ID, user_id: USER_ID,
-            lead
-          })
+          body: JSON.stringify(payload)
         });
         if (res.ok) {
           addBubble("✅ Vos informations ont été transmises. Souhaitez-vous ajouter un message pour préciser votre besoin ?", "bot");
@@ -225,7 +229,7 @@
       }
     }
 
-    // --- Appel API contenu/metier (pour la partie “conversation”) ---
+    // --- Appel API contenu/metier (conversation) ---
     async function callChatAPI(text){
       const payload = {
         message: text,
@@ -257,7 +261,7 @@
 
       addBubble(t, 'me'); msgInput.value = '';
 
-      // 1) Si on est en phase “lead”, on capture d’abord les coordonnées
+      // 1) Phase “lead” : on collecte d’abord les coordonnées
       const progressed = acceptLeadAnswer(t);
       if (progressed) {
         if (leadStep < 4) {
@@ -265,9 +269,8 @@
           sending = false; sendBtn.disabled = false; msgInput.focus();
           return;
         } else {
-          // leadStep === 4 → on a tout
           await submitLeadIfComplete();
-          // On continue quand même la conversation en appelant l’API
+          // on continue vers l'API "métier" juste après
         }
       }
 
@@ -278,7 +281,6 @@
           addBubble('⚠️ Erreur serveur.', 'bot', 'warn');
         } else {
           addBubble(data.reply, 'bot');
-          // Si l’API ne propose rien, on relance la qualif métier
           if ((data.reply || '').trim().toLowerCase().startsWith('bonjour')) {
             const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
             addBubble(hint, 'bot');
@@ -294,10 +296,10 @@
     sendBtn.addEventListener('click', ()=> send(msgInput.value));
     msgInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); } });
 
-    // --- Démarrage : salutation + entrée directe en collecte lead + amorce métier ---
+    // --- Démarrage : salutation + collecte lead + amorce métier ---
     (()=>{
       addBubble(START_GREETING, 'bot');
-      nextLeadQuestion(); // on commence immédiatement par NOM
+      nextLeadQuestion(); // NOM en premier
       const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
       addBubble(hint, 'bot');
       msgInput.focus();
