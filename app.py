@@ -3,18 +3,17 @@ import os, sqlite3, secrets, json, logging, re
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
-from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
-    Response, send_from_directory, jsonify, g, make_response
+    Response, send_from_directory, jsonify, g
 )
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     current_user, login_required
 )
 
-# Dépendances optionnelles
+# Dépendances optionnelles pour le proxy d’images (secours)
 try:
     import requests
 except Exception:
@@ -60,6 +59,7 @@ if STRIPE_SECRET_KEY:
 else:
     logger.warning("⚠️ STRIPE_SECRET_KEY manquante — paiements désactivés en prod.")
 
+# Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "root"
@@ -103,6 +103,7 @@ def init_db():
             shape TEXT,
             persona TEXT,
             welcome_text TEXT,
+            widget_size TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
@@ -124,7 +125,7 @@ with app.app_context():
     init_db()
 
 # ---------------------------------------------------------------------
-# Utilitaires
+# Utilitaires / Normalisation
 # ---------------------------------------------------------------------
 class User(UserMixin):
     def __init__(self, id_: int, email: str):
@@ -152,12 +153,7 @@ def get_bot(user_id: int) -> Optional[sqlite3.Row]:
     return db_one("SELECT * FROM bots WHERE user_id=? LIMIT 1", (user_id,))
 
 def base_url_for_checkout() -> str:
-    """
-    Base URL pour success/cancel Stripe.
-    - si PUBLIC_BASE_URL est défini → on l'utilise
-    - sinon → dérivé de la requête courante (http://host)
-    - force http pour localhost/127.0.0.1 (sinon ERR_CONNECTION_REFUSED)
-    """
+    """Base URL pour success/cancel Stripe."""
     if PUBLIC_BASE_URL_ENV:
         base = PUBLIC_BASE_URL_ENV
     else:
@@ -167,17 +163,57 @@ def base_url_for_checkout() -> str:
         return "http://" + base.split("://", 1)[1]
     return base
 
+# --- Normalisation métier/pack/avatar ---
+DEFAULT_SLUG = "agent_immo"  # pour l'URL /avatar/...
+
+PACK_TO_INTERNAL = {
+    "agent_immobilier": "agent_immo",
+    "avocat": "avocat",
+    "medecin": "medecin",
+}
+INTERNAL_TO_PACK = {v: k for k, v in PACK_TO_INTERNAL.items()}
+LABEL_TO_INTERNAL = {
+    "agent immo": "agent_immo",
+    "agent immobilier": "agent_immo",
+    "avocate": "avocat",
+    "avocat": "avocat",
+    "médecin": "medecin",
+    "medecin": "medecin",
+    "médecine": "medecin",
+    "medecine": "medecin",
+}
+
+def normalize_metier(raw: str) -> tuple[str, str]:
+    """
+    Retourne (internal_slug, pack_slug)
+    internal_slug -> pour /avatar/<slug>   (agent_immo|avocat|medecin)
+    pack_slug     -> pour l'API/chat & affichage (agent_immobilier|avocat|medecin)
+    """
+    v = (raw or "").strip().lower()
+    if v in PACK_TO_INTERNAL:
+        internal_slug = PACK_TO_INTERNAL[v]
+        pack_slug = v
+    elif v in INTERNAL_TO_PACK:
+        internal_slug = v
+        pack_slug = INTERNAL_TO_PACK[v]
+    else:
+        internal_slug = LABEL_TO_INTERNAL.get(v, DEFAULT_SLUG)
+        pack_slug = INTERNAL_TO_PACK.get(internal_slug, "agent_immobilier")
+    return internal_slug, pack_slug
+
 # ---------------------------------------------------------------------
-# ✅ AVATARS — seule section modifiée
-#    Local d'abord (tes fichiers), proxy externe en secours, puis placeholder
+# ✅ AVATARS — local d'abord, proxy externe en secours, placeholder sinon
 # ---------------------------------------------------------------------
 EXTERNAL_AVATARS = {
     "agent_immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
     "avocat":     "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
     "medecin":    "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
 }
-DEFAULT_SLUG = "agent_immo"
-
+_LOCAL_FILES = {
+    "agent_immo": "Betty Agent immo copie.jpg",
+    "avocat":     "Betty Avocate copie.jpg",
+    "medecin":    "Betty Medecine copie.jpg",
+}
 _PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
 <svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
  <rect width="256" height="256" fill="#e5e7eb"/>
@@ -185,33 +221,19 @@ _PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
  <rect x="56" y="148" width="144" height="60" rx="14" fill="#9ca3af"/>
 </svg>"""
 
-# mapping vers TES noms de fichiers exacts (vus sur ta capture GitHub)
-_LOCAL_FILES = {
-    "agent_immo": "Betty Agent immo copie.jpg",
-    "avocat":     "Betty Avocate copie.jpg",
-    "medecin":    "Betty Medecine copie.jpg",
-}
-
 @app.get("/avatar/<slug>")
 def avatar_proxy(slug: str):
-    """
-    1) Sert le fichier local s'il existe (le plus fiable sur Vercel)
-    2) Sinon tente le proxy externe (avec UA + Referer)
-    3) Sinon renvoie un placeholder (200)
-    """
     slug = (slug or "").strip().lower()
     if slug not in _LOCAL_FILES:
         slug = DEFAULT_SLUG
 
-    # 1) Local d'abord
+    # 1) Local
     local_name = _LOCAL_FILES[slug]
     local_path = BASE_DIR / "static" / local_name
     if local_path.exists():
-        # Cache agressif côté CDN
-        resp = send_from_directory(local_path.parent, local_path.name, max_age=86400)
-        return resp
+        return send_from_directory(local_path.parent, local_path.name, max_age=86400)
 
-    # 2) Proxy externe en secours
+    # 2) Proxy externe
     url = EXTERNAL_AVATARS.get(slug, EXTERNAL_AVATARS[DEFAULT_SLUG])
     try:
         if requests:
@@ -228,7 +250,6 @@ def avatar_proxy(slug: str):
                 resp = Response(r.content, mimetype=r.headers.get("Content-Type") or "image/jpeg")
                 resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
                 return resp
-        # urllib fallback
         req = urllib.request.Request(url, headers={"User-Agent": "BettyBots/1.0", "Referer": "https://postimg.cc/"})
         with urllib.request.urlopen(req, timeout=6) as f:
             data = f.read()
@@ -238,11 +259,11 @@ def avatar_proxy(slug: str):
     except Exception:
         pass
 
-    # 3) Placeholder propre (évite l'icône d'image cassée)
+    # 3) Placeholder
     return Response(_PLACEHOLDER_SVG, mimetype="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
 
 # ---------------------------------------------------------------------
-# Routes principales (inchangées)
+# Routes
 # ---------------------------------------------------------------------
 @app.get("/")
 def root():
@@ -262,26 +283,39 @@ def dashboard():
     bot = dict(row) if row else None
 
     if request.method == "GET":
+        # --- normalisation du pack & avatar, QUELLE QUE SOIT la valeur en base
+        internal_slug, pack_slug = normalize_metier((bot or {}).get("metier") or "")
         cfg = {
             "name": (bot or {}).get("name", "Mon Betty Bot"),
             "color_hex": (bot or {}).get("color_hex", "#4F46E5"),
             "welcome_text": (bot or {}).get("welcome_text", "Bonjour 👋"),
-            "avatar_url": (bot or {}).get("avatar_url", "/avatar/agent_immo"),
+            "persona": (bot or {}).get("persona", "neutre"),
+            "shape": (bot or {}).get("shape", "rounded"),
+            "widget_size": (bot or {}).get("widget_size", "m"),
+            "slug": pack_slug,                           # pack normalisé
+            "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
+            "avatar_url": f"/avatar/{internal_slug}",    # avatar cohérent
+            "metier": (bot or {}).get("metier") or pack_slug,
         }
         return render_template("dashboard.html", bot=bot, cfg=cfg)
 
-    # POST: sauvegarde rapide
-    name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
-    metier = (request.form.get("pack_slug") or "Agent Immo").strip()
-    color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
-    welcome = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
+    # --- POST: sauvegarde (on enregistre le slug pack tel quel)
+    name       = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
+    pack_slug  = (request.form.get("pack_slug") or "agent_immobilier").strip().lower()
+    color_hex  = sanitize_color(request.form.get("color_hex") or "#4F46E5")
+    welcome    = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
+    persona    = (request.form.get("persona") or "neutre").strip()
+    widget_sz  = (request.form.get("widget_size") or "m").strip()
+    shape_map  = {"s":"circle","m":"square","l":"rounded"}
+    shape      = shape_map.get(widget_sz, "square")
 
     if bot:
-        db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=? WHERE user_id=?""",
-                (name, metier, color_hex, welcome, current_user.id))
+        db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=? WHERE user_id=?""",
+                (name, pack_slug, color_hex, welcome, persona, widget_sz, shape, current_user.id))
     else:
-        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text) VALUES(?,?,?,?,?)""",
-                (current_user.id, name, metier, color_hex, welcome))
+        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape))
 
     flash("✅ Bot sauvegardé.", "success")
     return redirect(url_for("preview"))
@@ -293,7 +327,26 @@ def preview():
     if not row:
         flash("Configure d'abord ton bot.", "warning")
         return redirect(url_for("dashboard"))
-    return render_template("preview.html", bot=dict(row))
+
+    bot = dict(row)
+    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
+    shape = bot.get("shape") or "rounded"
+    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
+
+    cfg = {
+        "name": bot.get("name", "Mon Betty Bot"),
+        "color_hex": bot.get("color_hex", "#4F46E5"),
+        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
+        "persona": bot.get("persona", "neutre"),
+        "shape": shape,
+        "widget_size": shape_to_size.get(shape, "m"),
+        "slug": pack_slug,                           # pack pour l’UI & l’API
+        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
+        "avatar_url": f"/avatar/{internal_slug}",    # avatar choisi
+        "metier": bot.get("metier") or pack_slug,
+    }
+
+    return render_template("preview.html", bot=bot, cfg=cfg)
 
 # ---------------------------- SIGNUP ---------------------------------
 @app.route("/signup", methods=["GET", "POST"])
@@ -337,8 +390,11 @@ def pay_stripe():
     base = base_url_for_checkout()
     row = get_bot(int(current_user.id))
     bot = dict(row) if row else {}
-    metier = (bot.get("metier") or "Générique").capitalize()
-    product_name = f"Abonnement mensuel Betty {metier}"
+    # libellé produit
+    _, pack_slug = normalize_metier(bot.get("metier") or "")
+    label_map = {"agent_immobilier":"Agent immobilier","avocat":"Avocat","medecin":"Médecin"}
+    metier_label = label_map.get(pack_slug, "Générique")
+    product_name = f"Abonnement mensuel Betty {metier_label}"
 
     try:
         session = stripe.checkout.Session.create(
@@ -379,24 +435,15 @@ def confirm():
         customer = checkout.get("customer")
         cust_id = getattr(customer, "id", None) if customer else (checkout.get("customer") if isinstance(checkout.get("customer"), str) else None)
 
-        # Mémorise côté user (si dispo)
         if cust_id:
             db_exec("UPDATE users SET stripe_customer_id=? WHERE id=?", (cust_id, int(current_user.id)))
         if sub_id:
             db_exec("UPDATE users SET stripe_subscription_id=? WHERE id=?", (sub_id, int(current_user.id)))
 
-        # Données pour générer le snippet dans le template
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else {}
         base = base_url_for_checkout()
-        pack_map = {
-            "Avocate": "avocat_pack",
-            "Agent Immo": "agent_immobilier_pack",
-            "Médecine": "medecine_pack",
-            "Comptable": "comptable_pack",
-            "Psychologue": "psychologue_pack",
-        }
-        pack = pack_map.get(bot.get("metier") or "", "agent_immobilier_pack")
+        _, pack_slug = normalize_metier(bot.get("metier") or "")
         welcome = bot.get("welcome_text", "Bonjour 👋")
 
         return render_template(
@@ -407,7 +454,7 @@ def confirm():
             sub_status=sub_status,
             cust_id=cust_id,
             base_url=base.rstrip("/"),
-            pack=pack,
+            pack=pack_slug,
             welcome_text=welcome
         )
     except Exception as e:
@@ -421,8 +468,27 @@ def api_chat():
     try:
         data = request.get_json(force=True) or {}
         message = (data.get("message") or "").strip().lower()
-        reply = "Bonjour 👋" if ("bonjour" in message or not message) else "Je vous écoute."
-        return jsonify({"reply": reply, "ask_lead": False})
+        pack    = (data.get("pack") or "agent_immobilier").strip().lower()
+
+        # Réponse très simple + amorce de qualif par pack (proactif)
+        lead_prompts = {
+            "agent_immobilier": "Souhaitez-vous acheter, vendre ou louer ? Quel budget et sur quelle zone ?",
+            "avocat": "Pouvez-vous préciser le type de dossier (famille, travail, pénal...), l'urgence et vos coordonnées ?",
+            "medecin": "Quel est votre motif de consultation et vos disponibilités ?",
+            "coiffeur": "Quel service souhaitez-vous et quand êtes-vous disponible ?",
+            "coach_sportif": "Quel objectif (perte de poids, performance, remise en forme) et quels créneaux ?",
+        }
+
+        if not message or "bonjour" in message:
+            return jsonify({"reply": "Bonjour 👋", "ask_lead": False})
+
+        # mini règles de démo
+        if any(k in message for k in ["rdv", "rendez", "dispo", "disponibilit"]):
+            return jsonify({"reply": "D’accord. Préférez-vous matin, après-midi ou soir ?", "ask_lead": True})
+
+        # fallback + relance qualif
+        return jsonify({"reply": lead_prompts.get(pack, "Pouvez-vous préciser votre besoin, votre budget et votre délai ?"), "ask_lead": True})
+
     except Exception:
         return jsonify({"reply": "Erreur.", "ask_lead": False}), 500
 
