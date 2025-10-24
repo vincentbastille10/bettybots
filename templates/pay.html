@@ -5,20 +5,74 @@
   <title>Paiement</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:780px;margin:40px auto;padding:0 16px}
+    :root { --primary:#4F46E5; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:980px;margin:40px auto;padding:0 16px;line-height:1.4}
+    h1{margin-bottom:.25rem}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+    @media (max-width:800px){.grid{grid-template-columns:1fr}}
+    .card{border:1px solid #e5e7eb;border-radius:14px;padding:18px}
+    label{display:block;margin:.5rem 0 .2rem}
+    input{width:100%;padding:.6rem;border:1px solid #d1d5db;border-radius:10px}
     button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
-    .primary{background:#4F46E5;color:#fff}
+    .primary{background:var(--primary);color:#fff}
+    .muted{color:#6b7280;font-size:.95rem}
+    .sep{height:1px;background:#f0f2f5;margin:16px 0}
+    .price{font-size:1.1rem}
   </style>
 </head>
 <body>
   <h1>Paiement</h1>
-  {% if not stripe_enabled %}
-    <p>Le paiement est indisponible (configure STRIPE_SECRET_KEY et STRIPE_PRICE_ID).</p>
-  {% else %}
-    <p>Abonnement : <strong>9,99 € / mois</strong></p>
-    <form method="post" action="/pay/stripe">
-      <button class="primary" type="submit">Procéder au paiement</button>
-    </form>
-  {% endif %}
+  <p class="muted">Créez votre compte puis finalisez l’abonnement.</p>
+
+  <div class="grid">
+    <!-- Colonne 1 : Sign up (affichée si non connecté) -->
+    <div class="card">
+      {% if not current_user.is_authenticated %}
+        <h2 style="margin-top:0">Créer mon compte</h2>
+        <form method="post" action="{{ url_for('signup') }}">
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <label>Prénom</label>
+          <input name="first_name" type="text" autocomplete="given-name" />
+          <label>Nom</label>
+          <input name="last_name" type="text" autocomplete="family-name" />
+          <label>Email</label>
+          <input name="email" type="email" required autocomplete="email" />
+          <label>Confirmez l’email</label>
+          <input name="email_confirm" type="email" required autocomplete="email" />
+          <div style="margin-top:1rem">
+            <button type="submit" class="primary">Créer mon compte</button>
+          </div>
+        </form>
+        <div class="sep"></div>
+        <p class="muted">Une fois inscrit, cette page se rechargera automatiquement pour finaliser le paiement.</p>
+      {% else %}
+        <h2 style="margin-top:0">Compte</h2>
+        <p class="muted">Connecté en tant que <strong>{{ current_user.email }}</strong>.</p>
+      {% endif %}
+    </div>
+
+    <!-- Colonne 2 : Paiement -->
+    <div class="card">
+      <h2 style="margin-top:0">Finaliser l’abonnement</h2>
+      {% if not stripe_enabled %}
+        <p>Le paiement est indisponible (configure <code>STRIPE_SECRET_KEY</code> et <code>STRIPE_PRICE_ID</code>).</p>
+      {% else %}
+        <p class="price">Abonnement : <strong>9,99 € / mois</strong></p>
+        <form method="post" action="/pay/stripe">
+          {% if not current_user.is_authenticated %}
+            <!-- On protège le clic paiement si l'utilisateur n'est pas encore inscrit -->
+            <button class="primary" type="submit" disabled title="Créez d’abord votre compte">
+              Procéder au paiement
+            </button>
+            <p class="muted" style="margin-top:.5rem">Veuillez d’abord créer votre compte à gauche.</p>
+          {% else %}
+            <button class="primary" type="submit">Procéder au paiement</button>
+          {% endif %}
+        </form>
+        <div class="sep"></div>
+        <p class="muted">Le paiement sécurise votre accès à Betty Bots et à votre tableau de bord.</p>
+      {% endif %}
+    </div>
+  </div>
 </body>
 </html>
