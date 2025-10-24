@@ -8,6 +8,7 @@ from typing import Optional
 from contextlib import contextmanager
 from functools import wraps
 import logging
+import re
 
 from flask import (
     Flask, render_template, request, redirect,
@@ -153,6 +154,23 @@ def db_exec(sql: str, params: tuple = ()) -> bool:
 def get_bot(user_id: int) -> Optional[sqlite3.Row]:
     return db_one("SELECT * FROM bots WHERE user_id=? LIMIT 1", (user_id,))
 
+# --- helpers utilisateurs minimalistes ---
+def get_user_by_email(email: str) -> Optional[sqlite3.Row]:
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    return db_one("SELECT * FROM users WHERE email=?", (email,))
+
+def create_user(email: str) -> Optional[int]:
+    ok = db_exec("INSERT INTO users(email) VALUES(?)", (email,))
+    if not ok:
+        return None
+    row = get_user_by_email(email)
+    return int(row["id"]) if row else None
+
+def update_user_email(user_id: int, new_email: str) -> bool:
+    return db_exec("UPDATE users SET email=? WHERE id=?", (new_email, user_id))
+
 with app.app_context():
     init_db()
 
@@ -166,6 +184,9 @@ class User(UserMixin):
         self.email = email
     def __repr__(self):
         return f"<User {self.id}: {self.email}>"
+    @property
+    def is_guest(self) -> bool:
+        return (self.email or "").endswith("@guest.local")
 
 @login_manager.user_loader
 def load_user(user_id: str):
@@ -202,6 +223,11 @@ def rate_limit(max_requests: int = 100):
             return f(*args, **kwargs)
         return wrapped
     return decorator
+
+def is_guest_user() -> bool:
+    if not current_user.is_authenticated:
+        return True
+    return (current_user.email or "").endswith("@guest.local")
 
 # ---------------------------------------------------------------------
 # Avatars fournis (liens originaux Postimg) + mapping slug
@@ -464,6 +490,62 @@ def preview():
         return redirect(url_for("dashboard"))
 
 # ---------------------------------------------------------------------
+# Inscription (Sign up) — conversion guest -> compte + redirection /pay
+# ---------------------------------------------------------------------
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "GET":
+        # Le template lit ?next= et le met dans l'input hidden
+        return render_template("signup.html")
+
+    # POST
+    email      = (request.form.get("email") or "").strip().lower()
+    email2     = (request.form.get("email_confirm") or "").strip().lower()
+    next_url   = request.form.get("next") or request.args.get("next") or url_for("pay")
+
+    if not email or email != email2:
+        flash("Les emails ne correspondent pas.", "warning")
+        return redirect(url_for("signup", next=next_url))
+
+    if not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
+        flash("Email invalide.", "warning")
+        return redirect(url_for("signup", next=next_url))
+
+    try:
+        existing = get_user_by_email(email)
+        if existing:
+            # l'utilisateur existe déjà → on le connecte
+            login_user(User(existing["id"], existing["email"]), remember=True)
+            flash("Connexion réussie.", "success")
+            return redirect(next_url)
+
+        # conversion d'un invité connecté
+        if current_user.is_authenticated and current_user.is_guest:
+            if not update_user_email(int(current_user.id), email):
+                flash("Impossible de convertir le compte invité.", "danger")
+                return redirect(url_for("signup", next=next_url))
+            # recharge user en session avec le nouvel email
+            login_user(User(int(current_user.id), email), remember=True)
+            flash("Compte converti. Vous pouvez procéder au paiement.", "success")
+            return redirect(next_url)
+
+        # création d’un nouveau compte
+        new_id = create_user(email)
+        if not new_id:
+            flash("Création du compte impossible.", "danger")
+            return redirect(url_for("signup", next=next_url))
+
+        login_user(User(new_id, email), remember=True)
+        flash("Compte créé. Vous pouvez procéder au paiement.", "success")
+        return redirect(next_url)
+
+    except Exception as e:
+        logger.error(f"Erreur signup : {e}", exc_info=True)
+        flash("Erreur lors de l'inscription.", "danger")
+        return redirect(url_for("signup", next=next_url))
+
+# ---------------------------------------------------------------------
 # Paiement (Page 3)
 # ---------------------------------------------------------------------
 
@@ -480,6 +562,11 @@ def pay():
 @app.post("/pay/stripe")
 @login_required
 def pay_stripe() -> Response:
+    # 🔒 bloque le paiement pour un compte invité
+    if is_guest_user():
+        flash("Créez d’abord votre compte avec un email valide pour payer.", "warning")
+        return redirect(url_for("pay"))
+
     if not STRIPE_SECRET_KEY:
         flash("❌ Paiement indisponible pour le moment", "error")
         return redirect(url_for("pay"))
