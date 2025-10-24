@@ -68,7 +68,7 @@
     <div class="card">
       <h2 style="margin-top:0">Finaliser l’abonnement</h2>
       {% if not stripe_enabled %}
-        <p>Le paiement est indisponible (configure <code>STRIPE_SECRET_KEY</code> et <code>STRIPE_PRICE_ID</code>).</p>
+        <p>Le paiement est indisponible (configure <code>STRIPE_SECRET_KEY</code>).</p>
       {% else %}
         <p class="price">Abonnement : <strong>9,99 € / mois</strong></p>
         {% set lock = (not current_user.is_authenticated) or is_guest %}
