@@ -1,19 +1,49 @@
 @app.post("/api/lead")
+@login_required
 def api_lead():
-    data = request.get_json(force=True)
-    name = data.get("name")
-    email = data.get("email")
-    message = data.get("message", "")
-    metier = (data.get("extra", {}) or {}).get("metier", "inconnu")
+    """
+    Attend un JSON de la forme :
+    {
+      "name": "Prénom NOM",
+      "email": "lead@example.com",
+      "message": "récap avec téléphone etc.",
+      "extra": { "metier": "<slug pack>" }
+    }
+    → Enregistre en DB et envoie un mail au propriétaire (current_user.email).
+    """
+    try:
+        data = request.get_json(force=True) or {}
+        name    = (data.get("name") or "").strip()
+        email   = (data.get("email") or "").strip()
+        message = (data.get("message") or "").strip()
+        metier  = ((data.get("extra") or {}).get("metier") or "inconnu").strip()
 
-    # Stocke en DB (ou envoie par email)
-    db_exec(
-        "INSERT INTO leads (name, email, message, metier) VALUES (?, ?, ?, ?)",
-        (name, email, message, metier)
-    )
+        # 1) Stocke en DB
+        db_exec(
+            "INSERT INTO leads (name, email, message, metier) VALUES (?, ?, ?, ?)",
+            (name, email, message, metier)
+        )
 
-    # ⚠️ à faire une fois : crée la table si pas déjà présente
-    # CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY, name TEXT, email TEXT, message TEXT, metier TEXT);
+        # 2) Envoie un mail au propriétaire (email du compte connecté)
+        owner_email = getattr(current_user, "email", None)
+        if not owner_email:
+            logger.warning("Aucun owner_email (utilisateur non connecté ?)")
+            return jsonify({"status": "saved", "emailed": False}), 200
 
-    # Ici tu pourrais envoyer un mail à l’adresse du user connecté
-    return jsonify({"status": "saved"})
+        subject = f"Nouveau lead — {metier} — {name or 'inconnu'}"
+        body = (
+            "Vous avez reçu un nouveau lead depuis votre bot Betty.\n\n"
+            f"Métier (pack) : {metier}\n"
+            f"Nom complet   : {name}\n"
+            f"Email lead    : {email}\n"
+            f"Message       :\n{message}\n\n"
+            "---\n"
+            "Vous pouvez répondre directement à ce message pour recontacter le prospect."
+        )
+
+        mailed = send_mail(owner_email, subject, body)
+        return jsonify({"status": "saved", "emailed": bool(mailed)}), 200
+
+    except Exception as e:
+        logger.error(f"/api/lead error: {e}", exc_info=True)
+        return jsonify({"status": "error"}), 500
