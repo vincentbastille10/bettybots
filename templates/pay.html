@@ -6,28 +6,37 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root { --primary:#4F46E5; }
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:980px;margin:40px auto;padding:0 16px;line-height:1.4}
-    h1{margin-bottom:.25rem}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}
-    @media (max-width:800px){.grid{grid-template-columns:1fr}}
-    .card{border:1px solid #e5e7eb;border-radius:14px;padding:18px}
-    label{display:block;margin:.5rem 0 .2rem}
-    input{width:100%;padding:.6rem;border:1px solid #d1d5db;border-radius:10px}
-    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
-    .primary{background:var(--primary);color:#fff}
-    .muted{color:#6b7280;font-size:.95rem}
-    .sep{height:1px;background:#f0f2f5;margin:16px 0}
-    .price{font-size:1.1rem}
+    body {
+      font-family: system-ui,-apple-system,Segoe UI,Roboto;
+      max-width: 980px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.4;
+    }
+    h1 { margin-bottom:.25rem }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:28px }
+    @media (max-width:800px){ .grid{ grid-template-columns:1fr } }
+    .card { border:1px solid #e5e7eb; border-radius:14px; padding:18px }
+    label { display:block; margin:.5rem 0 .2rem }
+    input {
+      width:100%; padding:.6rem; border:1px solid #d1d5db; border-radius:10px;
+    }
+    button { padding:10px 16px; border:0; border-radius:10px; cursor:pointer }
+    .primary { background:var(--primary); color:#fff }
+    .muted { color:#6b7280; font-size:.95rem }
+    .sep { height:1px; background:#f0f2f5; margin:16px 0 }
+    .price { font-size:1.1rem }
   </style>
 </head>
 <body>
   <h1>Paiement</h1>
-  <p class="muted">Créez votre compte puis finalisez l’abonnement.</p>
+  <p class="muted">Créez votre compte pour activer et sauvegarder votre bot.</p>
 
   <div class="grid">
-    <!-- Colonne 1 : Sign up (affichée si non connecté) -->
+    <!-- Colonne 1 : Compte / Sign up -->
     <div class="card">
-      {% if not current_user.is_authenticated %}
+      {% set is_guest = (current_user.is_authenticated and current_user.email and current_user.email.endswith('@guest.local')) %}
+      {% if not current_user.is_authenticated or is_guest %}
         <h2 style="margin-top:0">Créer mon compte</h2>
         <form method="post" action="{{ url_for('signup') }}">
           <input type="hidden" name="next" value="{{ request.path }}">
@@ -44,7 +53,14 @@
           </div>
         </form>
         <div class="sep"></div>
-        <p class="muted">Une fois inscrit, cette page se rechargera automatiquement pour finaliser le paiement.</p>
+        <p class="muted">
+          {% if is_guest %}
+            Vous êtes connecté en invité (<strong>{{ current_user.email }}</strong>).<br>
+            Créez votre compte pour activer le paiement.
+          {% else %}
+            Une fois inscrit, cette page se rechargera automatiquement pour finaliser le paiement.
+          {% endif %}
+        </p>
       {% else %}
         <h2 style="margin-top:0">Compte</h2>
         <p class="muted">Connecté en tant que <strong>{{ current_user.email }}</strong>.</p>
@@ -58,16 +74,11 @@
         <p>Le paiement est indisponible (configure <code>STRIPE_SECRET_KEY</code> et <code>STRIPE_PRICE_ID</code>).</p>
       {% else %}
         <p class="price">Abonnement : <strong>9,99 € / mois</strong></p>
+        {% set lock = (not current_user.is_authenticated) or is_guest %}
         <form method="post" action="/pay/stripe">
-          {% if not current_user.is_authenticated %}
-            <!-- On protège le clic paiement si l'utilisateur n'est pas encore inscrit -->
-            <button class="primary" type="submit" disabled title="Créez d’abord votre compte">
-              Procéder au paiement
-            </button>
-            <p class="muted" style="margin-top:.5rem">Veuillez d’abord créer votre compte à gauche.</p>
-          {% else %}
-            <button class="primary" type="submit">Procéder au paiement</button>
-          {% endif %}
+          <button class="primary" type="submit" {% if lock %}disabled title="Créez d’abord votre compte"{% endif %}>
+            Procéder au paiement
+          </button>
         </form>
         <div class="sep"></div>
         <p class="muted">Le paiement sécurise votre accès à Betty Bots et à votre tableau de bord.</p>
