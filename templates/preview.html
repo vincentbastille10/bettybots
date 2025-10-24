@@ -24,7 +24,7 @@
   } %}
   {% set pack_label = pack_labels.get(pack_slug, '—') %}
 
-  {# 3 avatars disponibles via la route /avatar/... #}
+  {# 3 avatars via /avatar/... #}
   {% set avatar_key = (cfg.avatar_key if (cfg and (cfg.avatar_key is not none)) else 0) %}
   {% if avatar_key < 0 or avatar_key > 2 %}{% set avatar_key = 0 %}{% endif %}
   {% set avatar_choices = ['/avatar/agent_immo','/avatar/avocat','/avatar/medecin'] %}
@@ -66,6 +66,7 @@
     .input input{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
     .input button{padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
     .input button[disabled]{opacity:.6;cursor:not-allowed}
+    .small{font-size:12px;color:var(--muted)}
   </style>
 </head>
 
@@ -108,18 +109,20 @@
           <input id="msg" placeholder="Écrivez votre message…" autocomplete="off">
           <button id="send">Envoyer</button>
         </div>
+        <div class="small" style="margin-top:6px">Conseil : écrivez quelques mots-clés (“rendez-vous demain”, “aide juridique”, “visite”, etc.).</div>
       </div>
     </div>
   </div>
 
   <script>
+    // --- Contexte ---
     const USER_ID  = {{ user_id|tojson }};
     const BOT_ID   = {{ bot_id|tojson }};
     const PACK     = {{ pack_slug|tojson }};
     const PRIMARY  = {{ primary|tojson }};
     let persona    = {{ persona|tojson }};
 
-    // Suggestions initiales selon le métier choisi
+    // --- Amorce métier (pour le tout 1er échange) ---
     const LEAD_PROMPTS = {
       agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ? Sur quelle zone ?",
       avocat:           "Pouvez-vous préciser le type de dossier (famille, travail, pénal...) et l’urgence ?",
@@ -127,15 +130,14 @@
       coiffeur:         "Quel service souhaitez-vous et quand êtes-vous disponible ?",
       coach_sportif:    "Quel objectif (perte de poids, performance, remise en forme) et quels créneaux ?"
     };
+    const START_GREETING = "Bonjour, je suis Betty, votre assistante AI. Pour que l’on vous rappelle rapidement, je prends vos coordonnées.";
 
-    const START_GREETING = "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?";
-
+    // --- UI de chat ---
     const messagesEl = document.getElementById('messages');
     const msgInput   = document.getElementById('msg');
     const sendBtn    = document.getElementById('send');
     const personaSeg = document.getElementById('personaSeg');
     const personaButtons = Array.from(personaSeg.querySelectorAll('button'));
-
     function renderPersona(){ personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona)); }
     personaButtons.forEach(b=> b.addEventListener('click', ()=>{ persona=b.dataset.val; renderPersona(); }));
     renderPersona();
@@ -152,6 +154,78 @@
       return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
     }
 
+    // --- Qualification LEAD (toujours, tous métiers) ---
+    const lead = { nom:"", prenom:"", telephone:"", email:"" };
+    let leadStep = 0; // 0:nom,1:prenom,2:tel,3:email,4:done
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+
+    function isLeadComplete(l){ return l.nom && l.prenom && l.telephone && l.email; }
+
+    function nextLeadQuestion(){
+      if (leadStep === 0) { addBubble("Quel est votre NOM ?", "bot"); return; }
+      if (leadStep === 1) { addBubble("Et votre PRÉNOM ?", "bot"); return; }
+      if (leadStep === 2) { addBubble("Votre TÉLÉPHONE (mobile de préférence) ?", "bot"); return; }
+      if (leadStep === 3) { addBubble("Enfin, votre ADRESSE EMAIL ?", "bot"); return; }
+    }
+
+    function acceptLeadAnswer(text){
+      const t = (text || "").trim();
+      if (!t) return false;
+
+      if (leadStep === 0) {
+        lead.nom = t.toUpperCase();
+        leadStep = 1; return true;
+      }
+      if (leadStep === 1) {
+        lead.prenom = t.charAt(0).toUpperCase() + t.slice(1);
+        leadStep = 2; return true;
+      }
+      if (leadStep === 2) {
+        const digits = t.replace(/[^\d+]/g,"");
+        if (digits.length < 8) { addBubble("Le numéro semble trop court. Pouvez-vous le vérifier ?", "bot", "warn"); return true; }
+        lead.telephone = digits;
+        leadStep = 3; return true;
+      }
+      if (leadStep === 3) {
+        if (!emailRe.test(t)) { addBubble("L’email ne semble pas valide. Pouvez-vous le retaper ?", "bot", "warn"); return true; }
+        lead.email = t;
+        leadStep = 4; return true;
+      }
+      return false;
+    }
+
+    async function submitLeadIfComplete(){
+      if (!isLeadComplete(lead)) return;
+
+      // Récapitulatif clair
+      addBubble(
+        `Merci ${lead.prenom} ${lead.nom}. J’ai bien noté :\n- Téléphone : ${lead.telephone}\n- Email : ${lead.email}\nUn conseiller vous rappellera rapidement.`,
+        "bot"
+      );
+
+      // Tentative d’envoi au backend (si /api/lead existe)
+      try{
+        const res = await fetch('/api/lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            pack: PACK, persona, color: PRIMARY,
+            bot_id: BOT_ID, user_id: USER_ID,
+            lead
+          })
+        });
+        if (res.ok) {
+          addBubble("✅ Vos informations ont été transmises. Souhaitez-vous ajouter un message pour préciser votre besoin ?", "bot");
+        } else {
+          addBubble("ℹ️ J’ai noté vos informations. (Si l’envoi échoue, elles restent visibles ici.)", "bot");
+        }
+      } catch {
+        addBubble("ℹ️ J’ai noté vos informations. (Envoi temporairement indisponible.)", "bot");
+      }
+    }
+
+    // --- Appel API contenu/metier (pour la partie “conversation”) ---
     async function callChatAPI(text){
       const payload = {
         message: text,
@@ -174,6 +248,7 @@
       return { ok: res.ok && !!data, data, status: res.status };
     }
 
+    // --- Envoi d’un message ---
     let sending = false;
     async function send(text){
       const t = (text || '').trim();
@@ -182,12 +257,28 @@
 
       addBubble(t, 'me'); msgInput.value = '';
 
+      // 1) Si on est en phase “lead”, on capture d’abord les coordonnées
+      const progressed = acceptLeadAnswer(t);
+      if (progressed) {
+        if (leadStep < 4) {
+          nextLeadQuestion();
+          sending = false; sendBtn.disabled = false; msgInput.focus();
+          return;
+        } else {
+          // leadStep === 4 → on a tout
+          await submitLeadIfComplete();
+          // On continue quand même la conversation en appelant l’API
+        }
+      }
+
+      // 2) Conversation “métier” (API)
       try{
         const { ok, data } = await callChatAPI(t);
         if (!ok || !data || typeof data.reply !== 'string') {
           addBubble('⚠️ Erreur serveur.', 'bot', 'warn');
         } else {
           addBubble(data.reply, 'bot');
+          // Si l’API ne propose rien, on relance la qualif métier
           if ((data.reply || '').trim().toLowerCase().startsWith('bonjour')) {
             const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
             addBubble(hint, 'bot');
@@ -203,8 +294,10 @@
     sendBtn.addEventListener('click', ()=> send(msgInput.value));
     msgInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); } });
 
+    // --- Démarrage : salutation + entrée directe en collecte lead + amorce métier ---
     (()=>{
       addBubble(START_GREETING, 'bot');
+      nextLeadQuestion(); // on commence immédiatement par NOM
       const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
       addBubble(hint, 'bot');
       msgInput.focus();
