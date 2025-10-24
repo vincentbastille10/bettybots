@@ -8,56 +8,50 @@
   {# ----- CONFIG (safe defaults) ----- #}
   {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
   {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
-  {% set metier     = (cfg.metier if (cfg and cfg.metier) else '—') %}
   {% set bot_name   = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
   {% set pack_slug  = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilier') %}
+  {% set persona    = (cfg.persona if (cfg and cfg.persona) else 'neutre') %}
   {% set user_id    = (current_user.get_id() if current_user.is_authenticated else None) %}
   {% set bot_id     = (bot.get('id') if bot else None) %}
-  {% set persona    = (cfg.persona if (cfg and cfg.persona) else 'neutre') %}
 
-  {# 3 avatars prédéfinis #}
-  {% set avatars = [
-      url_for('static', filename='img/betty_avatar1.png'),
-      url_for('static', filename='img/betty_avatar2.png'),
-      url_for('static', filename='img/betty_avatar3.png')
-  ] %}
+  {# Libellé lisible du pack pour l’UI #}
+  {% set pack_labels = {
+    'agent_immobilier':'Agent immobilier',
+    'avocat':'Avocat',
+    'medecin':'Médecin',
+    'coiffeur':'Coiffeur',
+    'coach_sportif':'Coach sportif'
+  } %}
+  {% set pack_label = pack_labels.get(pack_slug, '—') %}
+
+  {# 3 avatars disponibles via la route /avatar/... #}
   {% set avatar_key = (cfg.avatar_key if (cfg and (cfg.avatar_key is not none)) else 0) %}
   {% if avatar_key < 0 or avatar_key > 2 %}{% set avatar_key = 0 %}{% endif %}
-  {% set avatar_url = avatars[avatar_key] %}
+  {% set avatar_choices = ['/avatar/agent_immo','/avatar/avocat','/avatar/medecin'] %}
+
+  {# Si le backend a déjà calculé un avatar_url, on le préfère #}
+  {% if cfg and cfg.avatar_url %}
+    {% set avatar_url = cfg.avatar_url %}
+  {% else %}
+    {% set avatar_url = avatar_choices[avatar_key] %}
+  {% endif %}
 
   <style>
-    :root{
-      --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb;
-      --primary:{{ primary }};
-    }
+    :root{ --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb; --primary:{{ primary }}; }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
-
-    /* Bandeau annonce */
-    .promo{
-      background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));
-      border-bottom:1px solid var(--line);
-      padding:10px 20px; text-align:center; font-size:14px; color:var(--muted);
-    }
+    .promo{background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));border-bottom:1px solid var(--line);padding:10px 20px;text-align:center;font-size:14px;color:var(--muted)}
     .promo b{color:#fff}
-
     .row{display:flex;align-items:center;gap:14px;margin:18px 0}
     h1{margin:0;font-size:20px}
     .btnbar{display:flex;gap:10px;margin-left:auto}
-    .btn{
-      display:inline-block;padding:10px 14px;border-radius:999px;border:1px solid var(--line);
-      background:rgba(255,255,255,.08);color:#fff;text-decoration:none;font-size:13px
-    }
+    .btn{display:inline-block;padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:#fff;text-decoration:none;font-size:13px}
     .btn.primary{background:rgba(79,70,229,.2);border-color:var(--primary)}
-    .avatar{
-      width:72px;height:72px;border:1px solid var(--line);overflow:hidden;background:#0f1012;
-      border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
-    }
+    .avatar{width:72px;height:72px;border:1px solid var(--line);overflow:hidden;background:#0f1012;border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};}
     .avatar img{width:100%;height:100%;object-fit:cover}
     .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);padding:4px 10px;border-radius:999px;color:var(--muted);font-size:12px}
     .chip{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--primary);border:1px solid var(--line)}
-
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
     .chat{display:flex;flex-direction:column;height:62vh;min-height:420px}
     .messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
@@ -65,28 +59,18 @@
     .me{align-self:flex-end;background:#1a1d24}
     .bot{align-self:flex-start;background:#101216}
     .bubble.warn{color:#ffdb6e;border-color:#3b2f0b;background:#1c1606}
-
     .toolbar{display:flex;align-items:center;gap:10px;margin:0 0 14px 0}
     .seg{display:flex;background:#0f1012;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-    .seg button{
-      border:0;background:transparent;color:var(--muted);padding:8px 12px;font-size:12px;cursor:pointer
-    }
+    .seg button{border:0;background:transparent;color:var(--muted);padding:8px 12px;font-size:12px;cursor:pointer}
     .seg button.active{background:rgba(79,70,229,.15);color:#fff}
-
     .input{display:flex;gap:8px;margin-top:10px}
-    .input input{
-      flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);
-      background:#0f1012;color:var(--text)
-    }
-    .input button{
-      padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer
-    }
+    .input input{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#0f1012;color:var(--text)}
+    .input button{padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer}
     .input button[disabled]{opacity:.6;cursor:not-allowed}
   </style>
 </head>
 
 <body>
-  <!-- Bandeau présentation + prix -->
   <div class="promo">
     <b>Betty</b> — votre assistante AI pour votre activité. <b>9,99 € / mois</b>, sans engagement.
   </div>
@@ -97,7 +81,7 @@
       <div>
         <h1>{{ bot_name }}</h1>
         <div class="badge">
-          <span>Pack : {{ metier }}</span>
+          <span>Pack : {{ pack_label }}</span>
           <span class="chip" title="{{ primary }}"></span>
           <span>{{ primary }}</span>
         </div>
@@ -130,27 +114,33 @@
   </div>
 
   <script>
+    // --- Contexte envoyé à l'API ---
     const USER_ID  = {{ user_id|tojson }};
     const BOT_ID   = {{ bot_id|tojson }};
-    const PACK     = {{ pack_slug|tojson }};
-    const AVATAR   = {{ avatar_key|tojson }};
+    const PACK     = {{ pack_slug|tojson }};      // ex: "agent_immobilier"
     const PRIMARY  = {{ primary|tojson }};
-    const START_GREETING = "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?";
-    let persona = {{ persona|tojson }};
+    let persona    = {{ persona|tojson }};
 
+    // Prompts d'amorce (force de proposition) par pack
+    const LEAD_PROMPTS = {
+      agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ? Quel budget et sur quelle zone ?",
+      avocat:           "Pouvez-vous préciser le type de dossier (famille, travail, pénal...), l'urgence et vos coordonnées ?",
+      medecin:          "Quel est votre motif de consultation et vos disponibilités ?",
+      coiffeur:         "Quel service souhaitez-vous et quand êtes-vous disponible ?",
+      coach_sportif:    "Quel objectif (perte de poids, performance, remise en forme) et quels créneaux ?"
+    };
+
+    const START_GREETING = "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous ?";
+
+    // --- UI ---
     const messagesEl = document.getElementById('messages');
     const msgInput   = document.getElementById('msg');
     const sendBtn    = document.getElementById('send');
 
-    // Personnalités (toggle UI)
     const personaSeg = document.getElementById('personaSeg');
     const personaButtons = Array.from(personaSeg.querySelectorAll('button'));
-    function renderPersona(){
-      personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona));
-    }
-    personaButtons.forEach(b=>{
-      b.addEventListener('click', ()=>{ persona = b.dataset.val; renderPersona(); });
-    });
+    function renderPersona(){ personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona)); }
+    personaButtons.forEach(b=> b.addEventListener('click', ()=>{ persona=b.dataset.val; renderPersona(); }));
     renderPersona();
 
     function addBubble(text, who, cls){
@@ -168,11 +158,10 @@
     async function callChatAPI(text){
       const payload = {
         message: text,
-        pack: PACK,
         history: userHistory(),
+        pack: PACK,
         persona,
         color: PRIMARY,
-        avatar_key: AVATAR,
         bot_id: BOT_ID,
         user_id: USER_ID
       };
@@ -182,11 +171,8 @@
         credentials: 'same-origin',
         body: JSON.stringify(payload)
       });
-
       const ctype = (res.headers.get('content-type')||'').toLowerCase();
-      if (!ctype.includes('application/json')) {
-        return { ok:false, data:null, status:res.status };
-      }
+      if (!ctype.includes('application/json')) return { ok:false, data:null, status:res.status };
       const data = await res.json().catch(()=>null);
       return { ok: res.ok && !!data, data, status: res.status };
     }
@@ -205,6 +191,12 @@
           addBubble('⚠️ Erreur serveur.', 'bot', 'warn');
         } else {
           addBubble(data.reply, 'bot');
+
+          // Si la réponse est un simple "Bonjour", pousser la qualification
+          if ((data.reply || '').trim().toLowerCase().startsWith('bonjour')) {
+            const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin, votre budget et votre délai ?";
+            addBubble(hint, 'bot');
+          }
         }
       } catch {
         addBubble('⚠️ Impossible de joindre le serveur.', 'bot', 'warn');
@@ -214,13 +206,13 @@
     }
 
     sendBtn.addEventListener('click', ()=> send(msgInput.value));
-    msgInput.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); }
-    });
+    msgInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); } });
 
-    // Message d’accueil imposé (pas d’appel API à vide)
+    // Message d’accueil + amorce de qualif (pack)
     (()=>{
       addBubble(START_GREETING, 'bot');
+      const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin, votre budget et votre délai ?";
+      addBubble(hint, 'bot');
       msgInput.focus();
     })();
   </script>
