@@ -1,5 +1,6 @@
 from __future__ import annotations
-import os, sqlite3, secrets, json, logging, re
+import os, sqlite3, secrets, json, logging, re, smtplib
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
@@ -59,6 +60,37 @@ if STRIPE_SECRET_KEY:
 else:
     logger.warning("⚠️ STRIPE_SECRET_KEY manquante — paiements désactivés en prod.")
 
+# Email SMTP (simple)
+SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "1025"))  # pratique avec MailHog/Mailpit en dev
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+SMTP_FROM = os.getenv("SMTP_FROM", "no-reply@bettybots.local")
+SMTP_TLS  = os.getenv("SMTP_TLS", "0") in ("1", "true", "True", "yes", "on")
+
+def send_mail(to_email: str, subject: str, body: str) -> bool:
+    """Envoie un email texte simple via SMTP_* (env). Retourne True si OK."""
+    try:
+        if not to_email:
+            logger.warning("send_mail: destinataire vide")
+            return False
+        msg = EmailMessage()
+        msg["From"] = SMTP_FROM
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.set_content(body)
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as s:
+            if SMTP_TLS:
+                s.starttls()
+            if SMTP_USER and SMTP_PASS:
+                s.login(SMTP_USER, SMTP_PASS)
+            s.send_message(msg)
+        return True
+    except Exception as e:
+        logger.error(f"Email send error: {e}", exc_info=True)
+        return False
+
 # Login
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -106,6 +138,14 @@ def init_db():
             widget_size TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT,
+            message TEXT,
+            metier TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
         conn.commit()
@@ -491,6 +531,58 @@ def api_chat():
 
     except Exception:
         return jsonify({"reply": "Erreur.", "ask_lead": False}), 500
+
+# ----------- API LEAD : enregistrement + email au propriétaire --------
+@app.post("/api/lead")
+@login_required
+def api_lead():
+    """
+    Attend un JSON :
+    {
+      "name": "Prénom NOM",
+      "email": "lead@example.com",
+      "message": "récap avec téléphone etc.",
+      "extra": { "metier": "<slug pack>" }
+    }
+    → Enregistre en DB et envoie un mail au propriétaire (current_user.email).
+    """
+    try:
+        data = request.get_json(force=True) or {}
+        name    = (data.get("name") or "").strip()
+        email   = (data.get("email") or "").strip()
+        message = (data.get("message") or "").strip()
+        metier  = ((data.get("extra") or {}).get("metier") or "inconnu").strip()
+
+        # 1) Stocke en DB
+        db_exec(
+            "INSERT INTO leads (name, email, message, metier) VALUES (?, ?, ?, ?)",
+            (name, email, message, metier)
+        )
+
+        # 2) Envoie un mail au propriétaire (email du compte connecté)
+        owner_email = getattr(current_user, "email", None)
+        subject = f"Nouveau lead — {metier} — {name or 'inconnu'}"
+        body = (
+            "Vous avez reçu un nouveau lead depuis votre bot Betty.\n\n"
+            f"Métier (pack) : {metier}\n"
+            f"Nom complet   : {name}\n"
+            f"Email lead    : {email}\n"
+            f"Message       :\n{message}\n\n"
+            "---\n"
+            "Vous pouvez répondre directement à ce message pour recontacter le prospect."
+        )
+
+        emailed = False
+        if owner_email:
+            emailed = send_mail(owner_email, subject, body)
+        else:
+            logger.warning("Aucun owner_email (utilisateur non connecté ?)")
+
+        return jsonify({"status": "saved", "emailed": bool(emailed)}), 200
+
+    except Exception as e:
+        logger.error(f"/api/lead error: {e}", exc_info=True)
+        return jsonify({"status": "error"}), 500
 
 # ----------------------------- Divers --------------------------------
 @app.get("/favicon.ico")
