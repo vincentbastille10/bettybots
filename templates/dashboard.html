@@ -14,11 +14,11 @@
   {% set pack_slug    = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilier') %}
   {% set greeting     = (cfg.greeting if (cfg and cfg.greeting) else 'Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous aujourd’hui ?') %}
 
-  {# 3 avatars proposés (pas d’URL libre) #}
+  {# 3 avatars proposés → utilisent la route /avatar/... #}
   {% set avatars = [
-      url_for('static', filename='img/betty_avatar1.png'),
-      url_for('static', filename='img/betty_avatar2.png'),
-      url_for('static', filename='img/betty_avatar3.png')
+      '/avatar/agent_immo',
+      '/avatar/avocat',
+      '/avatar/medecin'
   ] %}
 
   {# 6 couleurs principales autorisées #}
