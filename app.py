@@ -21,8 +21,8 @@ from flask_login import (
 
 # --- réseau pour proxy images
 try:
-    import requests
-except Exception:
+    import requests  # Render l’a en général
+except Exception:  # fallback sans requests
     requests = None
 import urllib.request
 
@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 
 def pick_db_path() -> Path:
+    """Sur Vercel (serverless), écrire dans /tmp. Local: fichier dans le projet."""
     if os.getenv("DB_PATH"):
         return Path(os.getenv("DB_PATH"))
     if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
@@ -48,11 +49,11 @@ def pick_db_path() -> Path:
 
 DB_PATH = pick_db_path()
 
-# Flask
+# Configuration Flask
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
 
-# Stripe
+# Stripe - Validation robuste
 def get_env_int(key: str, default: int) -> int:
     try:
         return int(os.getenv(key, str(default)))
@@ -76,7 +77,7 @@ login_manager.init_app(app)
 login_manager.login_view = "root"
 
 # ---------------------------------------------------------------------
-# DB
+# Gestion DB thread-safe avec context manager
 # ---------------------------------------------------------------------
 
 @contextmanager
@@ -155,7 +156,7 @@ def db_exec(sql: str, params: tuple = ()) -> bool:
 def get_bot(user_id: int) -> Optional[sqlite3.Row]:
     return db_one("SELECT * FROM bots WHERE user_id=? LIMIT 1", (user_id,))
 
-# helpers users
+# --- helpers utilisateurs minimalistes ---
 def get_user_by_email(email: str) -> Optional[sqlite3.Row]:
     email = (email or "").strip().lower()
     if not email:
@@ -176,7 +177,7 @@ with app.app_context():
     init_db()
 
 # ---------------------------------------------------------------------
-# User model
+# Modèle utilisateur
 # ---------------------------------------------------------------------
 
 class User(UserMixin):
@@ -200,7 +201,7 @@ def load_user(user_id: str):
     return None
 
 # ---------------------------------------------------------------------
-# Utils
+# Utilitaires
 # ---------------------------------------------------------------------
 
 def sanitize_color(color: str) -> str:
@@ -230,8 +231,18 @@ def is_guest_user() -> bool:
         return True
     return (current_user.email or "").endswith("@guest.local")
 
+def get_checkout_base_url() -> str:
+    """Force http pour localhost / 127.0.0.1 afin d'éviter ERR_CONNECTION_REFUSED."""
+    base = (PUBLIC_BASE_URL or "").strip()
+    if not base:
+        return "http://localhost:5000"
+    low = base.lower()
+    if low.startswith("https://localhost") or low.startswith("https://127.0.0.1"):
+        return "http://" + base.split("://", 1)[1]   # → http://localhost:5000
+    return base
+
 # ---------------------------------------------------------------------
-# Avatars & mapping
+# Avatars fournis + mapping
 # ---------------------------------------------------------------------
 
 EXTERNAL_AVATARS = {
@@ -244,16 +255,17 @@ METIER_TO_SLUG = {
     "Agent Immo": "agent_immo",
     "Avocate": "avocat",
     "Médecine": "medecin",
-    "Comptable": "agent_immo",
+    "Comptable": "agent_immo",   # fallback
     "Psychologue": "agent_immo",
     "Coiffeur": "agent_immo",
     "Coach sportif": "agent_immo"
 }
+
 SLUG_TO_METIER = {v: k for k, v in METIER_TO_SLUG.items()}
 DEFAULT_SLUG = "agent_immo"
 
 # ---------------------------------------------------------------------
-# Proxy avatar
+# Proxy d'avatars
 # ---------------------------------------------------------------------
 
 _PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -313,7 +325,7 @@ def favicon() -> Response:
     return Response(status=204)
 
 # ---------------------------------------------------------------------
-# Root → crée guest + va au dashboard
+# Accueil
 # ---------------------------------------------------------------------
 
 @app.get("/")
@@ -344,6 +356,7 @@ def dashboard():
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else None
 
+        # --- prépare un cfg même si aucun bot encore
         shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
         if bot:
             slug = METIER_TO_SLUG.get(bot.get("metier") or "", DEFAULT_SLUG)
@@ -386,7 +399,7 @@ def dashboard():
     if request.method == "GET":
         return render_template("dashboard.html", metiers=metiers, bot=bot, cfg=cfg)
 
-    # POST: save + redir /preview
+    # --- POST : sauvegarde + redirection /preview
     logger.info(f"📝 POST /dashboard par user {current_user.id} — form={dict(request.form)}")
 
     name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
@@ -487,7 +500,7 @@ def preview():
         return redirect(url_for("dashboard"))
 
 # ---------------------------------------------------------------------
-# Signup (Page intermédiaire)
+# Inscription
 # ---------------------------------------------------------------------
 
 @app.route("/signup", methods=["GET", "POST"])
@@ -537,7 +550,7 @@ def signup():
         return redirect(url_for("signup", next=next_url))
 
 # ---------------------------------------------------------------------
-# Pay (Page 3) + Stripe
+# Paiement (Page 3)
 # ---------------------------------------------------------------------
 
 @app.get("/pay")
@@ -553,6 +566,7 @@ def pay():
 @app.post("/pay/stripe")
 @login_required
 def pay_stripe() -> Response:
+    # 🔒 bloque le paiement pour un compte invité
     if is_guest_user():
         flash("Créez d’abord votre compte avec un email valide pour payer.", "warning")
         return redirect(url_for("pay"))
@@ -560,7 +574,9 @@ def pay_stripe() -> Response:
     if not STRIPE_SECRET_KEY:
         flash("❌ Paiement indisponible pour le moment", "error")
         return redirect(url_for("pay"))
-    if not PUBLIC_BASE_URL:
+
+    base = get_checkout_base_url()
+    if not base:
         flash("❌ Configuration serveur incomplète", "error")
         logger.error("PUBLIC_BASE_URL non configurée")
         return redirect(url_for("pay"))
@@ -573,8 +589,8 @@ def pay_stripe() -> Response:
         avatar = sanitize_url(bot.get("avatar_url") or "")
         product_name = f"Abonnement mensuel Betty {metier}"
 
-        success_url = f"{PUBLIC_BASE_URL.rstrip('/')}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
-        cancel_url = f"{PUBLIC_BASE_URL.rstrip('/')}/pay"
+        success_url = f"{base.rstrip('/')}/confirm?session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = f"{base.rstrip('/')}/pay"
 
         session_params = {
             "mode": "subscription",
@@ -599,9 +615,8 @@ def pay_stripe() -> Response:
         }
         if avatar:
             if avatar.startswith("/"):
-                base = (PUBLIC_BASE_URL or "").rstrip("/")
                 if base:
-                    session_params["line_items"][0]["price_data"]["product_data"]["images"] = [f"{base}{avatar}"]
+                    session_params["line_items"][0]["price_data"]["product_data"]["images"] = [f"{base.rstrip('/')}{avatar}"]
             else:
                 session_params["line_items"][0]["price_data"]["product_data"]["images"] = [avatar]
 
@@ -619,7 +634,7 @@ def pay_stripe() -> Response:
         return redirect(url_for("pay"))
 
 # ---------------------------------------------------------------------
-# Confirm (Page 4) — vérifie la session Stripe
+# Confirmation (Page 4)
 # ---------------------------------------------------------------------
 
 @app.get("/confirm")
@@ -649,6 +664,50 @@ def confirm():
         if sub_id:
             db_exec("UPDATE users SET stripe_subscription_id=? WHERE id=?", (sub_id, int(current_user.id)))
 
+        # Récupère le bot pour générer le code d'intégration
+        row = get_bot(int(current_user.id))
+        bot = dict(row) if row else {}
+        # pack utilisé par /api/chat
+        METIER_SLUGS = {
+            "Avocate": "avocat_pack",
+            "Agent Immo": "agent_immobilier_pack",
+            "Médecine": "medecine_pack",
+            "Comptable": "comptable_pack",
+            "Psychologue": "psychologue_pack",
+        }
+        pack = METIER_SLUGS.get(bot.get("metier") or "", "agent_immobilier_pack")
+        base = get_checkout_base_url()
+
+        # petit widget vanilla qui appelle /api/chat
+        embed_code = f"""<div id="betty-widget" style="border:1px solid #e5e7eb;border-radius:12px;max-width:360px;padding:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">
+  <div id="betty-thread" style="height:260px;overflow:auto;padding:8px;background:#f9fafb;border-radius:8px;margin-bottom:8px"></div>
+  <form id="betty-form">
+    <input id="betty-input" type="text" placeholder="Posez une question..." style="width:100%;padding:.6rem;border:1px solid #d1d5db;border-radius:8px">
+  </form>
+</div>
+<script>
+(function(){
+  const thread = document.getElementById('betty-thread');
+  const form = document.getElementById('betty-form');
+  const input = document.getElementById('betty-input');
+  function add(msg, who){const p=document.createElement('p');p.textContent=(who?who+': ':'')+msg;thread.appendChild(p);thread.scrollTop=thread.scrollHeight;}
+  add({repr(bot.get("welcome_text","Bonjour 👋"))}, "Betty");
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    const message = input.value.trim(); if(!message) return;
+    add(message, "Vous"); input.value='';
+    try{
+      const r = await fetch('{base.rstrip("/")}/api/chat', {{
+        method:'POST', headers:{{'Content-Type':'application/json'}},
+        body: JSON.stringify({{ message, history:[], pack:'{pack}' }})
+      }});
+      const d = await r.json();
+      add(d.reply || "…", "Betty");
+    }catch(err){ add("Erreur de connexion.", "Betty"); }
+  });
+})();
+</script>"""
+
         if payment_status == "paid" and (sub_status in {"active", "trialing"} or sub_status is None):
             flash("✅ Paiement confirmé. Abonnement activé.", "success")
         else:
@@ -660,7 +719,8 @@ def confirm():
             payment_status=payment_status,
             sub_id=sub_id,
             sub_status=sub_status,
-            cust_id=cust_id
+            cust_id=cust_id,
+            embed_code=embed_code
         )
 
     except stripe.error.StripeError as e:
@@ -771,7 +831,7 @@ def server_error(e):
     return "Erreur serveur", 500
 
 # ---------------------------------------------------------------------
-# Run
+# Run local
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
