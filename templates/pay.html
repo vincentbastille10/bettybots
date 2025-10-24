@@ -18,9 +18,7 @@
     @media (max-width:800px){ .grid{ grid-template-columns:1fr } }
     .card { border:1px solid #e5e7eb; border-radius:14px; padding:18px }
     label { display:block; margin:.5rem 0 .2rem }
-    input {
-      width:100%; padding:.6rem; border:1px solid #d1d5db; border-radius:10px;
-    }
+    input { width:100%; padding:.6rem; border:1px solid #d1d5db; border-radius:10px }
     button { padding:10px 16px; border:0; border-radius:10px; cursor:pointer }
     .primary { background:var(--primary); color:#fff }
     .muted { color:#6b7280; font-size:.95rem }
@@ -41,13 +39,13 @@
         <form method="post" action="{{ url_for('signup') }}">
           <input type="hidden" name="next" value="{{ request.path }}">
           <label>Prénom</label>
-          <input name="first_name" type="text" autocomplete="given-name" />
+          <input name="first_name" type="text" autocomplete="given-name">
           <label>Nom</label>
-          <input name="last_name" type="text" autocomplete="family-name" />
+          <input name="last_name" type="text" autocomplete="family-name">
           <label>Email</label>
-          <input name="email" type="email" required autocomplete="email" />
+          <input name="email" type="email" required autocomplete="email">
           <label>Confirmez l’email</label>
-          <input name="email_confirm" type="email" required autocomplete="email" />
+          <input name="email_confirm" type="email" required autocomplete="email">
           <div style="margin-top:1rem">
             <button type="submit" class="primary">Créer mon compte</button>
           </div>
@@ -55,10 +53,9 @@
         <div class="sep"></div>
         <p class="muted">
           {% if is_guest %}
-            Vous êtes connecté en invité (<strong>{{ current_user.email }}</strong>).<br>
-            Créez votre compte pour activer le paiement.
+            Vous êtes connecté en invité (<strong>{{ current_user.email }}</strong>). Créez votre compte pour activer le paiement.
           {% else %}
-            Une fois inscrit, cette page se rechargera automatiquement pour finaliser le paiement.
+            Une fois inscrit, cette page se rechargera pour finaliser le paiement.
           {% endif %}
         </p>
       {% else %}
