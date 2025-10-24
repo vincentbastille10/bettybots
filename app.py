@@ -21,8 +21,8 @@ from flask_login import (
 
 # --- réseau pour proxy images
 try:
-    import requests  # Render l’a en général
-except Exception:  # fallback sans requests
+    import requests
+except Exception:
     requests = None
 import urllib.request
 
@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 
 def pick_db_path() -> Path:
-    """Sur Vercel (serverless), écrire dans /tmp. Local: fichier dans le projet."""
     if os.getenv("DB_PATH"):
         return Path(os.getenv("DB_PATH"))
     if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "VERCEL_ENV", "AWS_LAMBDA_FUNCTION_NAME")):
@@ -49,11 +48,11 @@ def pick_db_path() -> Path:
 
 DB_PATH = pick_db_path()
 
-# Configuration Flask
+# Flask
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
 
-# Stripe - Validation robuste
+# Stripe
 def get_env_int(key: str, default: int) -> int:
     try:
         return int(os.getenv(key, str(default)))
@@ -77,7 +76,7 @@ login_manager.init_app(app)
 login_manager.login_view = "root"
 
 # ---------------------------------------------------------------------
-# Gestion DB thread-safe avec context manager
+# DB
 # ---------------------------------------------------------------------
 
 @contextmanager
@@ -110,6 +109,8 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL,
+                stripe_customer_id TEXT,
+                stripe_subscription_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -154,7 +155,7 @@ def db_exec(sql: str, params: tuple = ()) -> bool:
 def get_bot(user_id: int) -> Optional[sqlite3.Row]:
     return db_one("SELECT * FROM bots WHERE user_id=? LIMIT 1", (user_id,))
 
-# --- helpers utilisateurs minimalistes ---
+# helpers users
 def get_user_by_email(email: str) -> Optional[sqlite3.Row]:
     email = (email or "").strip().lower()
     if not email:
@@ -175,7 +176,7 @@ with app.app_context():
     init_db()
 
 # ---------------------------------------------------------------------
-# Modèle utilisateur
+# User model
 # ---------------------------------------------------------------------
 
 class User(UserMixin):
@@ -199,7 +200,7 @@ def load_user(user_id: str):
     return None
 
 # ---------------------------------------------------------------------
-# Utilitaires
+# Utils
 # ---------------------------------------------------------------------
 
 def sanitize_color(color: str) -> str:
@@ -230,7 +231,7 @@ def is_guest_user() -> bool:
     return (current_user.email or "").endswith("@guest.local")
 
 # ---------------------------------------------------------------------
-# Avatars fournis (liens originaux Postimg) + mapping slug
+# Avatars & mapping
 # ---------------------------------------------------------------------
 
 EXTERNAL_AVATARS = {
@@ -243,17 +244,16 @@ METIER_TO_SLUG = {
     "Agent Immo": "agent_immo",
     "Avocate": "avocat",
     "Médecine": "medecin",
-    "Comptable": "agent_immo",   # fallback
+    "Comptable": "agent_immo",
     "Psychologue": "agent_immo",
     "Coiffeur": "agent_immo",
     "Coach sportif": "agent_immo"
 }
-
 SLUG_TO_METIER = {v: k for k, v in METIER_TO_SLUG.items()}
 DEFAULT_SLUG = "agent_immo"
 
 # ---------------------------------------------------------------------
-# Proxy d'avatars (same-origin) avec User-Agent + Referer + fallback SVG
+# Proxy avatar
 # ---------------------------------------------------------------------
 
 _PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -313,7 +313,7 @@ def favicon() -> Response:
     return Response(status=204)
 
 # ---------------------------------------------------------------------
-# Accueil
+# Root → crée guest + va au dashboard
 # ---------------------------------------------------------------------
 
 @app.get("/")
@@ -344,7 +344,6 @@ def dashboard():
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else None
 
-        # --- prépare un cfg même si aucun bot encore (important pour les images)
         shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
         if bot:
             slug = METIER_TO_SLUG.get(bot.get("metier") or "", DEFAULT_SLUG)
@@ -361,7 +360,6 @@ def dashboard():
                 "avatar_url": avatar_url,
             }
         else:
-            # valeurs par défaut → IMMO + avatar 1 pour que ça s’affiche tout de suite
             cfg = {
                 "name": "Mon Betty Bot",
                 "slug": "agent_immobilier",
@@ -386,10 +384,9 @@ def dashboard():
         }
 
     if request.method == "GET":
-        # 🔧 BUG FIX: on PASSAIT PAS cfg au template → pas d’images.
         return render_template("dashboard.html", metiers=metiers, bot=bot, cfg=cfg)
 
-    # --- POST : sauvegarde + redirection robuste /preview
+    # POST: save + redir /preview
     logger.info(f"📝 POST /dashboard par user {current_user.id} — form={dict(request.form)}")
 
     name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
@@ -490,16 +487,14 @@ def preview():
         return redirect(url_for("dashboard"))
 
 # ---------------------------------------------------------------------
-# Inscription (Sign up) — conversion guest -> compte + redirection /pay
+# Signup (Page intermédiaire)
 # ---------------------------------------------------------------------
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "GET":
-        # Le template lit ?next= et le met dans l'input hidden
         return render_template("signup.html")
 
-    # POST
     email      = (request.form.get("email") or "").strip().lower()
     email2     = (request.form.get("email_confirm") or "").strip().lower()
     next_url   = request.form.get("next") or request.args.get("next") or url_for("pay")
@@ -515,22 +510,18 @@ def signup():
     try:
         existing = get_user_by_email(email)
         if existing:
-            # l'utilisateur existe déjà → on le connecte
             login_user(User(existing["id"], existing["email"]), remember=True)
             flash("Connexion réussie.", "success")
             return redirect(next_url)
 
-        # conversion d'un invité connecté
         if current_user.is_authenticated and current_user.is_guest:
             if not update_user_email(int(current_user.id), email):
                 flash("Impossible de convertir le compte invité.", "danger")
                 return redirect(url_for("signup", next=next_url))
-            # recharge user en session avec le nouvel email
             login_user(User(int(current_user.id), email), remember=True)
             flash("Compte converti. Vous pouvez procéder au paiement.", "success")
             return redirect(next_url)
 
-        # création d’un nouveau compte
         new_id = create_user(email)
         if not new_id:
             flash("Création du compte impossible.", "danger")
@@ -546,7 +537,7 @@ def signup():
         return redirect(url_for("signup", next=next_url))
 
 # ---------------------------------------------------------------------
-# Paiement (Page 3)
+# Pay (Page 3) + Stripe
 # ---------------------------------------------------------------------
 
 @app.get("/pay")
@@ -562,7 +553,6 @@ def pay():
 @app.post("/pay/stripe")
 @login_required
 def pay_stripe() -> Response:
-    # 🔒 bloque le paiement pour un compte invité
     if is_guest_user():
         flash("Créez d’abord votre compte avec un email valide pour payer.", "warning")
         return redirect(url_for("pay"))
@@ -629,16 +619,58 @@ def pay_stripe() -> Response:
         return redirect(url_for("pay"))
 
 # ---------------------------------------------------------------------
-# Confirmation (Page 4)
+# Confirm (Page 4) — vérifie la session Stripe
 # ---------------------------------------------------------------------
 
 @app.get("/confirm")
 @login_required
 def confirm():
     session_id = request.args.get("session_id")
-    if session_id:
-        logger.info(f"✅ Confirmation paiement - Session : {session_id}")
-    return render_template("confirm.html", session_id=session_id)
+    if not session_id:
+        flash("Session Stripe introuvable.", "warning")
+        return redirect(url_for("pay"))
+
+    try:
+        checkout = stripe.checkout.Session.retrieve(
+            session_id,
+            expand=["subscription", "customer"]
+        )
+
+        payment_status = (checkout.get("payment_status") or "").lower()
+        customer       = checkout.get("customer")
+        sub            = checkout.get("subscription")
+
+        sub_id     = getattr(sub, "id", None) if sub else None
+        sub_status = getattr(sub, "status", None) if sub else None
+        cust_id    = getattr(customer, "id", None) if customer else (checkout.get("customer") if isinstance(checkout.get("customer"), str) else None)
+
+        if cust_id:
+            db_exec("UPDATE users SET stripe_customer_id=? WHERE id=?", (cust_id, int(current_user.id)))
+        if sub_id:
+            db_exec("UPDATE users SET stripe_subscription_id=? WHERE id=?", (sub_id, int(current_user.id)))
+
+        if payment_status == "paid" and (sub_status in {"active", "trialing"} or sub_status is None):
+            flash("✅ Paiement confirmé. Abonnement activé.", "success")
+        else:
+            flash(f"⚠️ Paiement confirmé, statut d’abonnement : {sub_status or 'inconnu'}", "warning")
+
+        return render_template(
+            "confirm.html",
+            session_id=session_id,
+            payment_status=payment_status,
+            sub_id=sub_id,
+            sub_status=sub_status,
+            cust_id=cust_id
+        )
+
+    except stripe.error.StripeError as e:
+        logger.error(f"[Stripe] Erreur confirm: {e}", exc_info=True)
+        flash("Erreur Stripe lors de la confirmation.", "danger")
+        return redirect(url_for("pay"))
+    except Exception as e:
+        logger.error(f"Erreur confirm(): {e}", exc_info=True)
+        flash("Erreur lors de la confirmation du paiement.", "danger")
+        return redirect(url_for("pay"))
 
 # ---------------------------------------------------------------------
 # API - Chat et Health
@@ -739,7 +771,7 @@ def server_error(e):
     return "Erreur serveur", 500
 
 # ---------------------------------------------------------------------
-# Run local
+# Run
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
