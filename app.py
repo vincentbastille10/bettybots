@@ -168,7 +168,8 @@ def base_url_for_checkout() -> str:
     return base
 
 # ---------------------------------------------------------------------
-# Avatars proxy (optionnel, intact)
+# ✅ AVATARS — seule section modifiée
+#    Local d'abord (tes fichiers), proxy externe en secours, puis placeholder
 # ---------------------------------------------------------------------
 EXTERNAL_AVATARS = {
     "agent_immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
@@ -177,29 +178,71 @@ EXTERNAL_AVATARS = {
 }
 DEFAULT_SLUG = "agent_immo"
 
+_PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+ <rect width="256" height="256" fill="#e5e7eb"/>
+ <circle cx="128" cy="96" r="40" fill="#9ca3af"/>
+ <rect x="56" y="148" width="144" height="60" rx="14" fill="#9ca3af"/>
+</svg>"""
+
+# mapping vers TES noms de fichiers exacts (vus sur ta capture GitHub)
+_LOCAL_FILES = {
+    "agent_immo": "Betty Agent immo copie.jpg",
+    "avocat":     "Betty Avocate copie.jpg",
+    "medecin":    "Betty Medecine copie.jpg",
+}
+
 @app.get("/avatar/<slug>")
 def avatar_proxy(slug: str):
+    """
+    1) Sert le fichier local s'il existe (le plus fiable sur Vercel)
+    2) Sinon tente le proxy externe (avec UA + Referer)
+    3) Sinon renvoie un placeholder (200)
+    """
     slug = (slug or "").strip().lower()
+    if slug not in _LOCAL_FILES:
+        slug = DEFAULT_SLUG
+
+    # 1) Local d'abord
+    local_name = _LOCAL_FILES[slug]
+    local_path = BASE_DIR / "static" / local_name
+    if local_path.exists():
+        # Cache agressif côté CDN
+        resp = send_from_directory(local_path.parent, local_path.name, max_age=86400)
+        return resp
+
+    # 2) Proxy externe en secours
     url = EXTERNAL_AVATARS.get(slug, EXTERNAL_AVATARS[DEFAULT_SLUG])
     try:
         if requests:
-            r = requests.get(url, headers={"User-Agent": "BettyBot/1.0", "Referer": "https://postimg.cc/"}, timeout=8)
+            r = requests.get(
+                url,
+                headers={
+                    "User-Agent": "BettyBots/1.0",
+                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                    "Referer": "https://postimg.cc/",
+                },
+                timeout=6,
+            )
             if r.status_code == 200 and r.content:
                 resp = Response(r.content, mimetype=r.headers.get("Content-Type") or "image/jpeg")
                 resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
                 return resp
-        # fallback urllib
-        req = urllib.request.Request(url, headers={"User-Agent": "BettyBot/1.0", "Referer": "https://postimg.cc/"})
-        with urllib.request.urlopen(req, timeout=8) as f:
+        # urllib fallback
+        req = urllib.request.Request(url, headers={"User-Agent": "BettyBots/1.0", "Referer": "https://postimg.cc/"})
+        with urllib.request.urlopen(req, timeout=6) as f:
             data = f.read()
             resp = Response(data, mimetype="image/jpeg")
             resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
             return resp
-    except Exception as e:
-        return Response(status=204)
+    except Exception:
+        pass
+
+    # 3) Placeholder propre (évite l'icône d'image cassée)
+    return Response(_PLACEHOLDER_SVG, mimetype="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
 
 # ---------------------------------------------------------------------
-# Routes principales
+# Routes principales (inchangées)
 # ---------------------------------------------------------------------
 @app.get("/")
 def root():
@@ -215,7 +258,6 @@ def root():
 @app.route("/dashboard", methods=["GET", "POST"])
 @login_required
 def dashboard():
-    # Minimal : ta template 'dashboard.html' est utilisée telle quelle
     row = get_bot(int(current_user.id))
     bot = dict(row) if row else None
 
@@ -228,7 +270,7 @@ def dashboard():
         }
         return render_template("dashboard.html", bot=bot, cfg=cfg)
 
-    # POST: sauvegarde rapide (adapte si tu as d'autres champs)
+    # POST: sauvegarde rapide
     name = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
     metier = (request.form.get("pack_slug") or "Agent Immo").strip()
     color_hex = sanitize_color(request.form.get("color_hex") or "#4F46E5")
@@ -343,11 +385,10 @@ def confirm():
         if sub_id:
             db_exec("UPDATE users SET stripe_subscription_id=? WHERE id=?", (sub_id, int(current_user.id)))
 
-        # Données pour générer le snippet dans le template (pas d'f-string piégeux)
+        # Données pour générer le snippet dans le template
         row = get_bot(int(current_user.id))
         bot = dict(row) if row else {}
         base = base_url_for_checkout()
-        # mapping minimal -> pack
         pack_map = {
             "Avocate": "avocat_pack",
             "Agent Immo": "agent_immobilier_pack",
@@ -365,7 +406,6 @@ def confirm():
             sub_id=sub_id,
             sub_status=sub_status,
             cust_id=cust_id,
-            # variables utilisées par confirm.html pour fabriquer le code
             base_url=base.rstrip("/"),
             pack=pack,
             welcome_text=welcome
