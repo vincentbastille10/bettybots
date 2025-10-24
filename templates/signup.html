@@ -5,23 +5,40 @@
   <title>Inscription</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
-  <style>label{display:block;margin:.5rem 0 .2rem}input{width:320px;max-width:100%;padding:.5rem}</style>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:780px;margin:40px auto;padding:0 16px}
+    label{display:block;margin:.5rem 0 .2rem}
+    input{width:360px;max-width:100%;padding:.6rem;border:1px solid #d1d5db;border-radius:10px}
+    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer;background:#4F46E5;color:#fff}
+    .muted{color:#6b7280}
+  </style>
 </head>
 <body>
   <h1>Inscription</h1>
+
   <form method="post" action="{{ url_for('signup') }}">
+    <!-- Redirection après inscription : /pay par défaut, ou ?next=… si présent -->
+    <input type="hidden" name="next" value="{{ request.args.get('next', url_for('pay')) }}">
+
     <label>Prénom</label>
-    <input name="first_name" type="text" />
+    <input name="first_name" type="text" autocomplete="given-name">
+
     <label>Nom</label>
-    <input name="last_name" type="text" />
+    <input name="last_name" type="text" autocomplete="family-name">
+
     <label>Email</label>
-    <input name="email" type="email" required />
+    <input name="email" type="email" required autocomplete="email">
+
     <label>Confirmez l’email</label>
-    <input name="email_confirm" type="email" required />
+    <input name="email_confirm" type="email" required autocomplete="email">
+
     <div style="margin-top:1rem">
       <button type="submit">Créer mon compte</button>
     </div>
   </form>
-  <p style="margin-top:1rem"><a href="{{ url_for('landing') }}">← Retour</a></p>
+
+  <p style="margin-top:1rem" class="muted">
+    <a href="{{ url_for('pay') }}">← Retour au paiement</a>
+  </p>
 </body>
 </html>
