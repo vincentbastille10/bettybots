@@ -137,6 +137,9 @@ def init_db():
             welcome_text TEXT,
             widget_size TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            pro_phone TEXT,
+            pro_address_label TEXT,
+            pro_address_url TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS leads (
@@ -149,6 +152,26 @@ def init_db():
         );
         """)
         conn.commit()
+
+def ensure_bot_extra_columns():
+    """Ajoute pro_phone, pro_address_label, pro_address_url si absents (migration douce)."""
+    try:
+        with get_db() as conn:
+            cur = conn.execute("PRAGMA table_info(bots)")
+            existing = {row["name"] for row in cur.fetchall()}
+            alters = []
+            if "pro_phone" not in existing:
+                alters.append("ALTER TABLE bots ADD COLUMN pro_phone TEXT")
+            if "pro_address_label" not in existing:
+                alters.append("ALTER TABLE bots ADD COLUMN pro_address_label TEXT")
+            if "pro_address_url" not in existing:
+                alters.append("ALTER TABLE bots ADD COLUMN pro_address_url TEXT")
+            for sql in alters:
+                conn.execute(sql)
+            if alters:
+                conn.commit()
+    except Exception as e:
+        logger.error(f"ensure_bot_extra_columns error: {e}", exc_info=True)
 
 def db_one(sql, params=()):
     with get_db() as c:
@@ -163,6 +186,7 @@ def db_exec(sql, params=()):
 
 with app.app_context():
     init_db()
+    ensure_bot_extra_columns()
 
 # ---------------------------------------------------------------------
 # Utilitaires / Normalisation
@@ -349,13 +373,22 @@ def dashboard():
     shape_map  = {"s":"circle","m":"square","l":"rounded"}
     shape      = shape_map.get(widget_sz, "square")
 
+    # Nouveaux champs (facultatifs)
+    pro_phone        = (request.form.get("pro_phone") or "").strip()[:100]
+    pro_address_lbl  = (request.form.get("pro_address_label") or "").strip()[:200]
+    pro_address_url  = (request.form.get("pro_address_url") or "").strip()[:300]
+
     if bot:
-        db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=? WHERE user_id=?""",
-                (name, pack_slug, color_hex, welcome, persona, widget_sz, shape, current_user.id))
+        db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=?,
+                                   pro_phone=?, pro_address_label=?, pro_address_url=? WHERE user_id=?""",
+                (name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
+                 pro_phone, pro_address_lbl, pro_address_url, current_user.id))
     else:
-        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape)
-                   VALUES(?,?,?,?,?,?,?,?)""",
-                (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape))
+        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
+                                    pro_phone, pro_address_label, pro_address_url)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
+                 pro_phone, pro_address_lbl, pro_address_url))
 
     flash("✅ Bot sauvegardé.", "success")
     return redirect(url_for("preview"))
@@ -384,6 +417,10 @@ def preview():
         "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
         "avatar_url": f"/avatar/{internal_slug}",    # avatar choisi
         "metier": bot.get("metier") or pack_slug,
+        # Coordonnées publiques (optionnel)
+        "pro_phone": bot.get("pro_phone"),
+        "pro_address_label": bot.get("pro_address_label"),
+        "pro_address_url": bot.get("pro_address_url"),
     }
 
     return render_template("preview.html", bot=bot, cfg=cfg)
