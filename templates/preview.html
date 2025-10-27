@@ -27,6 +27,11 @@
   {# Avatar final (vient d’app.py si défini) #}
   {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '/avatar/agent_immo') %}
 
+  {# Coordonnées publiques (depuis dashboard) #}
+  {% set pro_phone         = (cfg.pro_phone if (cfg and cfg.pro_phone) else None) %}
+  {% set pro_address_label = (cfg.pro_address_label if (cfg and cfg.pro_address_label) else None) %}
+  {% set pro_address_url   = (cfg.pro_address_url if (cfg and cfg.pro_address_url) else None) %}
+
   <style>
     :root{
       --bg:#0b0b0c;
@@ -182,6 +187,14 @@
     const PRIMARY  = {{ primary|tojson }};
     let   persona  = {{ persona|tojson }};
 
+    // Coordonnées publiques (depuis dashboard)
+    const PRO_PHONE         = {{ pro_phone|tojson }};
+    const PRO_ADDRESS_LABEL = {{ pro_address_label|tojson }};
+    const PRO_ADDRESS_URL   = {{ pro_address_url|tojson }};
+    const MAP_URL = (PRO_ADDRESS_URL && PRO_ADDRESS_URL.trim())
+      ? PRO_ADDRESS_URL
+      : (PRO_ADDRESS_LABEL ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(PRO_ADDRESS_LABEL)}` : null);
+
     // -------- Amorce par pack (pour guider la qualif) --------
     const LEAD_PROMPTS = {
       agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ? Sur quelle zone ?",
@@ -203,6 +216,15 @@
     function renderPersona(){ personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona)); }
     personaButtons.forEach(b=> b.addEventListener('click', ()=>{ persona=b.dataset.val; renderPersona(); }));
     renderPersona();
+
+    // Bulle HTML contrôlée (pour lien Maps, etc.)
+    function addHtmlBubble(html){
+      const b = document.createElement('div');
+      b.className = 'bubble bot';
+      b.innerHTML = html;
+      messagesEl.appendChild(b);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
 
     // -------- Historique utilisateur (pour /api/chat) --------
     function userHistory(){
@@ -258,7 +280,7 @@
     async function submitLeadIfComplete(){
       if (!isLeadComplete(lead)) return;
 
-      // Récapitulatif clair à l'écran (autorisée en doublon si re-merciements)
+      // Récapitulatif clair à l'écran (doublon autorisé)
       addBubble(
         `Merci ${lead.prenom} ${lead.nom}. J’ai bien noté :\n- Téléphone : ${lead.telephone}\n- Email : ${lead.email}\nUn conseiller vous rappellera rapidement.`,
         "bot",
@@ -290,7 +312,7 @@
         addBubble("ℹ️ J’ai noté vos informations. (Envoi temporairement indisponible.)", "bot", null, {allowDuplicate:true});
       }
 
-      // Relance unique de la question métier (évite les redites côté API)
+      // Relance unique de la question métier
       const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
       addBubble(hint, 'bot');
     }
@@ -303,7 +325,6 @@
       generic: [
         { test: t => /num(é|e)ro.*t(é|e)l(é|e)phone|t(é|e)l(é|e)phone|mobile/i.test(t), satisfied: () => !!lead.telephone },
         { test: t => /e[-\s]?mail|mail|adresse\s*email/i.test(t),                       satisfied: () => !!lead.email }
-        // { test: t => /adresse\s(postale|compl(è|e)te)?/i.test(t),                       satisfied: () => false } // à activer si tu captes l’adresse postale
       ],
       avocat: [],
       medecin: [],
@@ -322,7 +343,7 @@
       const txt = String(text ?? '');
 
       if (who !== 'me') {
-        // anti-doublon exact (sans toucher app.py)
+        // anti-doublon exact
         if (!allowDuplicate) {
           const key = txt.trim().toLowerCase();
           if (seenBotTexts.has(key)) return;
@@ -339,6 +360,40 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    // -------- Détection : l'utilisateur demande nos coordonnées ? --------
+    function userAsksForBusinessInfo(text){
+      const t = (text || '').toLowerCase();
+
+      const askPhone =
+        /t(é|e)l(é|e)phone|num(é|e)ro|joindre|appeler|appel/i.test(t) && !!PRO_PHONE;
+
+      const askAddr =
+        /(adresse|o(ù|u)\s+(vous\s+)?(situez|trouvez)|venir|localisation|plan|map|google\s+maps)/i.test(t)
+        && (!!PRO_ADDRESS_LABEL || !!MAP_URL);
+
+      return { askPhone, askAddr };
+    }
+
+    function answerBusinessInfoIfAsked(text){
+      const { askPhone, askAddr } = userAsksForBusinessInfo(text);
+      if (!askPhone && !askAddr) return false;
+
+      const parts = [];
+      if (askPhone && PRO_PHONE) {
+        parts.push(`📞 Téléphone : <b>${PRO_PHONE}</b>`);
+      }
+      if (askAddr && (PRO_ADDRESS_LABEL || MAP_URL)) {
+        const link = MAP_URL ? `<a href="${MAP_URL}" target="_blank" rel="noopener">ouvrir dans Google Maps</a>` : '';
+        const label = PRO_ADDRESS_LABEL ? `<b>${PRO_ADDRESS_LABEL}</b>` : '';
+        parts.push(`📍 Adresse : ${label}${label && link ? " — " : ""}${link}`);
+      }
+      if (parts.length) {
+        addHtmlBubble(parts.join("<br>"));
+        return true;
+      }
+      return false;
+    }
+
     // -------- Appel API “métier” --------
     async function callChatAPI(text){
       const payload = {
@@ -349,7 +404,9 @@
         color: PRIMARY,
         bot_id: BOT_ID,
         user_id: USER_ID,
-        lead // ← on passe le lead pour que l’API évite les re-questions
+        lead,
+        // Option déjà prête si tu veux exploiter côté backend :
+        business: { phone: PRO_PHONE, address_label: PRO_ADDRESS_LABEL, address_url: MAP_URL }
       };
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -372,6 +429,9 @@
 
       addBubble(t, 'me'); msgInput.value = '';
 
+      // Si l’utilisateur demande nos coordonnées, répondre subtilement (sans interrompre le flow)
+      answerBusinessInfoIfAsked(t);
+
       // 1) Phase lead
       const progressed = acceptLeadAnswer(t);
       if (progressed) {
@@ -392,7 +452,6 @@
           addBubble('⚠️ Erreur serveur.', 'bot', 'warn', {allowDuplicate:true});
         } else {
           addBubble(data.reply, 'bot'); // anti-doublon déjà actif
-          // Si l’API renvoie une salutation générique, on remet une amorce par pack (une seule fois grâce à l’anti-doublon)
           if ((data.reply || '').trim().toLowerCase().startsWith('bonjour')) {
             const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
             addBubble(hint, 'bot');
