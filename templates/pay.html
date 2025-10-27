@@ -12,11 +12,12 @@
       margin: 40px auto;
       padding: 0 16px;
       line-height: 1.4;
+      color:#111827;
     }
     h1 { margin-bottom:.25rem }
     .grid { display:grid; grid-template-columns:1fr 1fr; gap:28px }
     @media (max-width:800px){ .grid{ grid-template-columns:1fr } }
-    .card { border:1px solid #e5e7eb; border-radius:14px; padding:18px }
+    .card { border:1px solid #e5e7eb; border-radius:14px; padding:18px; background:#fff }
     label { display:block; margin:.5rem 0 .2rem }
     input { width:100%; padding:.6rem; border:1px solid #d1d5db; border-radius:10px }
     button { padding:10px 16px; border:0; border-radius:10px; cursor:pointer }
@@ -24,6 +25,9 @@
     .muted { color:#6b7280; font-size:.95rem }
     .sep { height:1px; background:#f0f2f5; margin:16px 0 }
     .price { font-size:1.1rem }
+    .warn { background:#FEF3C7; border:1px solid #FDE68A; padding:8px 10px; border-radius:10px; color:#92400E; }
+    .ok { background:#DCFCE7; border:1px solid #86EFAC; padding:8px 10px; border-radius:10px; color:#065F46; }
+    a { color:#4F46E5; text-decoration:none }
   </style>
 </head>
 <body>
@@ -61,18 +65,20 @@
       {% else %}
         <h2 style="margin-top:0">Compte</h2>
         <p class="muted">Connecté en tant que <strong>{{ current_user.email }}</strong>.</p>
+        <p class="ok">Votre bot est prêt à être activé.</p>
       {% endif %}
     </div>
 
     <!-- Colonne 2 : Paiement -->
     <div class="card">
       <h2 style="margin-top:0">Finaliser l’abonnement</h2>
+
       {% if not stripe_enabled %}
-        <p>Le paiement est indisponible (configure <code>STRIPE_SECRET_KEY</code>).</p>
+        <p class="warn">Le paiement est indisponible (configure <code>STRIPE_SECRET_KEY</code> dans tes variables d’environnement).</p>
       {% else %}
         <p class="price">Abonnement : <strong>9,99 € / mois</strong></p>
         {% set lock = (not current_user.is_authenticated) or is_guest %}
-        <form method="post" action="/pay/stripe">
+        <form method="post" action="{{ url_for('pay_stripe') }}">
           <button class="primary" type="submit" {% if lock %}disabled title="Créez d’abord votre compte"{% endif %}>
             Procéder au paiement
           </button>
