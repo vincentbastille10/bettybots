@@ -41,7 +41,7 @@
       {% if not current_user.is_authenticated or is_guest %}
         <h2 style="margin-top:0">Créer mon compte</h2>
         <form method="post" action="{{ url_for('signup') }}">
-          <input type="hidden" name="next" value="{{ request.path }}">
+          <input type="hidden" name="next" value="{{ req_path or '/pay' }}">
           <label>Prénom</label>
           <input name="first_name" type="text" autocomplete="given-name">
           <label>Nom</label>
