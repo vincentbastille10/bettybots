@@ -1,64 +1,76 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <title>Confirmation</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <title>Confirmation du paiement — Votre bot est prêt</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:820px;margin:40px auto;padding:0 16px;line-height:1.6}
-    .muted{color:#6b7280}
-    .card{border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-top:18px}
-    textarea{width:100%;min-height:260px;border:1px solid #d1d5db;border-radius:10px;padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace}
-    code{background:#f3f4f6;padding:2px 6px;border-radius:6px}
+    :root {
+      --bg:#0b0b0c; --card:#111214; --line:#23262d; 
+      --text:#e7e9ee; --muted:#a7adbb; --primary:#4F46E5;
+    }
+    body {
+      margin:0; background:var(--bg); color:var(--text);
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      display:flex; justify-content:center; align-items:center; height:100vh;
+    }
+    .card {
+      background:var(--card); border:1px solid var(--line); border-radius:14px;
+      padding:30px; max-width:680px; width:90%;
+      text-align:center; box-shadow:0 0 25px rgba(0,0,0,.3);
+    }
+    h1 { margin-top:0; font-size:24px; color:#fff; }
+    pre {
+      background:#0f1012; border:1px solid var(--line);
+      border-radius:12px; padding:16px; text-align:left;
+      color:#9ef; font-size:14px; overflow-x:auto;
+    }
+    button {
+      margin-top:18px; padding:12px 18px; border:none; border-radius:10px;
+      background:var(--primary); color:#fff; font-weight:600; cursor:pointer;
+    }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+    .msg { margin-top:16px; font-size:14px; color:var(--muted); }
   </style>
 </head>
+
 <body>
-  <h1>Merci pour votre abonnement 🎉</h1>
-  <p class="muted">Session : <code>{{ session_id }}</code> — Paiement : <strong>{{ payment_status or 'inconnu' }}</strong></p>
-
   <div class="card">
-    <h2 style="margin-top:0">Code d’intégration à copier</h2>
-    {% set base_js = base_url|tojson %}
-    {% set pack_js = pack|tojson %}
-    {% set welcome_js = welcome_text|tojson %}
-    <textarea readonly onclick="this.select()"><div id="betty-widget" style="border:1px solid #e5e7eb;border-radius:12px;max-width:360px;padding:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto">
-  <div id="betty-thread" style="height:260px;overflow:auto;padding:8px;background:#f9fafb;border-radius:8px;margin-bottom:8px"></div>
-  <form id="betty-form">
-    <input id="betty-input" type="text" placeholder="Posez une question..." style="width:100%;padding:.6rem;border:1px solid #d1d5db;border-radius:8px">
-  </form>
-</div>
-<script>
-(function(){
-  const t=document.getElementById('betty-thread');
-  const f=document.getElementById('betty-form');
-  const i=document.getElementById('betty-input');
-  function add(m,w){const p=document.createElement('p');p.textContent=(w?w+': ':'')+m;t.appendChild(p);t.scrollTop=t.scrollHeight;}
-  add({{ welcome_js }}, "Betty");
-  f.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const m=i.value.trim(); if(!m) return;
-    add(m,"Vous"); i.value='';
-    try{
-      const r=await fetch({{ base_js }} + '/api/chat', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ message:m, history:[], pack: {{ pack_js }} })
-      });
-      const d=await r.json();
-      add(d.reply || "…", "Betty");
-    }catch(err){ add("Erreur de connexion.", "Betty"); }
-  });
-})();
-</script></textarea>
-    <p class="muted">Collez ce bloc dans votre page, il appelle <code>/api/chat</code>.</p>
+    <h1>✅ Paiement confirmé !</h1>
+    <p>Merci pour votre achat. Voici votre code d’intégration :</p>
+
+    <pre id="embedCode">&lt;iframe src="{{ public_url or 'https://bettybots.vercel.app/chat?bot=' ~ bot_id }}" 
+style="border:0;width:420px;height:580px;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" 
+title="Mon Betty Bot"&gt;&lt;/iframe&gt;</pre>
+
+    <button id="sendBtn">📧 Envoyer ce code à mon adresse e-mail d’inscription</button>
+    <div id="msg" class="msg"></div>
   </div>
 
-  {% if sub_id %}
-  <div class="card">
-    <h3>Détails abonnement</h3>
-    <p>Abonnement : <code>{{ sub_id }}</code> — statut : <strong>{{ sub_status or 'inconnu' }}</strong></p>
-  </div>
-  {% endif %}
+  <script>
+    const sendBtn = document.getElementById('sendBtn');
+    const msgEl = document.getElementById('msg');
+    const code = document.getElementById('embedCode').textContent;
 
-  <p style="margin-top:1rem"><a href="{{ url_for('dashboard') }}">← Retour au dashboard</a></p>
+    sendBtn.addEventListener('click', async () => {
+      sendBtn.disabled = true;
+      msgEl.textContent = "Envoi en cours...";
+      try {
+        const res = await fetch('/api/send_code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+        if (res.ok) {
+          msgEl.textContent = "✅ Le code d’intégration a été envoyé à votre adresse e-mail.";
+        } else {
+          msgEl.textContent = "⚠️ Échec de l’envoi. Réessayez plus tard.";
+        }
+      } catch (e) {
+        msgEl.textContent = "⚠️ Erreur de connexion avec le serveur.";
+      }
+      sendBtn.disabled = false;
+    });
+  </script>
 </body>
 </html>
