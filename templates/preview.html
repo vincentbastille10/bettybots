@@ -168,10 +168,23 @@
     personaButtons.forEach(b=> b.addEventListener('click', ()=>{ persona=b.dataset.val; renderPersona(); }));
     renderPersona();
 
-    function addBubble(text, who, cls){
+    // --- Anti-doublon doux côté UI (ne touche pas app.py) ---
+    const seenBotTexts = new Set();
+    function addBubble(text, who, cls, {allowDuplicate=false} = {}){
+      const txt = String(text ?? '');
+
+      if (who !== 'me' && !allowDuplicate) {
+        // On évite d'afficher deux fois exactement le même message bot pendant la session,
+        // sauf si on le force (allowDuplicate=true) pour les cas utiles (ex: validations).
+        if (seenBotTexts.has(txt.trim())) {
+          return;
+        }
+        seenBotTexts.add(txt.trim());
+      }
+
       const b = document.createElement('div');
       b.className = 'bubble ' + (who === 'me' ? 'me' : 'bot') + (cls ? (' ' + cls) : '');
-      b.textContent = String(text ?? '');
+      b.textContent = txt;
       messagesEl.appendChild(b);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
@@ -209,12 +222,12 @@
       }
       if (leadStep === 2) {
         const digits = t.replace(/[^\d+]/g,"");
-        if (digits.length < 8) { addBubble("Le numéro semble trop court. Pouvez-vous le vérifier ?", "bot", "warn"); return true; }
+        if (digits.length < 8) { addBubble("Le numéro semble trop court. Pouvez-vous le vérifier ?", "bot", "warn", {allowDuplicate:true}); return true; }
         lead.telephone = digits;
         leadStep = 3; return true;
       }
       if (leadStep === 3) {
-        if (!emailRe.test(t)) { addBubble("L’email ne semble pas valide. Pouvez-vous le retaper ?", "bot", "warn"); return true; }
+        if (!emailRe.test(t)) { addBubble("L’email ne semble pas valide. Pouvez-vous le retaper ?", "bot", "warn", {allowDuplicate:true}); return true; }
         lead.email = t;
         leadStep = 4; return true;
       }
@@ -227,7 +240,9 @@
       // Récapitulatif clair à l'écran
       addBubble(
         `Merci ${lead.prenom} ${lead.nom}. J’ai bien noté :\n- Téléphone : ${lead.telephone}\n- Email : ${lead.email}\nUn conseiller vous rappellera rapidement.`,
-        "bot"
+        "bot",
+        null,
+        {allowDuplicate:true}
       );
 
       // Format attendu par ton /api/lead :
@@ -249,10 +264,10 @@
         if (res.ok) {
           addBubble("✅ Vos informations ont été transmises. Souhaitez-vous ajouter un message pour préciser votre besoin ?", "bot");
         } else {
-          addBubble("ℹ️ J’ai noté vos informations. (Si l’envoi échoue, elles restent visibles ici.)", "bot");
+          addBubble("ℹ️ J’ai noté vos informations. (Si l’envoi échoue, elles restent visibles ici.)", "bot", null, {allowDuplicate:true});
         }
       } catch {
-        addBubble("ℹ️ J’ai noté vos informations. (Envoi temporairement indisponible.)", "bot");
+        addBubble("ℹ️ J’ai noté vos informations. (Envoi temporairement indisponible.)", "bot", null, {allowDuplicate:true});
       }
     }
 
@@ -305,17 +320,19 @@
       try{
         const { ok, data } = await callChatAPI(t);
         if (!ok || !data || typeof data.reply !== 'string') {
-          addBubble('⚠️ Erreur serveur.', 'bot', 'warn');
+          addBubble('⚠️ Erreur serveur.', 'bot', 'warn', {allowDuplicate:true});
         } else {
+          // si l'API répète une salutation générique, l'anti-doublon évite de l'afficher 3x
           addBubble(data.reply, 'bot');
-          // Si l’API reste generique, on relance la qualif métier
+
+          // Si l’API reste générique, on relance la qualif métier (affiché une seule fois grâce à l’anti-doublon)
           if ((data.reply || '').trim().toLowerCase().startsWith('bonjour')) {
             const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
             addBubble(hint, 'bot');
           }
         }
       } catch {
-        addBubble('⚠️ Impossible de joindre le serveur.', 'bot', 'warn');
+        addBubble('⚠️ Impossible de joindre le serveur.', 'bot', 'warn', {allowDuplicate:true});
       } finally {
         sending = false; sendBtn.disabled = false; msgInput.focus();
       }
