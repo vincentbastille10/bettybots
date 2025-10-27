@@ -145,6 +145,7 @@ def init_db():
             pro_address_label TEXT,
             pro_address_url TEXT,
             pro_description TEXT,
+            auth_key TEXT,                             -- ✅ clé d’accès publique
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS leads (
@@ -159,7 +160,7 @@ def init_db():
         conn.commit()
 
 def ensure_bot_extra_columns():
-    """Ajoute pro_phone, pro_address_label, pro_address_url, pro_description si absents (migration douce)."""
+    """Ajoute pro_phone, pro_address_label, pro_address_url, pro_description, auth_key si absents (migration douce)."""
     try:
         with get_db() as conn:
             cur = conn.execute("PRAGMA table_info(bots)")
@@ -173,6 +174,8 @@ def ensure_bot_extra_columns():
                 alters.append("ALTER TABLE bots ADD COLUMN pro_address_url TEXT")
             if "pro_description" not in existing:
                 alters.append("ALTER TABLE bots ADD COLUMN pro_description TEXT")
+            if "auth_key" not in existing:
+                alters.append("ALTER TABLE bots ADD COLUMN auth_key TEXT")
             for sql in alters:
                 conn.execute(sql)
             if alters:
@@ -191,9 +194,27 @@ def db_exec(sql, params=()):
         c.commit()
         return True
 
+# --- Génération + remplissage des clés d’accès (sécurité d’embed) ----
+def make_bot_key() -> str:
+    return secrets.token_urlsafe(16)
+
+def ensure_bot_keys():
+    """Génère une auth_key pour tous les bots qui n'en ont pas (migration douce)."""
+    try:
+        with get_db() as conn:
+            cur = conn.execute("SELECT id FROM bots WHERE auth_key IS NULL OR auth_key=''")
+            rows = cur.fetchall()
+            for r in rows:
+                conn.execute("UPDATE bots SET auth_key=? WHERE id=?", (make_bot_key(), r["id"]))
+            if rows:
+                conn.commit()
+    except Exception as e:
+        logger.error(f"ensure_bot_keys error: {e}", exc_info=True)
+
 with app.app_context():
     init_db()
     ensure_bot_extra_columns()
+    ensure_bot_keys()
 
 # ---------------------------------------------------------------------
 # Utilitaires / Normalisation
@@ -402,11 +423,13 @@ def dashboard():
                 (name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
                  pro_phone, pro_address_lbl, pro_address_url, pro_description, current_user.id))
     else:
+        # ✅ nouvelle clé d’accès pour le bot
+        auth_key = make_bot_key()
         db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
-                                    pro_phone, pro_address_label, pro_address_url, pro_description)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    pro_phone, pro_address_label, pro_address_url, pro_description, auth_key)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-                 pro_phone, pro_address_lbl, pro_address_url, pro_description))
+                 pro_phone, pro_address_lbl, pro_address_url, pro_description, auth_key))
 
     flash("✅ Bot sauvegardé.", "success")
     return redirect(url_for("preview"))
@@ -449,20 +472,31 @@ def preview():
 def chat_public():
     """
     Affiche le widget dans une page minimaliste pour l'iframe.
-    - Si ?bot=<id> est fourni, on charge ce bot.
-    - Sinon, si l'utilisateur est connecté, on prend son bot.
-    - Sinon, message d’info.
+    Sécurité : exige ?bot=<id> et, si visiteur externe, ?key=<auth_key>.
+    Si l'utilisateur propriétaire est connecté, la clé n'est pas requise.
     """
-    bot_id = request.args.get("bot")
+    bot_id = request.args.get("bot", type=int)
+    key    = (request.args.get("key") or "").strip()
 
-    row = None
-    if bot_id:
-        row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
-    elif current_user.is_authenticated:
-        row = get_bot(int(current_user.id))
+    if not bot_id:
+        return "Aucun bot à afficher. Fournissez ?bot=<id>.", 400
 
+    row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
     if not row:
-        return "Aucun bot à afficher. Fournissez ?bot=<id> ou connectez-vous et enregistrez un bot.", 200
+        return "Bot introuvable.", 404
+
+    # Propriétaire connecté ?
+    is_owner = False
+    if current_user.is_authenticated:
+        owners_bot = get_bot(int(current_user.id))
+        if owners_bot and dict(owners_bot)["id"] == bot_id:
+            is_owner = True
+
+    # Si pas le propriétaire, on vérifie la clé
+    if not is_owner:
+        db_key = (row["auth_key"] or "").strip()
+        if not db_key or key != db_key:
+            return "Accès non autorisé (clé invalide).", 403
 
     bot = dict(row)
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
@@ -592,23 +626,26 @@ def confirm():
         _, pack_slug = normalize_metier(bot.get("metier") or "")
         welcome = bot.get("welcome_text", "Bonjour 👋")
 
-        # --- Code d’intégration (historique) ---
-        bot_id = bot.get("id")
-        embed_src_legacy = f"{base.rstrip('/')}/chat?bot={bot_id}" if bot_id else f"{base.rstrip('/')}/chat"
+        # --- Données bot + clé ---
+        bot_id   = bot.get("id")
+        auth_key = (bot.get("auth_key") or "").strip() if bot_id else None
+
+        # --- Code d’intégration (historique) — maintenant avec clé pour sécurité ---
+        embed_src_legacy = f"{base.rstrip('/')}/chat?bot={bot_id}&key={auth_key}" if bot_id and auth_key else f"{base.rstrip('/')}/chat"
         embed_code = (
             f'<iframe src="{embed_src_legacy}" '
             'style="border:0;width:420px;height:580px;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
             'title="Mon Betty Bot"></iframe>'
         )
 
-        # --- ⚡️ Liens d’intégration ultra simples (pour Wix/NoCode) ---
-        embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}" if bot_id else None   # “Adresse du site Web”
-        embed_url_page   = f"{base.rstrip('/')}/embed/{bot_id}" if bot_id else None      # page wrapper
+        # --- ⚡️ Liens d’intégration ultra simples (pour Wix/NoCode) — incluent la clé ---
+        embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}&key={auth_key}" if bot_id and auth_key else None   # “Adresse du site Web”
+        embed_url_page   = f"{base.rstrip('/')}/embed/{bot_id}" if bot_id else None      # page wrapper (inclut la clé automatiquement)
         embed_iframe     = (
             f'<iframe src="{embed_url_simple}" '
             'width="420" height="580" style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
             'title="Mon Betty Bot"></iframe>'
-        ) if bot_id else None
+        ) if embed_url_simple else None
 
         return render_template(
             "confirm.html",
@@ -747,7 +784,8 @@ def embed(bot_id: int):
     if not row:
         return "Bot introuvable.", 404
     base = base_url_for_checkout().rstrip("/")
-    src = f"{base}/chat?bot={bot_id}"
+    key  = (row["auth_key"] or "").strip()
+    src  = f"{base}/chat?bot={bot_id}&key={key}"  # ✅ inclut la clé
     # page ultra-minimale pour Wix/Notion/Webflow...
     return (
         f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
