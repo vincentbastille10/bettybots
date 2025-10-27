@@ -387,10 +387,6 @@ def avatar_proxy(slug: str):
 # ---------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------
-@app.get("/healthz")
-def healthz():
-    return jsonify({"ok": True})
-
 @app.get("/")
 def root():
     if current_user.is_authenticated:
@@ -887,83 +883,58 @@ def api_send_code():
 # --------------------------- EMBED WRAPPER ---------------------------
 @app.get("/embed/<int:bot_id>")
 def embed(bot_id: int):
-    """
-    Page wrapper d’intégration (utile si tu veux embarquer un IFRAME
-    sans exposer la clé dans l’URL publique). Le propriétaire connecté
-    peut y accéder; les visiteurs externes reçoivent 403.
-    """
     row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
     if not row:
         return "Bot introuvable.", 404
 
-    # Propriétaire ?
-    owner_ok = False
-    if current_user.is_authenticated:
-        owners_bot = get_bot(int(current_user.id))
-        if owners_bot and dict(owners_bot)["id"] == bot_id:
-            owner_ok = True
-    if not owner_ok:
-        return "Accès réservé au propriétaire.", 403
-
     bot = dict(row)
-    base = base_url_for_checkout()
-    # garantit la présence d'une clé
-    if not (bot.get("auth_key") or "").strip():
-        new_key = make_bot_key()
-        db_exec("UPDATE bots SET auth_key=? WHERE id=?", (new_key, bot["id"]))
-        bot["auth_key"] = new_key
+    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
+    shape = bot.get("shape") or "rounded"
+    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
 
-    iframe_src = f"{base.rstrip('/')}/chat?bot={bot['id']}&key={bot['auth_key']}"
-    html = f"""<!doctype html>
-<html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Intégration — Betty Bot</title>
-<style>
- body{{background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;margin:0;padding:24px}}
- .wrap{{max-width:900px;margin:0 auto}}
- iframe{{width:420px;height:580px;border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4)}}
- .hint{{opacity:.7;margin-top:10px}}
-</style></head><body>
- <div class="wrap">
-  <h1>Intégration de votre bot</h1>
-  <iframe src="{iframe_src}" title="Mon Betty Bot"></iframe>
-  <p class="hint">Vous seul voyez cette page car vous êtes connecté en tant que propriétaire.</p>
- </div>
-</body></html>"""
-    return Response(html, mimetype="text/html")
-
-# --------------------------- ERROR HANDLERS --------------------------
-@app.errorhandler(404)
-def not_found(e):
+    cfg = {
+        "name": bot.get("name", "Mon Betty Bot"),
+        "color_hex": bot.get("color_hex", "#4F46E5"),
+        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
+        "persona": bot.get("persona", "neutre"),
+        "shape": shape,
+        "widget_size": shape_to_size.get(shape, "m"),
+        "slug": pack_slug,
+        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
+        "avatar_url": f"/avatar/{internal_slug}",
+        "metier": bot.get("metier") or pack_slug,
+        "pro_phone": bot.get("pro_phone"),
+        "pro_address_label": bot.get("pro_address_label"),
+        "pro_address_url": bot.get("pro_address_url"),
+        "pro_description": bot.get("pro_description"),
+    }
+    # Template d’intégration minimal (ou crée templates/embed.html si tu préfères)
     try:
-        return render_template("404.html"), 404
+        return render_template("embed.html", bot=bot, cfg=cfg)
     except Exception:
-        return Response(
-            "<h1>404</h1><p>Page introuvable.</p><p><a href='{}'>Retour</a></p>".format(url_for("root")),
-            mimetype="text/html", status=404
-        )
+        # fallback minimal si embed.html manque
+        html = f"""<!doctype html><meta charset="utf-8">
+<title>Betty — Embed</title>
+<iframe src="/chat?bot={bot['id']}" width="420" height="580"
+ style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);"></iframe>"""
+        return Response(html, mimetype="text/html")
 
+# --------------------------- ERREURS GLOBALES ------------------------
 @app.errorhandler(500)
-def server_error(e):
-    logger.error("500 error: %s", e, exc_info=True)
-    try:
-        return render_template("500.html"), 500
-    except Exception:
-        return Response(
-            "<h1>Erreur</h1><p>Un problème est survenu.</p><p><a href='{}'>Retour</a></p>".format(url_for("root")),
-            mimetype="text/html", status=500
-        )
+def on_500(err):
+    logger.error("HTTP 500: %s", err, exc_info=True)
+    # Page ultra-sûre pour empêcher un 500 bloquant, notamment sur /pay
+    html = """<!doctype html><meta charset="utf-8">
+<title>Erreur</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;padding:40px">
+  <h1>Oups…</h1>
+  <p>Une erreur s’est produite. Vous pouvez réessayer ou <a href="/pay">aller au paiement</a>.</p>
+</body>"""
+    return Response(html, mimetype="text/html"), 500
 
-# ----------------------------- DEV ONLY ------------------------------
-@app.get("/logout")
-def logout():
-    try:
-        logout_user()
-    except Exception:
-        pass
-    return redirect(url_for("root"))
-
-# ------------------------------ MAIN --------------------------------
+# ---------------------------------------------------------------------
+# MAIN (utile en local)
+# ---------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
