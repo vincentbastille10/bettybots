@@ -145,7 +145,7 @@ def init_db():
             pro_address_label TEXT,
             pro_address_url TEXT,
             pro_description TEXT,
-            auth_key TEXT,                             -- ✅ clé d’accès publique
+            auth_key TEXT,                             -- clé d’accès publique
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS leads (
@@ -244,17 +244,41 @@ def is_guest_user() -> bool:
 def get_bot(user_id: int) -> Optional[sqlite3.Row]:
     return db_one("SELECT * FROM bots WHERE user_id=? LIMIT 1", (user_id,))
 
+def ensure_user_bot(user_id: int) -> sqlite3.Row:
+    """
+    Retourne le bot de l'utilisateur ; le crée si absent (pack par défaut: agent_immobilier).
+    Génère aussi une auth_key si manquante.
+    """
+    row = get_bot(user_id)
+    if not row:
+        name = "Mon Betty Bot"
+        pack_slug = "agent_immobilier"
+        color_hex = "#4F46E5"
+        welcome = "Bonjour 👋"
+        persona = "neutre"
+        widget_sz = "m"
+        shape = "rounded"
+        auth_key = make_bot_key()
+        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
+                                    pro_phone, pro_address_label, pro_address_url, pro_description, auth_key)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (user_id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
+                 "", "", "", "", auth_key))
+        row = get_bot(user_id)
+    else:
+        if not (row.get("auth_key") or "").strip():
+            db_exec("UPDATE bots SET auth_key=? WHERE id=?", (make_bot_key(), row["id"]))
+            row = get_bot(user_id)
+    return row
+
 def base_url_for_checkout() -> str:
     """Base URL absolue pour success/cancel Stripe (jamais localhost en prod)."""
-    # 1) Si fournie, on force PUBLIC_BASE_URL / BASE_URL (ex: https://bettybots.vercel.app)
     if PUBLIC_BASE_URL_ENV:
         return PUBLIC_BASE_URL_ENV.rstrip("/")
-    # 2) Sinon, on dérive de la requête (ProxyFix respecte X-Forwarded-Proto/Host)
     base = (request.url_root or "").rstrip("/")
     if not base:
-        return "https://example.com"  # fallback extrême
+        return "https://example.com"
     low = base.lower()
-    # En dev local, on tolère http://localhost
     if "localhost" in low or "127.0.0.1" in low:
         return base.replace("https://", "http://")
     return base
@@ -423,7 +447,7 @@ def dashboard():
                 (name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
                  pro_phone, pro_address_lbl, pro_address_url, pro_description, current_user.id))
     else:
-        # ✅ nouvelle clé d’accès pour le bot
+        # nouvelle clé d’accès pour le bot
         auth_key = make_bot_key()
         db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
                                     pro_phone, pro_address_label, pro_address_url, pro_description, auth_key)
@@ -548,7 +572,8 @@ def signup():
 @app.get("/pay")
 @login_required
 def pay():
-    row = get_bot(int(current_user.id))
+    # garantit qu'un bot existe avant de payer
+    row = ensure_user_bot(int(current_user.id))
     bot = dict(row) if row else None
     return render_template("pay.html", bot=bot, stripe_enabled=bool(STRIPE_SECRET_KEY))
 
@@ -563,7 +588,7 @@ def pay_stripe():
         return redirect(url_for("pay"))
 
     base = base_url_for_checkout()
-    row = get_bot(int(current_user.id))
+    row = ensure_user_bot(int(current_user.id))
     bot = dict(row) if row else {}
     # libellé produit
     _, pack_slug = normalize_metier(bot.get("metier") or "")
@@ -620,32 +645,58 @@ def confirm():
         if sub_id:
             db_exec("UPDATE users SET stripe_subscription_id=? WHERE id=?", (sub_id, int(current_user.id)))
 
-        row = get_bot(int(current_user.id))
+        # S'assure qu'un bot existe et qu'il a une auth_key
+        row = ensure_user_bot(int(current_user.id))
         bot = dict(row) if row else {}
         base = base_url_for_checkout()
         _, pack_slug = normalize_metier(bot.get("metier") or "")
         welcome = bot.get("welcome_text", "Bonjour 👋")
 
-        # --- Données bot + clé ---
-        bot_id   = bot.get("id")
+        # --- garantir un bot_id + auth_key ---
+        bot_id = bot.get("id")
         auth_key = (bot.get("auth_key") or "").strip() if bot_id else None
+        if bot_id and not auth_key:
+            try:
+                new_key = make_bot_key()
+                db_exec("UPDATE bots SET auth_key=? WHERE id=?", (new_key, bot_id))
+                auth_key = new_key
+                row = get_bot(int(current_user.id))
+                bot = dict(row) if row else bot
+            except Exception as _e:
+                logger.error(f"Impossible de créer l'auth_key: {_e}", exc_info=True)
 
-        # --- Code d’intégration (historique) — maintenant avec clé pour sécurité ---
-        embed_src_legacy = f"{base.rstrip('/')}/chat?bot={bot_id}&key={auth_key}" if bot_id and auth_key else f"{base.rstrip('/')}/chat"
-        embed_code = (
-            f'<iframe src="{embed_src_legacy}" '
-            'style="border:0;width:420px;height:580px;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
-            'title="Mon Betty Bot"></iframe>'
-        )
+        # --- URLs/snippet d’intégration ---
+        embed_url_simple = None
+        if bot_id and auth_key:
+            embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}&key={auth_key}"
+        if not embed_url_simple and bot_id:
+            embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}"
 
-        # --- ⚡️ Liens d’intégration ultra simples (pour Wix/NoCode) — incluent la clé ---
-        embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}&key={auth_key}" if bot_id and auth_key else None   # “Adresse du site Web”
-        embed_url_page   = f"{base.rstrip('/')}/embed/{bot_id}" if bot_id else None      # page wrapper (inclut la clé automatiquement)
-        embed_iframe     = (
+        embed_iframe = (
             f'<iframe src="{embed_url_simple}" '
             'width="420" height="580" style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
             'title="Mon Betty Bot"></iframe>'
         ) if embed_url_simple else None
+
+        embed_url_page = f"{base.rstrip('/')}/embed/{bot_id}" if bot_id else None
+
+        # --- email au propriétaire des abonnements (toi) avec les IDs Stripe ---
+        try:
+            owner_to = "spectramediabots@gmail.com"
+            buyer_email = getattr(current_user, "email", None) or "inconnu"
+            bot_info = f"bot_id={bot_id or '—'} pack={pack_slug} base={base.rstrip('/')}"
+            subject = f"[BettyBots] Nouveau paiement — {payment_status} — {buyer_email}"
+            body = (
+                "Nouveau paiement Betty Bots.\n\n"
+                f"Acheteur : {buyer_email}\n"
+                f"{bot_info}\n\n"
+                f"Session ID : {session_id or '—'}\n"
+                f"Subscription ID : {sub_id or '—'}\n"
+                f"Customer ID : {cust_id or '—'}\n"
+            )
+            send_mail(owner_to, subject, body)
+        except Exception as _e:
+            logger.error(f"Owner email send failed: {_e}", exc_info=True)
 
         return render_template(
             "confirm.html",
@@ -657,7 +708,7 @@ def confirm():
             base_url=base.rstrip("/"),
             pack=pack_slug,
             welcome_text=welcome,
-            embed_code=embed_code,
+            embed_code=None,              # on n’affiche plus le legacy
             bot_id=bot_id,
             embed_url_simple=embed_url_simple,
             embed_url_page=embed_url_page,
@@ -785,7 +836,7 @@ def embed(bot_id: int):
         return "Bot introuvable.", 404
     base = base_url_for_checkout().rstrip("/")
     key  = (row["auth_key"] or "").strip()
-    src  = f"{base}/chat?bot={bot_id}&key={key}"  # ✅ inclut la clé
+    src  = f"{base}/chat?bot={bot_id}&key={key}" if key else f"{base}/chat?bot={bot_id}"
     # page ultra-minimale pour Wix/Notion/Webflow...
     return (
         f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
