@@ -96,11 +96,10 @@
     <h1>Configuration du bot</h1>
     <div class="sub">Page 1 — apparence, personnalité, pack métier et phrase d’accroche.</div>
 
-    {# POST sur /dashboard (même route) #}
     <form method="POST" action="/dashboard">
       {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
       <input type="hidden" name="bot_name" value="{{ cfg_bot_name }}">
-      <input type="hidden" name="next" value="/preview"> {# utilitaire si ton serveur l'utilise #}
+      <input type="hidden" name="next" value="/preview">
 
       <div class="grid">
         <!-- Avatars + Couleurs -->
@@ -173,7 +172,22 @@
         </div>
       </div>
 
-      <!-- Coordonnées publiques (facultatif) -->
+      <!-- Activité / Présentation / Enseigne -->
+      <div class="card" style="margin-top:16px">
+        <div class="section-title">Activité / Présentation / Enseigne (facultatif)</div>
+        <div class="row">
+          <label>
+            Décrivez votre activité, votre cabinet, votre enseigne…
+            <input
+              name="pro_activity"
+              value="{{ (bot.pro_activity if bot and bot.pro_activity else '') }}"
+              placeholder="Ex : Cabinet du Dr Martin – Kinésithérapeute Le Mans">
+          </label>
+        </div>
+        <div class="sub">Ce texte permettra à Betty de se présenter avec le bon contexte professionnel.</div>
+      </div>
+
+      <!-- Coordonnées publiques -->
       <div class="card" style="margin-top:16px">
         <div class="section-title">Coordonnées publiques (facultatif)</div>
         <div class="row">
@@ -209,12 +223,6 @@
       <div class="footer">
         <button type="submit" class="btn cta">Enregistrer & tester le bot</button>
       </div>
-
-      {# Champs postés :
-         avatar_key, color_hex, persona, widget_size, pack_slug, greeting, bot_name,
-         pro_phone, pro_address_label, pro_address_url
-         → le serveur enregistre puis redirect /preview
-      #}
     </form>
   </div>
 </body>
