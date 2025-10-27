@@ -13,7 +13,7 @@ from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     current_user, login_required
 )
-from werkzeug.middleware.proxy_fix import ProxyFix  # ✅ pour respecter X-Forwarded-* en prod (Vercel/Render)
+from werkzeug.middleware.proxy_fix import ProxyFix  # respecte X-Forwarded-* en prod (Vercel/Render)
 
 # Dépendances optionnelles pour le proxy d’images (secours)
 try:
@@ -46,7 +46,7 @@ DB_PATH = pick_db_path()
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
 
-# ✅ Respecte le schéma/host envoyés par le reverse-proxy (Vercel/Render/Nginx)
+# Respecte le schéma/host envoyés par le reverse-proxy (Vercel/Render/Nginx)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Stripe
@@ -227,14 +227,11 @@ def base_url_for_checkout() -> str:
     """Base URL absolue pour success/cancel Stripe (jamais localhost en prod)."""
     # 1) Si fournie, on force PUBLIC_BASE_URL / BASE_URL (ex: https://bettybots.vercel.app)
     if PUBLIC_BASE_URL_ENV:
-        base = PUBLIC_BASE_URL_ENV.rstrip("/")
-        return base
-
+        return PUBLIC_BASE_URL_ENV.rstrip("/")
     # 2) Sinon, on dérive de la requête (ProxyFix respecte X-Forwarded-Proto/Host)
     base = (request.url_root or "").rstrip("/")
     if not base:
         return "https://example.com"  # fallback extrême
-
     low = base.lower()
     # En dev local, on tolère http://localhost
     if "localhost" in low or "127.0.0.1" in low:
@@ -447,6 +444,51 @@ def preview():
 
     return render_template("preview.html", bot=bot, cfg=cfg)
 
+# --------------------------- CHAT PUBLIC (iframe) --------------------
+@app.get("/chat")
+def chat_public():
+    """
+    Affiche le widget dans une page minimaliste pour l'iframe.
+    - Si ?bot=<id> est fourni, on charge ce bot.
+    - Sinon, si l'utilisateur est connecté, on prend son bot.
+    - Sinon, message d’info.
+    """
+    bot_id = request.args.get("bot")
+
+    row = None
+    if bot_id:
+        row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
+    elif current_user.is_authenticated:
+        row = get_bot(int(current_user.id))
+
+    if not row:
+        return "Aucun bot à afficher. Fournissez ?bot=<id> ou connectez-vous et enregistrez un bot.", 200
+
+    bot = dict(row)
+    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
+    shape = bot.get("shape") or "rounded"
+    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
+
+    cfg = {
+        "name": bot.get("name", "Mon Betty Bot"),
+        "color_hex": bot.get("color_hex", "#4F46E5"),
+        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
+        "persona": bot.get("persona", "neutre"),
+        "shape": shape,
+        "widget_size": shape_to_size.get(shape, "m"),
+        "slug": pack_slug,
+        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
+        "avatar_url": f"/avatar/{internal_slug}",
+        "metier": bot.get("metier") or pack_slug,
+        "pro_phone": bot.get("pro_phone"),
+        "pro_address_label": bot.get("pro_address_label"),
+        "pro_address_url": bot.get("pro_address_url"),
+        "pro_description": bot.get("pro_description"),
+    }
+
+    # On réutilise le template de test (UI identique à /preview)
+    return render_template("preview.html", bot=bot, cfg=cfg)
+
 # ---------------------------- SIGNUP ---------------------------------
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -550,15 +592,23 @@ def confirm():
         _, pack_slug = normalize_metier(bot.get("metier") or "")
         welcome = bot.get("welcome_text", "Bonjour 👋")
 
-        # --- Code d’intégration (simple iframe) ---
-        # On fournit une URL neutre /chat?bot=<id> côté domaine courant (PUBLIC_BASE_URL/BASE_URL)
+        # --- Code d’intégration (historique) ---
         bot_id = bot.get("id")
-        embed_src = f"{base.rstrip('/')}/chat?bot={bot_id}" if bot_id else f"{base.rstrip('/')}/chat"
+        embed_src_legacy = f"{base.rstrip('/')}/chat?bot={bot_id}" if bot_id else f"{base.rstrip('/')}/chat"
         embed_code = (
-            f'<iframe src="{embed_src}" '
+            f'<iframe src="{embed_src_legacy}" '
             'style="border:0;width:420px;height:580px;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
             'title="Mon Betty Bot"></iframe>'
         )
+
+        # --- ⚡️ Liens d’intégration ultra simples (pour Wix/NoCode) ---
+        embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}" if bot_id else None   # “Adresse du site Web”
+        embed_url_page   = f"{base.rstrip('/')}/embed/{bot_id}" if bot_id else None      # page wrapper
+        embed_iframe     = (
+            f'<iframe src="{embed_url_simple}" '
+            'width="420" height="580" style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
+            'title="Mon Betty Bot"></iframe>'
+        ) if bot_id else None
 
         return render_template(
             "confirm.html",
@@ -570,8 +620,11 @@ def confirm():
             base_url=base.rstrip("/"),
             pack=pack_slug,
             welcome_text=welcome,
-            embed_code=embed_code,    # ← utilisé par confirm.html pour affichage + email
-            bot_id=bot_id
+            embed_code=embed_code,
+            bot_id=bot_id,
+            embed_url_simple=embed_url_simple,
+            embed_url_page=embed_url_page,
+            embed_iframe=embed_iframe,
         )
     except Exception as e:
         logger.error(f"Confirm error: {e}", exc_info=True)
@@ -583,7 +636,6 @@ def confirm():
 def api_chat():
     try:
         data = request.get_json(force=True) or {}
-        # .trim() n'existe pas en Python, on sécurise avec fallback
         raw_msg = data.get("message") or ""
         message = raw_msg.strip().lower()
         pack    = (data.get("pack") or "agent_immobilier").strip().lower()
@@ -600,11 +652,9 @@ def api_chat():
         if not message or "bonjour" in message:
             return jsonify({"reply": "Bonjour 👋", "ask_lead": False})
 
-        # mini règles de démo
         if any(k in message for k in ["rdv", "rendez", "dispo", "disponibilit"]):
             return jsonify({"reply": "D’accord. Préférez-vous matin, après-midi ou soir ?", "ask_lead": True})
 
-        # fallback + relance qualif
         return jsonify({"reply": lead_prompts.get(pack, "Pouvez-vous préciser votre besoin, votre budget et votre délai ?"), "ask_lead": True})
 
     except Exception:
@@ -689,6 +739,23 @@ def api_send_code():
     except Exception as e:
         logger.error(f"/api/send_code error: {e}", exc_info=True)
         return jsonify({"ok": False}), 500
+
+# --------------------------- EMBED WRAPPER ---------------------------
+@app.get("/embed/<int:bot_id>")
+def embed(bot_id: int):
+    row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
+    if not row:
+        return "Bot introuvable.", 404
+    base = base_url_for_checkout().rstrip("/")
+    src = f"{base}/chat?bot={bot_id}"
+    # page ultra-minimale pour Wix/Notion/Webflow...
+    return (
+        f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<style>html,body{{margin:0;height:100%}}.wrap{{display:grid;place-items:center;height:100%;background:#0d1117}}</style>'
+        f'</head><body><div class="wrap">'
+        f'<iframe src="{src}" width="420" height="580" style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" title="Betty Bot"></iframe>'
+        f'</div></body></html>'
+    )
 
 # ----------------------------- Divers --------------------------------
 @app.get("/favicon.ico")
