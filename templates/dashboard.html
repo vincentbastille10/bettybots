@@ -77,7 +77,7 @@
     /* Champs */
     .row{ display:grid; gap:8px; margin-bottom:10px }
     .row label{ font-size:13px; color:var(--muted) }
-    select, textarea{
+    select, textarea, input{
       width:100%; padding:12px; border-radius:10px; border:1px solid var(--line);
       background:#0f1012; color:var(--text); resize:vertical
     }
@@ -173,12 +173,46 @@
         </div>
       </div>
 
+      <!-- Coordonnées publiques (facultatif) -->
+      <div class="card" style="margin-top:16px">
+        <div class="section-title">Coordonnées publiques (facultatif)</div>
+        <div class="row">
+          <label>Téléphone professionnel
+            <input
+              name="pro_phone"
+              value="{{ (bot.pro_phone if bot and bot.pro_phone else '') }}"
+              placeholder="+33 1 23 45 67 89"
+              pattern="^\\+?[\\d\\s\\-\\.]{8,}$"
+              inputmode="tel">
+          </label>
+        </div>
+        <div class="row">
+          <label>Adresse professionnelle (libellé)
+            <input
+              name="pro_address_label"
+              value="{{ (bot.pro_address_label if bot and bot.pro_address_label else '') }}"
+              placeholder="12 rue de la République, 72000 Le Mans">
+          </label>
+        </div>
+        <div class="row">
+          <label>Lien Google Maps (URL)
+            <input
+              name="pro_address_url"
+              type="url"
+              value="{{ (bot.pro_address_url if bot and bot.pro_address_url else '') }}"
+              placeholder="https://maps.app.goo.gl/xxxx">
+            <div class="sub">Si vide, un lien Maps sera généré automatiquement depuis le libellé.</div>
+          </label>
+        </div>
+      </div>
+
       <div class="footer">
         <button type="submit" class="btn cta">Enregistrer & tester le bot</button>
       </div>
 
       {# Champs postés :
-         avatar_key, color_hex, persona, widget_size, pack_slug, greeting, bot_name
+         avatar_key, color_hex, persona, widget_size, pack_slug, greeting, bot_name,
+         pro_phone, pro_address_label, pro_address_url
          → le serveur enregistre puis redirect /preview
       #}
     </form>
