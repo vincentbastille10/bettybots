@@ -2,170 +2,90 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Confirmation d’achat — Betty Bots</title>
+  <title>Merci pour votre abonnement ! — Betty Bots</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --bg:#0d1117; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --b:#e5e7eb1a; --primary:#4F46E5; }
+    :root { --bg:#0d1117; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --b:#1f2937; --primary:#4F46E5; --ok:#16a34a; }
     * { box-sizing: border-box }
-    body {
-      margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: var(--bg); color: var(--text); line-height:1.5;
-    }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text) }
     .wrap { max-width: 940px; margin: 24px auto 64px; padding: 0 16px; }
-    h1 { margin: 8px 0 4px; font-size: 28px }
-    h2 { margin: 0 0 10px; font-size: 20px }
-    p.muted, .muted { color: var(--muted) }
-    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; }
-    @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } }
-    .card {
-      background: var(--panel); border: 1px solid var(--b); border-radius: 16px; padding: 18px;
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset;
-    }
-    .badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid var(--b) }
-    .ok { background:#16a34a22; border-color:#16a34a55; color:#86efac }
-    .warn { background:#f59e0b22; border-color:#f59e0b55; color:#fde68a }
-    .err { background:#ef444422; border-color:#ef444455; color:#fecaca }
+    .card { background:var(--panel); border:1px solid var(--b); border-radius:16px; padding:18px }
+    h1,h2 { margin:0 0 10px }
+    h1 { font-size:22px }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+    .ok { color:#bbf7d0 }
+    .badge { display:inline-flex; gap:8px; align-items:center; background:#052e16; border:1px solid #14532d; color:#bbf7d0; border-radius:12px; padding:8px 10px; font-weight:600 }
+    .kpi { display:grid; grid-template-columns: 1fr 1fr; gap:10px }
+    @media (max-width: 560px){ .kpi { grid-template-columns: 1fr } }
+    .kpi .item { background:#0b1220; border:1px dashed #334155; border-radius:12px; padding:12px }
+    .muted { color:var(--muted) }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace }
-    input.copy, textarea.copy {
-      width:100%; padding:.65rem .75rem; border:1px solid #334155; background:#0b1220; color:#e5e7eb;
-      border-radius:10px; outline:none;
-    }
-    textarea.copy { min-height: 120px; resize: vertical }
-    button.btn {
-      padding:.6rem .9rem; border:0; border-radius:10px; background:var(--primary); color:#fff; cursor:pointer;
-    }
-    .sep { height:1px; background:#111827; border-top:1px solid #1f2937; margin:14px 0 }
-    .hint { font-size:13px; color:#9ca3af }
-    .pill { display:inline-block; padding:2px 8px; border:1px solid var(--b); border-radius:999px; font-size:12px; color:#a1a1aa }
-    a { color:#93c5fd; text-decoration:none }
-    a:hover { text-decoration:underline }
-    .kpi { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px }
-    @media (max-width: 520px){ .kpi { grid-template-columns: 1fr 1fr } }
-    .kpi .card { text-align:center }
+    textarea, input { width:100%; background:#0b1220; color:var(--text); border:1px solid #334155; border-radius:10px; padding:.65rem .75rem; outline:none }
+    button.btn { background:var(--primary); color:#fff; border:0; border-radius:10px; padding:.6rem .9rem; cursor:pointer }
+    .btn.secondary { background:#1f2937 }
+    .hint { color:var(--muted); font-size:13px }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <header class="row" style="justify-content:space-between">
-      <div>
-        <div class="pill">Betty Bots</div>
-        <h1>Confirmation d’achat</h1>
-        <p class="muted">Merci ! Votre abonnement est actif (ou en cours d’activation). Vous pouvez intégrer votre bot immédiatement.</p>
-      </div>
+    <div class="card" style="margin-bottom:16px">
       <div class="row">
-        <span class="badge {% if payment_status in ['paid','no_payment_required'] %}ok{% elif payment_status=='unpaid' %}warn{% else %}err{% endif %}">
-          Paiement : {{ payment_status or 'inconnu' }}
-        </span>
+        <div class="badge">✅ <span>Merci pour votre abonnement !</span></div>
       </div>
-    </header>
-
-    <div class="grid" style="margin-top:14px">
-      <!-- Colonne gauche : intégration -->
-      <section class="card">
-        <h2>Intégrer votre bot sur votre site</h2>
-
-        {% if embed_url_simple %}
-          <p class="muted" style="margin:.25rem 0 .5rem">
-            <strong>Wix (recommandé)</strong> : dans <em>Intégration → Adresse du site Web</em>, collez simplement cette URL.
-          </p>
-          <div class="row" style="gap:8px">
-            <input id="bb-url" class="copy mono" type="text" value="{{ embed_url_simple }}" readonly />
-            <button class="btn" type="button" onclick="copyToClipboard('bb-url')">Copier</button>
-          </div>
-          <p class="hint" style="margin-top:6px">Astuce : cette URL pointe directement vers votre bot (ID: {{ bot_id }}). Aucune configuration supplémentaire.</p>
-        {% else %}
-          <p>Identifiant du bot introuvable. Contactez le support si le problème persiste.</p>
-        {% endif %}
-
-        {% if embed_iframe %}
-          <div class="sep"></div>
-          <p class="muted" style="margin:.25rem 0 .5rem">
-            <strong>Éditeurs acceptant le HTML</strong> : vous pouvez aussi coller ce snippet &lt;iframe&gt; :
-          </p>
-          <textarea id="bb-iframe" class="copy mono" readonly>{{ embed_iframe }}</textarea>
-          <div class="row" style="margin-top:8px; gap:8px">
-            <button class="btn" type="button" onclick="copyRaw('bb-iframe')">Copier le code</button>
-            {% if embed_url_page %}
-              <a href="{{ embed_url_page }}" target="_blank" class="pill">Aperçu wrapper</a>
-            {% endif %}
-          </div>
-        {% endif %}
-
-        <div class="sep"></div>
-        <p class="hint">
-          Besoin d’aide ? Collez l’URL “Wix” ci-dessus. Si vous voyez une erreur 404 dans l’aperçu Wix, vérifiez que l’URL contient bien
-          <span class="mono">?bot={{ bot_id }}</span> et que votre page est en HTTPS.
-        </p>
-      </section>
-
-      <!-- Colonne droite : récap / infos -->
-      <aside class="card">
-        <h2>Récapitulatif</h2>
-        <div class="kpi">
-          <div class="card">
-            <div class="muted" style="font-size:12px">Pack</div>
-            <div style="font-weight:600">{{ pack or 'générique' }}</div>
-          </div>
-          <div class="card">
-            <div class="muted" style="font-size:12px">Bot ID</div>
-            <div class="mono">{{ bot_id or '—' }}</div>
-          </div>
-          <div class="card">
-            <div class="muted" style="font-size:12px">Abonnement</div>
-            <div class="mono">{{ sub_status or '—' }}</div>
-          </div>
-        </div>
-
-        <div class="sep"></div>
-
-        <p class="muted" style="margin-top:0">Message d’accueil :</p>
-        <div class="card" style="background:#0b1220;border:1px dashed #334155">
-          <div class="mono">{{ welcome_text or 'Bonjour 👋' }}</div>
-        </div>
-
-        <div class="sep"></div>
-
-        <p class="muted" style="margin:.25rem 0 .5rem">Infos Stripe</p>
-        <ul class="mono" style="padding-left:18px; margin: 0">
-          <li>Session : {{ session_id or '—' }}</li>
-          <li>Customer : {{ cust_id or '—' }}</li>
-          <li>Subscription : {{ sub_id or '—' }}</li>
-          <li>Statut paiement : {{ payment_status or '—' }}</li>
-        </ul>
-
-        <div class="sep"></div>
-
-        <p class="hint">Domaine d’hébergement : <span class="mono">{{ base_url }}</span></p>
-        <p class="hint">Vous pouvez revenir sur le <a href="{{ url_for('dashboard') }}">tableau de bord</a> pour modifier votre bot.</p>
-      </aside>
+      <p class="muted" style="margin:.5rem 0 0">Votre bot est prêt.</p>
     </div>
 
-    <!-- Optionnel : ancien code d’intégration général -->
-    {% if embed_code %}
-      <section class="card" style="margin-top:20px">
-        <h2>Code d’intégration (générique)</h2>
-        <p class="muted" style="margin:.25rem 0 .5rem">Si vous préférez un iframe standard :</p>
-        <textarea id="bb-legacy" class="copy mono" readonly>{{ embed_code }}</textarea>
-        <div style="margin-top:8px">
-          <button class="btn" type="button" onclick="copyRaw('bb-legacy')">Copier</button>
+    <div class="card" style="margin-bottom:16px">
+      <h2>Récapitulatif</h2>
+      <div class="kpi" style="margin-top:8px">
+        <div class="item">
+          <div class="muted" style="font-size:12px">Pack</div>
+          <div class="mono" style="margin-top:4px">{{ pack or 'agent_immobilier' }}</div>
         </div>
-      </section>
-    {% endif %}
+        <div class="item">
+          <div class="muted" style="font-size:12px">Statut paiement</div>
+          <div class="mono ok" style="margin-top:4px">
+            {% if payment_status in ['paid','no_payment_required'] %}Payé / Abonnement actif{% else %}{{ payment_status or '—' }}{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h2>Code d’intégration</h2>
+      <p class="muted">Collez ce code dans votre site (où vous souhaitez afficher le bot) :</p>
+
+      <textarea id="bb-iframe" rows="3" readonly>{{ embed_iframe }}</textarea>
+
+      <div class="row" style="margin-top:10px">
+        <button class="btn" type="button" onclick="copyRaw('bb-iframe')">Copier</button>
+        <button class="btn secondary" type="button" onclick="sendMe()">✉️ Envoyer ce code à mon adresse d’inscription</button>
+      </div>
+
+      <p id="copied" class="hint" style="display:none;margin-top:8px">✔️ Code copié dans le presse-papiers.</p>
+    </div>
+
+    <div class="card" style="display:flex;justify-content:flex-start">
+      <a href="{{ url_for('dashboard') }}" class="btn secondary">← Retour au dashboard</a>
+    </div>
   </div>
 
   <script>
-    function copyToClipboard(inputId){
-      const el = document.getElementById(inputId);
+    function copyRaw(id){
+      const el = document.getElementById(id);
       el.select(); el.setSelectionRange(0, 99999);
       try { document.execCommand('copy'); } catch(e){}
       if (navigator.clipboard && el.value) navigator.clipboard.writeText(el.value);
+      const ok = document.getElementById('copied');
+      if (ok) { ok.style.display = 'block'; setTimeout(()=> ok.style.display='none', 1500); }
     }
-    function copyRaw(areaId){
-      const el = document.getElementById(areaId);
-      el.select(); el.setSelectionRange(0, 99999);
-      try { document.execCommand('copy'); } catch(e){}
-      if (navigator.clipboard && el.value) navigator.clipboard.writeText(el.value);
+    async function sendMe(){
+      const code = document.getElementById('bb-iframe').value || '';
+      try{
+        const r = await fetch('/api/send_code', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})});
+        const j = await r.json();
+        alert(j.ok ? 'Code envoyé à votre email.' : 'Envoi impossible.');
+      }catch(e){ alert('Envoi impossible.'); }
     }
   </script>
 </body>
