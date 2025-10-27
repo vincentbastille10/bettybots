@@ -182,7 +182,7 @@
               name="pro_phone"
               value="{{ (bot.pro_phone if bot and bot.pro_phone else '') }}"
               placeholder="+33 1 23 45 67 89"
-              pattern="^\\+?[\\d\\s\\-\\.]{8,}$"
+              pattern="^\+?[0-9][0-9\s().-]{7,}$"
               inputmode="tel">
           </label>
         </div>
@@ -191,7 +191,7 @@
             <input
               name="pro_address_label"
               value="{{ (bot.pro_address_label if bot and bot.pro_address_label else '') }}"
-              placeholder="12 rue de la République, 72000 Le Mans">
+              placeholder="33 rue de la pelouse, 72000 Le Mans">
           </label>
         </div>
         <div class="row">
