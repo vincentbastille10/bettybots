@@ -140,6 +140,7 @@ def init_db():
             pro_phone TEXT,
             pro_address_label TEXT,
             pro_address_url TEXT,
+            pro_description TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS leads (
@@ -154,7 +155,7 @@ def init_db():
         conn.commit()
 
 def ensure_bot_extra_columns():
-    """Ajoute pro_phone, pro_address_label, pro_address_url si absents (migration douce)."""
+    """Ajoute pro_phone, pro_address_label, pro_address_url, pro_description si absents (migration douce)."""
     try:
         with get_db() as conn:
             cur = conn.execute("PRAGMA table_info(bots)")
@@ -166,6 +167,8 @@ def ensure_bot_extra_columns():
                 alters.append("ALTER TABLE bots ADD COLUMN pro_address_label TEXT")
             if "pro_address_url" not in existing:
                 alters.append("ALTER TABLE bots ADD COLUMN pro_address_url TEXT")
+            if "pro_description" not in existing:
+                alters.append("ALTER TABLE bots ADD COLUMN pro_description TEXT")
             for sql in alters:
                 conn.execute(sql)
             if alters:
@@ -360,6 +363,11 @@ def dashboard():
             "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
             "avatar_url": f"/avatar/{internal_slug}",    # avatar cohérent
             "metier": (bot or {}).get("metier") or pack_slug,
+            # Coordonnées publiques
+            "pro_phone": (bot or {}).get("pro_phone"),
+            "pro_address_label": (bot or {}).get("pro_address_label"),
+            "pro_address_url": (bot or {}).get("pro_address_url"),
+            "pro_description": (bot or {}).get("pro_description"),
         }
         return render_template("dashboard.html", bot=bot, cfg=cfg)
 
@@ -377,18 +385,20 @@ def dashboard():
     pro_phone        = (request.form.get("pro_phone") or "").strip()[:100]
     pro_address_lbl  = (request.form.get("pro_address_label") or "").strip()[:200]
     pro_address_url  = (request.form.get("pro_address_url") or "").strip()[:300]
+    pro_description  = (request.form.get("pro_description") or "").strip()[:400]
 
     if bot:
         db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=?,
-                                   pro_phone=?, pro_address_label=?, pro_address_url=? WHERE user_id=?""",
+                                   pro_phone=?, pro_address_label=?, pro_address_url=?, pro_description=?
+                   WHERE user_id=?""",
                 (name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-                 pro_phone, pro_address_lbl, pro_address_url, current_user.id))
+                 pro_phone, pro_address_lbl, pro_address_url, pro_description, current_user.id))
     else:
         db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
-                                    pro_phone, pro_address_label, pro_address_url)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                                    pro_phone, pro_address_label, pro_address_url, pro_description)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-                 pro_phone, pro_address_lbl, pro_address_url))
+                 pro_phone, pro_address_lbl, pro_address_url, pro_description))
 
     flash("✅ Bot sauvegardé.", "success")
     return redirect(url_for("preview"))
@@ -421,6 +431,7 @@ def preview():
         "pro_phone": bot.get("pro_phone"),
         "pro_address_label": bot.get("pro_address_label"),
         "pro_address_url": bot.get("pro_address_url"),
+        "pro_description": bot.get("pro_description"),
     }
 
     return render_template("preview.html", bot=bot, cfg=cfg)
@@ -523,6 +534,16 @@ def confirm():
         _, pack_slug = normalize_metier(bot.get("metier") or "")
         welcome = bot.get("welcome_text", "Bonjour 👋")
 
+        # --- Code d’intégration (simple iframe) ---
+        # On fournit une URL neutre /chat?bot=<id> côté domaine courant (PUBLIC_BASE_URL/BASE_URL)
+        bot_id = bot.get("id")
+        embed_src = f"{base.rstrip('/')}/chat?bot={bot_id}" if bot_id else f"{base.rstrip('/')}/chat"
+        embed_code = (
+            f'<iframe src="{embed_src}" '
+            'style="border:0;width:420px;height:580px;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
+            'title="Mon Betty Bot"></iframe>'
+        )
+
         return render_template(
             "confirm.html",
             session_id=session_id,
@@ -532,7 +553,9 @@ def confirm():
             cust_id=cust_id,
             base_url=base.rstrip("/"),
             pack=pack_slug,
-            welcome_text=welcome
+            welcome_text=welcome,
+            embed_code=embed_code,    # ← utilisé par confirm.html pour affichage + email
+            bot_id=bot_id
         )
     except Exception as e:
         logger.error(f"Confirm error: {e}", exc_info=True)
@@ -544,7 +567,7 @@ def confirm():
 def api_chat():
     try:
         data = request.get_json(force=True) or {}
-        message = (data.get("message") or "").strip().lower()
+        message = (data.get("message") or "").trim().lower() if hasattr(str, "trim") else (data.get("message") or "").strip().lower()
         pack    = (data.get("pack") or "agent_immobilier").strip().lower()
 
         # Réponse très simple + amorce de qualif par pack (proactif)
@@ -620,6 +643,34 @@ def api_lead():
     except Exception as e:
         logger.error(f"/api/lead error: {e}", exc_info=True)
         return jsonify({"status": "error"}), 500
+
+# ----------- API : envoi du code d’intégration à l’email d’inscription ----
+@app.post("/api/send_code")
+@login_required
+def api_send_code():
+    try:
+        data = request.get_json(force=True) or {}
+        code = (data.get("code") or "").strip()
+        if not code:
+            return jsonify({"ok": False, "error": "missing code"}), 400
+
+        to_email = getattr(current_user, "email", None)
+        if not to_email:
+            return jsonify({"ok": False, "error": "no user email"}), 400
+
+        subject = "Votre code d’intégration Betty Bot"
+        body = (
+            "Bonjour,\n\n"
+            "Voici le code d’intégration de votre bot Betty, prêt à copier-coller dans votre site :\n\n"
+            f"{code}\n\n"
+            "Besoin d’aide ? Répondez simplement à cet email.\n\n"
+            "— L’équipe Betty Bots"
+        )
+        ok = send_mail(to_email, subject, body)
+        return jsonify({"ok": bool(ok)})
+    except Exception as e:
+        logger.error(f"/api/send_code error: {e}", exc_info=True)
+        return jsonify({"ok": False}), 500
 
 # ----------------------------- Divers --------------------------------
 @app.get("/favicon.ico")
