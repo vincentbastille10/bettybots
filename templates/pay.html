@@ -37,7 +37,6 @@
   <div class="grid">
     <!-- Colonne 1 : Compte / Sign up -->
     <div class="card">
-      {% set is_guest = (current_user.is_authenticated and current_user.email and current_user.email.endswith('@guest.local')) %}
       {% if not current_user.is_authenticated or is_guest %}
         <h2 style="margin-top:0">Créer mon compte</h2>
         <form method="post" action="{{ url_for('signup') }}">
