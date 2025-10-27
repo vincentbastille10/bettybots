@@ -8,33 +8,37 @@
     :root { --bg:#0d1117; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --b:#1f2937; --primary:#4F46E5; --ok:#16a34a; }
     * { box-sizing: border-box }
     body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text) }
+    a { color:#93c5fd; text-decoration:none }
+    a:hover { text-decoration:underline }
     .wrap { max-width: 940px; margin: 24px auto 64px; padding: 0 16px; }
     .card { background:var(--panel); border:1px solid var(--b); border-radius:16px; padding:18px }
     h1,h2 { margin:0 0 10px }
     h1 { font-size:22px }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
-    .ok { color:#bbf7d0 }
     .badge { display:inline-flex; gap:8px; align-items:center; background:#052e16; border:1px solid #14532d; color:#bbf7d0; border-radius:12px; padding:8px 10px; font-weight:600 }
     .kpi { display:grid; grid-template-columns: 1fr 1fr; gap:10px }
     @media (max-width: 560px){ .kpi { grid-template-columns: 1fr } }
     .kpi .item { background:#0b1220; border:1px dashed #334155; border-radius:12px; padding:12px }
     .muted { color:var(--muted) }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace }
-    textarea, input { width:100%; background:#0b1220; color:var(--text); border:1px solid #334155; border-radius:10px; padding:.65rem .75rem; outline:none }
+    textarea { width:100%; background:#0b1220; color:var(--text); border:1px solid #334155; border-radius:10px; padding:.65rem .75rem; outline:none; min-height:92px }
     button.btn { background:var(--primary); color:#fff; border:0; border-radius:10px; padding:.6rem .9rem; cursor:pointer }
     .btn.secondary { background:#1f2937 }
     .hint { color:var(--muted); font-size:13px }
+    .footerlink { display:inline-flex; align-items:center; gap:6px }
   </style>
 </head>
 <body>
   <div class="wrap">
+    <!-- Bandeau succès -->
     <div class="card" style="margin-bottom:16px">
       <div class="row">
-        <div class="badge">✅ <span>Merci pour votre abonnement !</span></div>
+        <div class="badge">✅ <span>Merci pour votre abonnement&nbsp;!</span></div>
       </div>
       <p class="muted" style="margin:.5rem 0 0">Votre bot est prêt.</p>
     </div>
 
+    <!-- Récapitulatif -->
     <div class="card" style="margin-bottom:16px">
       <h2>Récapitulatif</h2>
       <div class="kpi" style="margin-top:8px">
@@ -44,18 +48,19 @@
         </div>
         <div class="item">
           <div class="muted" style="font-size:12px">Statut paiement</div>
-          <div class="mono ok" style="margin-top:4px">
+          <div class="mono" style="margin-top:4px; color:#bbf7d0">
             {% if payment_status in ['paid','no_payment_required'] %}Payé / Abonnement actif{% else %}{{ payment_status or '—' }}{% endif %}
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Code d'intégration -->
     <div class="card" style="margin-bottom:16px">
       <h2>Code d’intégration</h2>
       <p class="muted">Collez ce code dans votre site (où vous souhaitez afficher le bot) :</p>
 
-      <textarea id="bb-iframe" rows="3" readonly>{{ embed_iframe }}</textarea>
+      <textarea id="bb-iframe" readonly>{{ embed_iframe or '' }}</textarea>
 
       <div class="row" style="margin-top:10px">
         <button class="btn" type="button" onclick="copyRaw('bb-iframe')">Copier</button>
@@ -65,14 +70,16 @@
       <p id="copied" class="hint" style="display:none;margin-top:8px">✔️ Code copié dans le presse-papiers.</p>
     </div>
 
+    <!-- Retour dashboard -->
     <div class="card" style="display:flex;justify-content:flex-start">
-      <a href="{{ url_for('dashboard') }}" class="btn secondary">← Retour au dashboard</a>
+      <a href="{{ url_for('dashboard') }}" class="footerlink">← Retour au dashboard</a>
     </div>
   </div>
 
   <script>
     function copyRaw(id){
       const el = document.getElementById(id);
+      if(!el) return;
       el.select(); el.setSelectionRange(0, 99999);
       try { document.execCommand('copy'); } catch(e){}
       if (navigator.clipboard && el.value) navigator.clipboard.writeText(el.value);
@@ -82,10 +89,16 @@
     async function sendMe(){
       const code = document.getElementById('bb-iframe').value || '';
       try{
-        const r = await fetch('/api/send_code', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})});
+        const r = await fetch('/api/send_code', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({code})
+        });
         const j = await r.json();
         alert(j.ok ? 'Code envoyé à votre email.' : 'Envoi impossible.');
-      }catch(e){ alert('Envoi impossible.'); }
+      }catch(e){
+        alert('Envoi impossible.');
+      }
     }
   </script>
 </body>
