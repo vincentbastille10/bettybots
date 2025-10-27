@@ -1,44 +1,35 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>Inscription</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <meta charset="utf-8">
+  <title>Créer un compte — Betty Bots</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto;max-width:780px;margin:40px auto;padding:0 16px}
-    label{display:block;margin:.5rem 0 .2rem}
-    input{width:360px;max-width:100%;padding:.6rem;border:1px solid #d1d5db;border-radius:10px}
-    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer;background:#4F46E5;color:#fff}
-    .muted{color:#6b7280}
+    body { font-family: system-ui,-apple-system,Segoe UI,Roboto; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    .card { border:1px solid #e5e7eb; border-radius:14px; padding:18px }
+    label { display:block; margin:.5rem 0 .2rem }
+    input { width:100%; padding:.6rem; border:1px solid #d1d5db; border-radius:10px }
+    button { padding:10px 16px; border:0; border-radius:10px; cursor:pointer; background:#4F46E5; color:#fff }
+    a { color:#4F46E5; text-decoration:none }
   </style>
 </head>
 <body>
-  <h1>Inscription</h1>
-
-  <form method="post" action="{{ url_for('signup') }}">
-    <!-- Redirection après inscription : /pay par défaut, ou ?next=… si présent -->
-    <input type="hidden" name="next" value="{{ request.args.get('next', url_for('pay')) }}">
-
-    <label>Prénom</label>
-    <input name="first_name" type="text" autocomplete="given-name">
-
-    <label>Nom</label>
-    <input name="last_name" type="text" autocomplete="family-name">
-
-    <label>Email</label>
-    <input name="email" type="email" required autocomplete="email">
-
-    <label>Confirmez l’email</label>
-    <input name="email_confirm" type="email" required autocomplete="email">
-
-    <div style="margin-top:1rem">
-      <button type="submit">Créer mon compte</button>
-    </div>
-  </form>
-
-  <p style="margin-top:1rem" class="muted">
-    <a href="{{ url_for('pay') }}">← Retour au paiement</a>
-  </p>
+  <h1>Créer un compte</h1>
+  <div class="card">
+    <form method="post" action="{{ url_for('signup') }}">
+      <label>Prénom</label>
+      <input name="first_name" type="text" autocomplete="given-name">
+      <label>Nom</label>
+      <input name="last_name" type="text" autocomplete="family-name">
+      <label>Email</label>
+      <input name="email" type="email" required autocomplete="email">
+      <label>Confirmez l’email</label>
+      <input name="email_confirm" type="email" required autocomplete="email">
+      <div style="margin-top:1rem">
+        <button type="submit">Créer mon compte</button>
+        <a href="{{ url_for('pay') }}" style="margin-left:12px">Annuler</a>
+      </div>
+    </form>
+  </div>
 </body>
 </html>
