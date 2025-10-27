@@ -577,7 +577,57 @@ def pay():
     # garantit qu'un bot existe avant de payer
     row = ensure_user_bot(int(current_user.id))
     bot = dict(row) if row else None
-    return render_template("pay.html", bot=bot, stripe_enabled=bool(STRIPE_SECRET_KEY))
+
+    # Calculer is_guest (ne pas faire de .endswith en Jinja)
+    is_guest = bool(
+        (not current_user.is_authenticated)
+        or str(getattr(current_user, "email", "") or "").endswith("@guest.local")
+    )
+
+    # Contexte complet
+    ctx = {
+        "bot": bot,
+        "stripe_enabled": bool(STRIPE_SECRET_KEY),
+        "is_guest": is_guest,
+        "STRIPE_CURRENCY": STRIPE_CURRENCY,
+        "STRIPE_PRICE_CENTS": STRIPE_PRICE_CENTS,
+        "price_eur": round(STRIPE_PRICE_CENTS / 100, 2),
+        "user_email": getattr(current_user, "email", None),
+        "checkout_path": url_for("pay_stripe"),
+        "base_url": base_url_for_checkout(),
+    }
+
+    # Essaye de rendre le template. Si échec (ex: Jinja error), fallback minimal
+    try:
+        return render_template("pay.html", **ctx)
+    except Exception as e:
+        logger.error("Exception on /pay [GET]: %s", e, exc_info=True)
+        fallback_html = f"""<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paiement — Betty Bots</title>
+<style>
+  body{{background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;margin:0;padding:40px}}
+  .card{{max-width:520px;margin:0 auto;background:#111827;border-radius:16px;padding:24px;box-shadow:0 0 25px rgba(0,0,0,.4)}}
+  h1{{font-size:22px;margin:0 0 12px}}
+  p{{opacity:.85;line-height:1.5}}
+  .price{{font-size:28px;margin:12px 0 24px}}
+  form button{{background:#4F46E5;border:0;color:#fff;padding:12px 18px;border-radius:10px;cursor:pointer}}
+  .muted{{opacity:.7;font-size:13px;margin-top:14px}}
+</style></head><body>
+  <div class="card">
+    <h1>Abonnement Betty Bots</h1>
+    <p>Compte : {ctx.get('user_email') or '—'}</p>
+    <div class="price">{ctx.get('price_eur')} {ctx.get('STRIPE_CURRENCY').upper()} / mois</div>
+    {"<p style='color:#fca5a5'>Le paiement est désactivé (clé Stripe manquante).</p>" if not ctx.get("stripe_enabled") else ""}
+    <form method="post" action="{ctx.get('checkout_path')}">
+      <button type="submit" {"disabled" if not ctx.get('stripe_enabled') else ""}>
+        Payer avec Stripe
+      </button>
+    </form>
+    <p class="muted">Page fallback: si le template casse, cette version minimaliste s’affiche.</p>
+  </div>
+</body></html>"""
+        return Response(fallback_html, mimetype="text/html")
 
 @app.post("/pay/stripe")
 @login_required
@@ -833,34 +883,4 @@ def api_send_code():
 # --------------------------- EMBED WRAPPER ---------------------------
 @app.get("/embed/<int:bot_id>")
 def embed(bot_id: int):
-    row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
-    if not row:
-        return "Bot introuvable.", 404
-    base = base_url_for_checkout().rstrip("/")
-    key  = (row["auth_key"] or "").strip()
-    src  = f"{base}/chat?bot={bot_id}&key={key}" if key else f"{base}/chat?bot={bot_id}"
-    # page ultra-minimale pour Wix/Notion/Webflow...
-    return (
-        f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<style>html,body{{margin:0;height:100%}}.wrap{{display:grid;place-items:center;height:100%;background:#0d1117}}</style>'
-        f'</head><body><div class="wrap">'
-        f'<iframe src="{src}" width="420" height="580" style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" title="Betty Bot"></iframe>'
-        f'</div></body></html>'
-    )
-
-# ----------------------------- Divers --------------------------------
-@app.get("/favicon.ico")
-def favicon():
-    fav = BASE_DIR / "static" / "favicon.ico"
-    return send_from_directory(fav.parent, fav.name) if fav.exists() else Response(status=204)
-
-@app.errorhandler(404)
-def not_found(e): return "404", 404
-
-@app.errorhandler(500)
-def server_err(e): return "500", 500
-
-# Local
-if __name__ == "__main__":
-    # En local, on écoute en HTTP pour éviter les mixed-content si tu testes depuis http://
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    row = db_one("SELECT * OF DETAIL. INVISIBLE
