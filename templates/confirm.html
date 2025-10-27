@@ -2,73 +2,94 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Confirmation du paiement — Votre bot est prêt</title>
+  <title>Confirmation — Betty Bots</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root {
-      --bg:#0b0b0c; --card:#111214; --line:#23262d; 
-      --text:#e7e9ee; --muted:#a7adbb; --primary:#4F46E5;
-    }
-    body {
-      margin:0; background:var(--bg); color:var(--text);
-      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-      display:flex; justify-content:center; align-items:center; height:100vh;
-    }
-    .card {
-      background:var(--card); border:1px solid var(--line); border-radius:14px;
-      padding:30px; max-width:680px; width:90%;
-      text-align:center; box-shadow:0 0 25px rgba(0,0,0,.3);
-    }
-    h1 { margin-top:0; font-size:24px; color:#fff; }
-    pre {
-      background:#0f1012; border:1px solid var(--line);
-      border-radius:12px; padding:16px; text-align:left;
-      color:#9ef; font-size:14px; overflow-x:auto;
-    }
-    button {
-      margin-top:18px; padding:12px 18px; border:none; border-radius:10px;
-      background:var(--primary); color:#fff; font-weight:600; cursor:pointer;
-    }
-    button:disabled { opacity:.6; cursor:not-allowed; }
-    .msg { margin-top:16px; font-size:14px; color:var(--muted); }
+    :root{ --bg:#0b0b0c; --card:#111214; --line:#23262d; --text:#e7e9ee; --muted:#a7adbb; --primary:#4F46E5; }
+    body{ margin:0; background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif }
+    .wrap{ max-width:900px; margin:36px auto; padding:0 18px }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:16px }
+    h1{ margin:0 0 8px 0; font-size:24px }
+    .muted{ color:var(--muted) }
+    .row{ display:grid; gap:6px; grid-template-columns: 200px 1fr; margin:6px 0 }
+    pre{ background:#0f1012; border:1px solid var(--line); border-radius:12px; padding:14px; overflow:auto; }
+    button{ padding:10px 14px; border:0; border-radius:10px; background:var(--primary); color:#fff; font-weight:600; cursor:pointer }
+    button:disabled{ opacity:.6; cursor:not-allowed }
+    .ok{ color:#10B981; font-weight:600 }
+    .warn{ color:#F59E0B; font-weight:600 }
+    .err{ color:#EF4444; font-weight:600 }
+    .footer{ display:flex; gap:10px; margin-top:10px }
   </style>
 </head>
-
 <body>
-  <div class="card">
-    <h1>✅ Paiement confirmé !</h1>
-    <p>Merci pour votre achat. Voici votre code d’intégration :</p>
+  <div class="wrap">
+    <!-- Merci -->
+    <div class="card">
+      <h1>✅ Merci pour votre abonnement !</h1>
+      <div class="muted">Votre bot est prêt.</div>
+    </div>
 
-    <pre id="embedCode">&lt;iframe src="{{ public_url or 'https://bettybots.vercel.app/chat?bot=' ~ bot_id }}" 
-style="border:0;width:420px;height:580px;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" 
-title="Mon Betty Bot"&gt;&lt;/iframe&gt;</pre>
+    <!-- Récap commande -->
+    <div class="card">
+      <h2>Récapitulatif</h2>
+      <div class="row"><div>Pack</div><div>{{ pack|default('—') }}</div></div>
+      <div class="row"><div>Statut paiement</div>
+        <div>
+          {% if payment_status=='paid' or sub_status in ('active','trialing') %}
+            <span class="ok">Payé / Abonnement actif</span>
+          {% else %}
+            <span class="warn">{{ payment_status or '—' }} / {{ sub_status or '—' }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="row"><div>ID session</div><div class="muted">{{ session_id or '—' }}</div></div>
+      <div class="row"><div>ID abonnement</div><div class="muted">{{ sub_id or '—' }}</div></div>
+      <div class="row"><div>ID client</div><div class="muted">{{ cust_id or '—' }}</div></div>
+    </div>
 
-    <button id="sendBtn">📧 Envoyer ce code à mon adresse e-mail d’inscription</button>
-    <div id="msg" class="msg"></div>
+    <!-- Code d'intégration -->
+    <div class="card">
+      <h2>Code d’intégration</h2>
+      <p class="muted">Collez ce code dans votre site (où vous souhaitez afficher le bot) :</p>
+      <pre id="embedCode">{{ embed_code }}</pre>
+
+      <div class="footer">
+        <button id="copyBtn">Copier</button>
+        <button id="sendBtn">📧 Envoyer ce code à mon adresse e-mail d’inscription</button>
+      </div>
+      <div id="msg" class="muted" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Lien retour -->
+    <div class="card">
+      <a href="{{ url_for('dashboard') }}"><button>← Retour au dashboard</button></a>
+    </div>
   </div>
 
   <script>
-    const sendBtn = document.getElementById('sendBtn');
-    const msgEl = document.getElementById('msg');
     const code = document.getElementById('embedCode').textContent;
+    const msgEl = document.getElementById('msg');
+    const copyBtn = document.getElementById('copyBtn');
+    const sendBtn = document.getElementById('sendBtn');
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        msgEl.textContent = '✅ Code copié dans le presse-papiers.';
+      } catch { msgEl.textContent = '⚠️ Impossible de copier automatiquement.'; }
+    });
 
     sendBtn.addEventListener('click', async () => {
-      sendBtn.disabled = true;
-      msgEl.textContent = "Envoi en cours...";
-      try {
+      sendBtn.disabled = true; msgEl.textContent = 'Envoi en cours...';
+      try{
         const res = await fetch('/api/send_code', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ code })
         });
-        if (res.ok) {
-          msgEl.textContent = "✅ Le code d’intégration a été envoyé à votre adresse e-mail.";
-        } else {
-          msgEl.textContent = "⚠️ Échec de l’envoi. Réessayez plus tard.";
-        }
-      } catch (e) {
-        msgEl.textContent = "⚠️ Erreur de connexion avec le serveur.";
-      }
+        if(res.ok){ msgEl.textContent = '✅ Le code a été envoyé à votre adresse e-mail.'; }
+        else{ msgEl.textContent = '⚠️ Échec de l’envoi. Réessayez plus tard.'; }
+      }catch(e){ msgEl.textContent = '⚠️ Erreur de connexion au serveur.'; }
       sendBtn.disabled = false;
     });
   </script>
