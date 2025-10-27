@@ -1,25 +1,11 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "app.py", "use": "@vercel/python" },
-    { "src": "static/(.*)", "use": "@vercel/static" },
-    { "src": "templates/(.*)", "use": "@vercel/static" }
-  ],
   "functions": {
     "app.py": {
       "runtime": "python3.11",
-      "maxDuration": 10,
-      "includeFiles": "templates/**"
+      "includeFiles": "templates/**,static/**"
     }
   },
   "routes": [
-    { "src": "^/static/(.*)$", "dest": "/static/$1" },
-    { "src": "^/favicon\\.ico$", "dest": "/favicon.ico" },
-
-    { "src": "^/api/(.*)$", "dest": "/app.py" },
-    { "src": "^/embed/(\\d+)$", "dest": "/app.py" },
-
-    { "src": "^/(dashboard|preview|pay|confirm|signup|chat)$", "dest": "/app.py" },
-    { "src": "/(.*)", "dest": "/app.py" }
+    { "src": "/(.*)", "dest": "app.py" }
   ]
 }
