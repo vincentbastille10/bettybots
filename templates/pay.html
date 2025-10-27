@@ -1,90 +1,57 @@
+<!-- templates/pay.html -->
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <title>Paiement</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Paiement — Betty Bots</title>
   <style>
-    :root { --primary:#4F46E5; }
-    body {
-      font-family: system-ui,-apple-system,Segoe UI,Roboto;
-      max-width: 980px;
-      margin: 40px auto;
-      padding: 0 16px;
-      line-height: 1.4;
-      color:#111827;
-    }
-    h1 { margin-bottom:.25rem }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:28px }
-    @media (max-width:800px){ .grid{ grid-template-columns:1fr } }
-    .card { border:1px solid #e5e7eb; border-radius:14px; padding:18px; background:#fff }
-    label { display:block; margin:.5rem 0 .2rem }
-    input { width:100%; padding:.6rem; border:1px solid #d1d5db; border-radius:10px }
-    button { padding:10px 16px; border:0; border-radius:10px; cursor:pointer }
-    .primary { background:var(--primary); color:#fff }
-    .muted { color:#6b7280; font-size:.95rem }
-    .sep { height:1px; background:#f0f2f5; margin:16px 0 }
-    .price { font-size:1.1rem }
-    .warn { background:#FEF3C7; border:1px solid #FDE68A; padding:8px 10px; border-radius:10px; color:#92400E; }
-    .ok { background:#DCFCE7; border:1px solid #86EFAC; padding:8px 10px; border-radius:10px; color:#065F46; }
-    a { color:#4F46E5; text-decoration:none }
+    :root { --bg:#0d1117; --panel:#111827; --muted:#9ca3af; --accent:#4F46E5; --danger:#fca5a5; }
+    body{background:var(--bg);color:#fff;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:32px}
+    .wrap{max-width:640px;margin:0 auto}
+    .card{background:var(--panel);border-radius:16px;box-shadow:0 0 25px rgba(0,0,0,.4);padding:24px}
+    h1{font-size:22px;margin:0 0 8px}
+    p{line-height:1.5;margin:8px 0}
+    .row{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    .price{font-weight:600;font-size:28px;margin:8px 0 16px}
+    .muted{color:var(--muted);font-size:13px}
+    .btn{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 18px;cursor:pointer}
+    .btn[disabled]{opacity:.6;cursor:not-allowed}
+    .warn{color:var(--danger);margin-top:8px}
+    a{color:#fff;text-decoration:underline}
   </style>
 </head>
 <body>
-  <h1>Paiement</h1>
-  <p class="muted">Créez votre compte pour activer et sauvegarder votre bot.</p>
-
-  <div class="grid">
-    <!-- Colonne 1 : Compte / Sign up -->
+  <div class="wrap">
     <div class="card">
-      {% if not current_user.is_authenticated or is_guest %}
-        <h2 style="margin-top:0">Créer mon compte</h2>
-        <form method="post" action="{{ url_for('signup') }}">
-          <input type="hidden" name="next" value="{{ req_path or '/pay' }}">
-          <label>Prénom</label>
-          <input name="first_name" type="text" autocomplete="given-name">
-          <label>Nom</label>
-          <input name="last_name" type="text" autocomplete="family-name">
-          <label>Email</label>
-          <input name="email" type="email" required autocomplete="email">
-          <label>Confirmez l’email</label>
-          <input name="email_confirm" type="email" required autocomplete="email">
-          <div style="margin-top:1rem">
-            <button type="submit" class="primary">Créer mon compte</button>
-          </div>
-        </form>
-        <div class="sep"></div>
-        <p class="muted">
-          {% if is_guest %}
-            Vous êtes connecté en invité (<strong>{{ current_user.email }}</strong>). Créez votre compte pour activer le paiement.
-          {% else %}
-            Une fois inscrit, cette page se rechargera pour finaliser le paiement.
-          {% endif %}
-        </p>
-      {% else %}
-        <h2 style="margin-top:0">Compte</h2>
-        <p class="muted">Connecté en tant que <strong>{{ current_user.email }}</strong>.</p>
-        <p class="ok">Votre bot est prêt à être activé.</p>
-      {% endif %}
-    </div>
+      <h1>Abonnement Betty Bots</h1>
 
-    <!-- Colonne 2 : Paiement -->
-    <div class="card">
-      <h2 style="margin-top:0">Finaliser l’abonnement</h2>
+      <p class="muted">Compte : {{ user_email or "—" }}</p>
 
-      {% if not stripe_enabled %}
-        <p class="warn">Le paiement est indisponible (configure <code>STRIPE_SECRET_KEY</code> dans tes variables d’environnement).</p>
-      {% else %}
-        <p class="price">Abonnement : <strong>9,99 € / mois</strong></p>
-        {% set lock = (not current_user.is_authenticated) or is_guest %}
-        <form method="post" action="{{ url_for('pay_stripe') }}">
-          <button class="primary" type="submit" {% if lock %}disabled title="Créez d’abord votre compte"{% endif %}>
-            Procéder au paiement
+      <div class="row">
+        <div>
+          <div class="price">{{ price_eur }} {{ STRIPE_CURRENCY|upper }} / mois</div>
+          <p class="muted">Accès au bot + captures de leads illimitées*</p>
+        </div>
+        <form method="post" action="{{ checkout_path }}">
+          <button type="submit" class="btn" {% if not stripe_enabled or is_guest %}disabled{% endif %}>
+            Payer avec Stripe
           </button>
         </form>
-        <div class="sep"></div>
-        <p class="muted">Le paiement sécurise votre accès à Betty Bots et à votre tableau de bord.</p>
+      </div>
+
+      {% if not stripe_enabled %}
+        <p class="warn">Le paiement est désactivé (clé Stripe manquante côté serveur).</p>
       {% endif %}
+      {% if is_guest %}
+        <p class="warn">Connecte-toi avec un email valide (via <a href="/signup">/signup</a>) avant de payer.</p>
+      {% endif %}
+
+      <p class="muted" style="margin-top:16px">* sous réserve d’un usage raisonnable. Annulation à tout moment.</p>
+
+      <p style="margin-top:24px">
+        <a href="/preview">← Revenir au test du bot</a>
+      </p>
     </div>
   </div>
 </body>
