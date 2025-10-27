@@ -266,8 +266,10 @@ def ensure_user_bot(user_id: int) -> sqlite3.Row:
                  "", "", "", "", auth_key))
         row = get_bot(user_id)
     else:
-        if not (row.get("auth_key") or "").strip():
-            db_exec("UPDATE bots SET auth_key=? WHERE id=?", (make_bot_key(), row["id"]))
+        # sqlite3.Row -> dict pour utiliser .get()
+        row_dict = dict(row)
+        if not (row_dict.get("auth_key") or "").strip():
+            db_exec("UPDATE bots SET auth_key=? WHERE id=?", (make_bot_key(), row_dict["id"]))
             row = get_bot(user_id)
     return row
 
