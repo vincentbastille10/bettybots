@@ -1,29 +1,25 @@
 {
   "version": 2,
   "builds": [
-    { "src": "app.py", "use": "@vercel/python", "config": { "maxLambdaSize": "50mb" } },
-    { "src": "static/**/*", "use": "@vercel/static" }
+    { "src": "app.py", "use": "@vercel/python" },
+    { "src": "static/(.*)", "use": "@vercel/static" },
+    { "src": "templates/(.*)", "use": "@vercel/static" }
   ],
   "functions": {
     "app.py": {
-      "includeFiles": [
-        "templates/**",
-        "static/**"
-      ]
+      "runtime": "python3.11",
+      "maxDuration": 10,
+      "includeFiles": "templates/**"
     }
   },
   "routes": [
     { "src": "^/static/(.*)$", "dest": "/static/$1" },
     { "src": "^/favicon\\.ico$", "dest": "/favicon.ico" },
 
-    { "src": "^/api/(.*)$", "dest": "app.py" },
+    { "src": "^/api/(.*)$", "dest": "/app.py" },
+    { "src": "^/embed/(\\d+)$", "dest": "/app.py" },
 
-    { "src": "^/dashboard$", "dest": "app.py" },
-    { "src": "^/preview$",  "dest": "app.py" },
-    { "src": "^/pay$",      "dest": "app.py" },
-    { "src": "^/confirm$",  "dest": "app.py" },
-    { "src": "^/bot$",      "dest": "app.py" },
-
-    { "src": ".*",          "dest": "app.py" }
+    { "src": "^/(dashboard|preview|pay|confirm|signup|chat)$", "dest": "/app.py" },
+    { "src": "/(.*)", "dest": "/app.py" }
   ]
 }
