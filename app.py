@@ -13,6 +13,7 @@ from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     current_user, login_required
 )
+from werkzeug.middleware.proxy_fix import ProxyFix  # ✅ pour respecter X-Forwarded-* en prod (Vercel/Render)
 
 # Dépendances optionnelles pour le proxy d’images (secours)
 try:
@@ -44,6 +45,9 @@ DB_PATH = pick_db_path()
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
+
+# ✅ Respecte le schéma/host envoyés par le reverse-proxy (Vercel/Render/Nginx)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Stripe
 def _env_int(key: str, default: int) -> int:
@@ -220,14 +224,21 @@ def get_bot(user_id: int) -> Optional[sqlite3.Row]:
     return db_one("SELECT * FROM bots WHERE user_id=? LIMIT 1", (user_id,))
 
 def base_url_for_checkout() -> str:
-    """Base URL pour success/cancel Stripe."""
+    """Base URL absolue pour success/cancel Stripe (jamais localhost en prod)."""
+    # 1) Si fournie, on force PUBLIC_BASE_URL / BASE_URL (ex: https://bettybots.vercel.app)
     if PUBLIC_BASE_URL_ENV:
-        base = PUBLIC_BASE_URL_ENV
-    else:
-        base = request.url_root.rstrip("/")
+        base = PUBLIC_BASE_URL_ENV.rstrip("/")
+        return base
+
+    # 2) Sinon, on dérive de la requête (ProxyFix respecte X-Forwarded-Proto/Host)
+    base = (request.url_root or "").rstrip("/")
+    if not base:
+        return "https://example.com"  # fallback extrême
+
     low = base.lower()
-    if low.startswith("https://localhost") or low.startswith("https://127.0.0.1"):
-        return "http://" + base.split("://", 1)[1]
+    # En dev local, on tolère http://localhost
+    if "localhost" in low or "127.0.0.1" in low:
+        return base.replace("https://", "http://")
     return base
 
 # --- Normalisation métier/pack/avatar ---
@@ -487,6 +498,8 @@ def pay_stripe():
     try:
         session = stripe.checkout.Session.create(
             mode="subscription",
+            ui_mode="hosted",
+            payment_method_types=["card"],
             line_items=[{
                 "price_data": {
                     "currency": STRIPE_CURRENCY,
@@ -496,6 +509,9 @@ def pay_stripe():
                 },
                 "quantity": 1
             }],
+            customer_email=(current_user.email or None),
+            client_reference_id=str(current_user.id),
+            allow_promotion_codes=True,
             success_url=f"{base}/confirm?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base}/pay",
         )
@@ -567,7 +583,9 @@ def confirm():
 def api_chat():
     try:
         data = request.get_json(force=True) or {}
-        message = (data.get("message") or "").trim().lower() if hasattr(str, "trim") else (data.get("message") or "").strip().lower()
+        # .trim() n'existe pas en Python, on sécurise avec fallback
+        raw_msg = data.get("message") or ""
+        message = raw_msg.strip().lower()
         pack    = (data.get("pack") or "agent_immobilier").strip().lower()
 
         # Réponse très simple + amorce de qualif par pack (proactif)
@@ -686,4 +704,5 @@ def server_err(e): return "500", 500
 
 # Local
 if __name__ == "__main__":
+    # En local, on écoute en HTTP pour éviter les mixed-content si tu testes depuis http://
     app.run(debug=True, host="0.0.0.0", port=5000)
