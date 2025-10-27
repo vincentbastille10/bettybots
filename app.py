@@ -23,7 +23,7 @@ except Exception:
 import urllib.request
 
 import stripe
-import yaml  # présent si besoin futur (pas bloquant)
+import yaml
 
 # ---------------------------------------------------------------------
 # CONFIG
@@ -51,10 +51,8 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Stripe
 def _env_int(key: str, default: int) -> int:
-    try:
-        return int(os.getenv(key, str(default)))
-    except Exception:
-        return default
+    try: return int(os.getenv(key, str(default)))
+    except: return default
 
 STRIPE_SECRET_KEY   = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PRICE_CENTS  = _env_int("STRIPE_PRICE_CENTS", 999)  # 9,99 €
@@ -114,13 +112,12 @@ def get_db():
     try:
         yield g.db
     finally:
-        pass  # fermé dans teardown
+        pass
 
 @app.teardown_appcontext
 def close_db(error):
     db = g.pop("db", None)
-    if db:
-        db.close()
+    if db: db.close()
 
 def init_db():
     with get_db() as conn:
@@ -238,8 +235,7 @@ def load_user(user_id: str):
 
 def sanitize_color(val: str) -> str:
     c = (val or "").strip()
-    if not c.startswith("#"):
-        c = "#" + c
+    if not c.startswith("#"): c = "#" + c
     return c if len(c) in (4, 7) else "#4F46E5"
 
 def is_guest_user() -> bool:
@@ -263,13 +259,11 @@ def ensure_user_bot(user_id: int) -> sqlite3.Row:
         widget_sz = "m"
         shape = "rounded"
         auth_key = make_bot_key()
-        db_exec(
-            """INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
-                                pro_phone, pro_address_label, pro_address_url, pro_description, auth_key)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (user_id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-             "", "", "", "", auth_key)
-        )
+        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
+                                    pro_phone, pro_address_label, pro_address_url, pro_description, auth_key)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (user_id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
+                 "", "", "", "", auth_key))
         row = get_bot(user_id)
     else:
         # sqlite3.Row -> dict pour utiliser .get()
@@ -388,12 +382,15 @@ def avatar_proxy(slug: str):
         pass
 
     # 3) Placeholder
-    return Response(_PLACEHOLDER_SVG, mimetype="image/svg+xml",
-                    headers={"Cache-Control": "public, max-age=86400"})
+    return Response(_PLACEHOLDER_SVG, mimetype="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
 
 # ---------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------
+@app.get("/healthz")
+def healthz():
+    return jsonify({"ok": True})
+
 @app.get("/")
 def root():
     if current_user.is_authenticated:
@@ -404,14 +401,6 @@ def root():
     if row:
         login_user(User(row["id"], row["email"]))
     return redirect(url_for("dashboard"))
-
-@app.route("/logout")
-def logout():
-    try:
-        logout_user()
-    except Exception:
-        pass
-    return redirect(url_for("root"))
 
 @app.route("/dashboard", methods=["GET", "POST"])
 @login_required
@@ -448,7 +437,7 @@ def dashboard():
     welcome    = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
     persona    = (request.form.get("persona") or "neutre").strip()
     widget_sz  = (request.form.get("widget_size") or "m").strip()
-    shape_map  = {"s": "circle", "m": "square", "l": "rounded"}
+    shape_map  = {"s":"circle","m":"square","l":"rounded"}
     shape      = shape_map.get(widget_sz, "square")
 
     # Nouveaux champs (facultatifs)
@@ -458,23 +447,19 @@ def dashboard():
     pro_description  = (request.form.get("pro_description") or "").strip()[:400]
 
     if bot:
-        db_exec(
-            """UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=?,
-                               pro_phone=?, pro_address_label=?, pro_address_url=?, pro_description=?
-               WHERE user_id=?""",
-            (name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-             pro_phone, pro_address_lbl, pro_address_url, pro_description, current_user.id)
-        )
+        db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=?,
+                                   pro_phone=?, pro_address_label=?, pro_address_url=?, pro_description=?
+                   WHERE user_id=?""",
+                (name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
+                 pro_phone, pro_address_lbl, pro_address_url, pro_description, current_user.id))
     else:
         # nouvelle clé d’accès pour le bot
         auth_key = make_bot_key()
-        db_exec(
-            """INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
-                                pro_phone, pro_address_label, pro_address_url, pro_description, auth_key)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-             pro_phone, pro_address_lbl, pro_address_url, pro_description, auth_key)
-        )
+        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
+                                    pro_phone, pro_address_label, pro_address_url, pro_description, auth_key)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
+                 pro_phone, pro_address_lbl, pro_address_url, pro_description, auth_key))
 
     flash("✅ Bot sauvegardé.", "success")
     return redirect(url_for("preview"))
@@ -490,7 +475,7 @@ def preview():
     bot = dict(row)
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
-    shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
+    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
 
     cfg = {
         "name": bot.get("name", "Mon Betty Bot"),
@@ -546,7 +531,7 @@ def chat_public():
     bot = dict(row)
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
-    shape_to_size = {"circle": "s", "square": "m", "rounded": "l"}
+    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
 
     cfg = {
         "name": bot.get("name", "Mon Betty Bot"),
@@ -663,7 +648,7 @@ def pay_stripe():
     bot = dict(row) if row else {}
     # libellé produit
     _, pack_slug = normalize_metier(bot.get("metier") or "")
-    label_map = {"agent_immobilier": "Agent immobilier", "avocat": "Avocat", "medecin": "Médecin"}
+    label_map = {"agent_immobilier":"Agent immobilier","avocat":"Avocat","medecin":"Médecin"}
     metier_label = label_map.get(pack_slug, "Générique")
     product_name = f"Abonnement mensuel Betty {metier_label}"
 
@@ -814,8 +799,7 @@ def api_chat():
         if any(k in message for k in ["rdv", "rendez", "dispo", "disponibilit"]):
             return jsonify({"reply": "D’accord. Préférez-vous matin, après-midi ou soir ?", "ask_lead": True})
 
-        return jsonify({"reply": lead_prompts.get(pack, "Pouvez-vous préciser votre besoin, votre budget et votre délai ?"),
-                        "ask_lead": True})
+        return jsonify({"reply": lead_prompts.get(pack, "Pouvez-vous préciser votre besoin, votre budget et votre délai ?"), "ask_lead": True})
 
     except Exception:
         return jsonify({"reply": "Erreur.", "ask_lead": False}), 500
@@ -904,70 +888,82 @@ def api_send_code():
 @app.get("/embed/<int:bot_id>")
 def embed(bot_id: int):
     """
-    Sert une page wrapper qui embarque le bot dans un <iframe>.
-    - Si le visiteur est le propriétaire connecté, pas besoin de clé.
-    - Sinon, on exige que le bot possède une auth_key et on l’injecte dans l’URL.
+    Page wrapper d’intégration (utile si tu veux embarquer un IFRAME
+    sans exposer la clé dans l’URL publique). Le propriétaire connecté
+    peut y accéder; les visiteurs externes reçoivent 403.
     """
     row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
     if not row:
         return "Bot introuvable.", 404
 
-    bot = dict(row)
-    base = base_url_for_checkout()
-
-    is_owner = False
+    # Propriétaire ?
+    owner_ok = False
     if current_user.is_authenticated:
         owners_bot = get_bot(int(current_user.id))
-        is_owner = bool(owners_bot and dict(owners_bot)["id"] == bot_id)
+        if owners_bot and dict(owners_bot)["id"] == bot_id:
+            owner_ok = True
+    if not owner_ok:
+        return "Accès réservé au propriétaire.", 403
 
-    key_qs = ""
-    if not is_owner:
-        key = (bot.get("auth_key") or "").strip()
-        if not key:
-            # sécurité douce : on crée une clé à la volée
-            try:
-                new_key = make_bot_key()
-                db_exec("UPDATE bots SET auth_key=? WHERE id=?", (new_key, bot_id))
-                key = new_key
-            except Exception:
-                pass
-        if key:
-            key_qs = f"&key={key}"
+    bot = dict(row)
+    base = base_url_for_checkout()
+    # garantit la présence d'une clé
+    if not (bot.get("auth_key") or "").strip():
+        new_key = make_bot_key()
+        db_exec("UPDATE bots SET auth_key=? WHERE id=?", (new_key, bot["id"]))
+        bot["auth_key"] = new_key
 
-    iframe_url = f"{base.rstrip('/')}/chat?bot={bot_id}{key_qs}"
+    iframe_src = f"{base.rstrip('/')}/chat?bot={bot['id']}&key={bot['auth_key']}"
     html = f"""<!doctype html>
-<html lang="fr"><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Betty Bot — Embed</title>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Intégration — Betty Bot</title>
 <style>
-  html,body{{height:100%;margin:0;background:#0d1117}}
-  .wrap{{display:flex;align-items:center;justify-content:center;min-height:100%}}
-  iframe{{border:0;width:420px;height:580px;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4)}}
-</style></head>
-<body>
-  <div class="wrap">
-    <iframe src="{iframe_url}" title="Betty Bot"></iframe>
-  </div>
+ body{{background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;margin:0;padding:24px}}
+ .wrap{{max-width:900px;margin:0 auto}}
+ iframe{{width:420px;height:580px;border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4)}}
+ .hint{{opacity:.7;margin-top:10px}}
+</style></head><body>
+ <div class="wrap">
+  <h1>Intégration de votre bot</h1>
+  <iframe src="{iframe_src}" title="Mon Betty Bot"></iframe>
+  <p class="hint">Vous seul voyez cette page car vous êtes connecté en tant que propriétaire.</p>
+ </div>
 </body></html>"""
     return Response(html, mimetype="text/html")
 
-# --------------------------- ERREURS GLOBALES ------------------------
+# --------------------------- ERROR HANDLERS --------------------------
 @app.errorhandler(404)
-def _404(e):
+def not_found(e):
     try:
         return render_template("404.html"), 404
     except Exception:
-        return Response("<h1>404</h1><p>Page introuvable.</p>", mimetype="text/html", status=404)
+        return Response(
+            "<h1>404</h1><p>Page introuvable.</p><p><a href='{}'>Retour</a></p>".format(url_for("root")),
+            mimetype="text/html", status=404
+        )
 
 @app.errorhandler(500)
-def _500(e):
+def server_error(e):
     logger.error("500 error: %s", e, exc_info=True)
     try:
         return render_template("500.html"), 500
     except Exception:
-        return Response("<h1>500</h1><p>Erreur interne.</p>", mimetype="text/html", status=500)
+        return Response(
+            "<h1>Erreur</h1><p>Un problème est survenu.</p><p><a href='{}'>Retour</a></p>".format(url_for("root")),
+            mimetype="text/html", status=500
+        )
 
-# --------------------------- MAIN (debug local) ----------------------
+# ----------------------------- DEV ONLY ------------------------------
+@app.get("/logout")
+def logout():
+    try:
+        logout_user()
+    except Exception:
+        pass
+    return redirect(url_for("root"))
+
+# ------------------------------ MAIN --------------------------------
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)
