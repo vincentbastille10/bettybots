@@ -266,7 +266,7 @@ def ensure_user_bot(user_id: int) -> sqlite3.Row:
                  "", "", "", "", auth_key))
         row = get_bot(user_id)
     else:
-        # sqlite3.Row -> dict pour utiliser .get()
+        # IMPORTANT : sqlite3.Row -> dict avant d'utiliser .get()
         row_dict = dict(row)
         if not (row_dict.get("auth_key") or "").strip():
             db_exec("UPDATE bots SET auth_key=? WHERE id=?", (make_bot_key(), row_dict["id"]))
@@ -574,10 +574,14 @@ def signup():
 @app.get("/pay")
 @login_required
 def pay():
-    # garantit qu'un bot existe avant de payer
-    row = ensure_user_bot(int(current_user.id))
-    bot = dict(row) if row else None
-    return render_template("pay.html", bot=bot, stripe_enabled=bool(STRIPE_SECRET_KEY))
+    try:
+        # garantit qu'un bot existe avant de payer
+        row = ensure_user_bot(int(current_user.id))
+        bot = dict(row) if row else None
+        return render_template("pay.html", bot=bot, stripe_enabled=bool(STRIPE_SECRET_KEY))
+    except Exception as e:
+        logger.error("Exception on /pay [GET]: %s", e, exc_info=True)
+        return "500", 500
 
 @app.post("/pay/stripe")
 @login_required
