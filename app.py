@@ -423,16 +423,29 @@ def dashboard():
             "pro_address_label": (bot or {}).get("pro_address_label"),
             "pro_address_url": (bot or {}).get("pro_address_url"),
             "pro_description": (bot or {}).get("pro_description"),
-            # UI flags
-            "show_controls": True,
-            "show_brand": False,
-            "inject_hide_css": False,
         }
         return render_template("dashboard.html", bot=bot, cfg=cfg)
 
-    # --- POST: sauvegarde (on enregistre le slug pack tel quel)
+    # --- POST: sauvegarde (robuste sur le champ pack) -----------------
+    raw_pack = (
+        request.form.get("pack_slug")
+        or request.form.get("metier")
+        or request.form.get("pack")
+        or "agent_immobilier"
+    )
+    raw_pack = (raw_pack or "").strip().lower()
+
+    # normalisation interne -> pack officiel
+    _internal_to_pack = {
+        "agent_immo": "agent_immobilier",
+        "avocat": "avocat",
+        "medecin": "medecin",
+    }
+    pack_slug = _internal_to_pack.get(raw_pack, raw_pack)
+    if pack_slug not in {"agent_immobilier", "avocat", "medecin"}:
+        pack_slug = "agent_immobilier"
+
     name       = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
-    pack_slug  = (request.form.get("pack_slug") or "agent_immobilier").strip().lower()
     color_hex  = sanitize_color(request.form.get("color_hex") or "#4F46E5")
     welcome    = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
     persona    = (request.form.get("persona") or "neutre").strip()
@@ -445,6 +458,8 @@ def dashboard():
     pro_address_lbl  = (request.form.get("pro_address_label") or "").strip()[:200]
     pro_address_url  = (request.form.get("pro_address_url") or "").strip()[:300]
     pro_description  = (request.form.get("pro_description") or "").strip()[:400]
+
+    app.logger.info(f"[DASHBOARD SAVE] raw_pack={raw_pack!r} -> pack_slug={pack_slug!r}")
 
     if bot:
         db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=?,
@@ -493,12 +508,6 @@ def preview():
         "pro_address_label": bot.get("pro_address_label"),
         "pro_address_url": bot.get("pro_address_url"),
         "pro_description": bot.get("pro_description"),
-        # UI flags : en preview => boutons visibles, pas de bandeau
-        "show_controls": True,
-        "show_brand": False,
-        "inject_hide_css": False,
-        "brand_text": os.getenv("BRAND_TEXT", "Betty Bot — propulsé par Spectra Media"),
-        "brand_link": os.getenv("BRAND_LINK", "https://spectramedia.ai"),
     }
 
     return render_template("preview.html", bot=bot, cfg=cfg)
@@ -513,7 +522,6 @@ def chat_public():
     """
     bot_id = request.args.get("bot", type=int)
     key    = (request.args.get("key") or "").strip()
-    clean  = (request.args.get("clean") or request.args.get("hide_ui") or "1").strip()  # 1 = controls masqués
 
     if not bot_id:
         return "Aucun bot à afficher. Fournissez ?bot=<id>.", 400
@@ -536,11 +544,15 @@ def chat_public():
             return "Accès non autorisé (clé invalide).", 403
 
     bot = dict(row)
+
+    # Option d’override pack via ?pack=..., utile si front legacy
+    pack_override = (request.args.get("pack") or "").strip().lower()
+    if pack_override in {"agent_immobilier", "avocat", "medecin"}:
+        bot["metier"] = pack_override
+
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
     shape_to_size = {"circle":"s","square":"m","rounded":"l"}
-
-    show_controls = clean in ("0", "false", "False", "no")
 
     cfg = {
         "name": bot.get("name", "Mon Betty Bot"),
@@ -557,12 +569,6 @@ def chat_public():
         "pro_address_label": bot.get("pro_address_label"),
         "pro_address_url": bot.get("pro_address_url"),
         "pro_description": bot.get("pro_description"),
-        # UI flags pour l’embed
-        "show_controls": show_controls,               # False par défaut
-        "show_brand": not show_controls,              # True par défaut
-        "inject_hide_css": not show_controls,         # CSS de secours
-        "brand_text": os.getenv("BRAND_TEXT", "Betty Bot — propulsé par Spectra Media"),
-        "brand_link": os.getenv("BRAND_LINK", "https://spectramedia.ai"),
     }
 
     # On réutilise le template de test (UI identique à /preview)
@@ -614,7 +620,7 @@ def pay():
         "user_email": getattr(current_user, "email", None),
         "checkout_path": url_for("pay_stripe"),
         "base_url": base_url_for_checkout(),
-        "signup_path": url_for("signup"),  # lien d’inscription
+        "signup_path": url_for("signup"),  # ✅ ajout pour le lien d’inscription
     }
 
     # Essaye de rendre le template. Si échec (ex: Jinja error), fallback minimal
@@ -622,7 +628,7 @@ def pay():
         return render_template("pay.html", **ctx)
     except Exception as e:
         logger.error("Exception on /pay [GET]: %s", e, exc_info=True)
-        # fallback avec lien vers /signup si guest
+        # ✅ fallback avec lien vers /signup si guest
         fallback_html = f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paiement — Betty Bots</title>
@@ -656,7 +662,7 @@ def pay():
 @app.post("/pay/stripe")
 @login_required
 def pay_stripe():
-    # redirection guest → /signup (au lieu de revenir sur /pay)
+    # ✅ redirection guest → /signup (au lieu de revenir sur /pay)
     if is_guest_user():
         flash("Créez votre compte avec un email valide pour procéder au paiement.", "warning")
         return redirect(url_for("signup"))
@@ -932,12 +938,6 @@ def embed(bot_id: int):
         "pro_address_label": bot.get("pro_address_label"),
         "pro_address_url": bot.get("pro_address_url"),
         "pro_description": bot.get("pro_description"),
-        # UI flags pour embed page
-        "show_controls": False,
-        "show_brand": True,
-        "inject_hide_css": True,
-        "brand_text": os.getenv("BRAND_TEXT", "Betty Bot — propulsé par Spectra Media"),
-        "brand_link": os.getenv("BRAND_LINK", "https://spectramedia.ai"),
     }
     # Template d’intégration minimal (ou crée templates/embed.html si tu préfères)
     try:
