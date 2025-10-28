@@ -14,6 +14,13 @@
   {% set user_id    = (current_user.get_id() if current_user.is_authenticated else None) %}
   {% set bot_id     = (bot.get('id') if bot else None) %}
 
+  {# flags UI #}
+  {% set show_controls   = (cfg.show_controls if cfg is defined and cfg.show_controls is not none else True) %}
+  {% set show_brand      = (cfg.show_brand if cfg is defined and cfg.show_brand is not none else False) %}
+  {% set inject_hide_css = (cfg.inject_hide_css if cfg is defined and cfg.inject_hide_css is not none else False) %}
+  {% set brand_text      = (cfg.brand_text if cfg is defined and cfg.brand_text else 'Betty Bot — propulsé par Spectra Media') %}
+  {% set brand_link      = (cfg.brand_link if cfg is defined and cfg.brand_link else 'https://spectramedia.ai') %}
+
   {# Libellé lisible du pack pour affichage #}
   {% set pack_labels = {
     'agent_immobilier':'Agent immobilier',
@@ -49,19 +56,16 @@
       color:var(--text);
       font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif
     }
-    .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
 
-    /* Bandeau annonce */
-    .promo{
-      background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));
-      border-bottom:1px solid var(--line);
-      padding:10px 20px;
-      text-align:center;
-      font-size:14px;
-      color:var(--muted);
+    /* Bandeau branding (embed) */
+    .bb-brand{
+      position:sticky;top:0;left:0;right:0;height:34px;z-index:999;
+      background:#0b0b0f;color:#cbd5e1;border-bottom:1px solid rgba(255,255,255,.06);
+      font:500 12px/34px Inter,system-ui,sans-serif;text-align:center;letter-spacing:.2px
     }
-    .promo b{color:#fff}
+    .bb-brand a{color:#a5b4fc;text-decoration:none}
 
+    .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
     .row{display:flex;align-items:center;gap:14px;margin:18px 0}
     h1{margin:0;font-size:20px}
     .btnbar{display:flex;gap:10px;margin-left:auto}
@@ -127,13 +131,28 @@
     .hint{color:var(--muted);font-size:13px;margin:10px 0 0 2px}
     .kbd{display:inline-block;background:#0f1012;border:1px solid var(--line);padding:0 6px;border-radius:6px}
   </style>
+
+  {% if inject_hide_css %}
+  <style>
+    /* Masque la barre de boutons preview quand on embarque en clean=1 */
+    .btnbar, .preview-toolbar, .header-actions { display:none !important; }
+  </style>
+  {% endif %}
 </head>
 
 <body>
-  <!-- Bandeau présentation + prix -->
-  <div class="promo">
+  {% if show_brand %}
+    <div class="bb-brand">
+      <a href="{{ brand_link }}" target="_blank" rel="noopener">{{ brand_text }}</a>
+    </div>
+  {% endif %}
+
+  <!-- Bandeau présentation + prix (uniquement si on garde l’UX preview) -->
+  {% if show_controls %}
+  <div class="promo" style="background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));border-bottom:1px solid var(--line);padding:10px 20px;text-align:center;font-size:14px;color:#a7adbb">
     <b>Betty</b> — votre assistante AI pour votre activité. <b>9,99 € / mois</b>, sans engagement.
   </div>
+  {% endif %}
 
   <div class="wrap">
     <div class="row">
@@ -146,13 +165,17 @@
           <span>{{ primary }}</span>
         </div>
       </div>
+
+      {% if show_controls %}
       <div class="btnbar">
         <a class="btn" href="{{ url_for('dashboard') }}">← Retour</a>
         <a class="btn primary" href="{{ url_for('pay') }}">Aller au paiement →</a>
       </div>
+      {% endif %}
     </div>
 
-    <!-- Choix des 4 personnalités -->
+    <!-- Choix des 4 personnalités (masqué si embed clean) -->
+    {% if show_controls %}
     <div class="toolbar">
       <div class="seg" id="personaSeg">
         <button data-val="neutre">Neutre</button>
@@ -161,6 +184,9 @@
         <button data-val="experte">Experte</button>
       </div>
     </div>
+    {% else %}
+    <div id="personaSeg" style="display:none"></div>
+    {% endif %}
 
     <div class="card">
       <div class="chat">
@@ -464,6 +490,7 @@
       }
     }
 
+    const sendBtn = document.getElementById('send');
     sendBtn.addEventListener('click', ()=> send(msgInput.value));
     msgInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); } });
 
