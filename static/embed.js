@@ -1,9 +1,3 @@
-diff --git a/templates/embed.html b/templates/embed.html
-new file mode 100644
-index 0000000..2222222
---- /dev/null
-+++ b/templates/embed.html
-@@ -0,0 +1,420 @@
 +<!doctype html>
 +<html lang="fr">
 +<head>
