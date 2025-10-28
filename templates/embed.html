@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Betty — Embed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% set bot_id  = (bot.get('id') if bot else None) %}
+  {% set authkey = (bot.get('auth_key') if bot else None) %}
+  {% set src_url = ("/chat?bot=" ~ bot_id ~ (("&key=" ~ authkey) if authkey else "")) %}
+
+  <style>
+    :root{
+      --bg:#0b0b0c;
+      --card:#0f1115;
+      --line:#23262d;
+      --text:#e7e9ee;
+      --muted:#a7adbb;
+      --accent:#4F46E5; /* sobre, n'altère pas les couleurs du bot */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:transparent; /* permet d’être posé sur n’importe quel site */
+      color:var(--text);
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    }
+
+    .wrap{
+      max-width: 520px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+
+    .brandbar{
+      display:flex; align-items:center; gap:10px;
+      background: #0d0f12;
+      border-bottom:1px solid var(--line);
+      padding:10px 14px;
+      font-size:13px; color:var(--muted);
+    }
+    .dot{
+      width:8px;height:8px;border-radius:50%;background:var(--accent);
+      box-shadow:0 0 0 2px rgba(79,70,229,.25);
+    }
+    .brandbar b{ color:#fff; }
+    .brandbar a{
+      color:#a5b4fc; text-decoration:none; margin-left:auto; font-weight:600;
+    }
+    .brandbar a:hover{ text-decoration:underline; }
+
+    .frame{
+      width:100%;
+      height: 620px; /* même gabarit que le preview */
+      border:0;
+      display:block;
+      background:#0b0b0c;
+    }
+
+    /* Mobile plein écran */
+    @media (max-width:540px){
+      .wrap{ border-radius: 0; max-width:100%; }
+      .frame{ height: 80vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brandbar" role="banner" aria-label="Bandeau Betty">
+      <span class="dot" aria-hidden="true"></span>
+      <span><b>Betty Bot</b> — propulsé par Spectra Media</span>
+      <a href="https://spectramedia.gumroad.com/l/haubanai" target="_blank" rel="noopener">Spectra&nbsp;Media</a>
+    </div>
+
+    <!-- On charge le vrai widget (protégé par key) -->
+    <iframe
+      class="frame"
+      title="Betty Bot"
+      src="{{ src_url }}"
+      allow="clipboard-write; autoplay"
+      referrerpolicy="no-referrer"
+      loading="eager">
+    </iframe>
+  </div>
+</body>
+</html>
