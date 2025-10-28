@@ -1,4 +1,3 @@
-# app.py  — Betty Bots (corrigé)  [PART 1/4]
 from __future__ import annotations
 
 import os
