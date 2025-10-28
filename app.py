@@ -23,7 +23,7 @@ except Exception:
 import urllib.request
 
 import stripe
-import yaml  # (peut servir ensuite)
+import yaml
 
 # ---------------------------------------------------------------------
 # CONFIG
@@ -43,19 +43,16 @@ def pick_db_path() -> Path:
 
 DB_PATH = pick_db_path()
 
-app = Flask(__name__, static_folder="static", static_url_path="/static", template_folder="templates")
-app.config["TEMPLATES_AUTO_RELOAD"] = True
+app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
 
 # Respecte le schéma/host envoyés par le reverse-proxy (Vercel/Render/Nginx)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Stripe
 def _env_int(key: str, default: int) -> int:
-    try:
-        return int(os.getenv(key, str(default)))
-    except Exception:
-        return default
+    try: return int(os.getenv(key, str(default)))
+    except: return default
 
 STRIPE_SECRET_KEY   = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PRICE_CENTS  = _env_int("STRIPE_PRICE_CENTS", 999)  # 9,99 €
@@ -120,8 +117,7 @@ def get_db():
 @app.teardown_appcontext
 def close_db(error):
     db = g.pop("db", None)
-    if db:
-        db.close()
+    if db: db.close()
 
 def init_db():
     with get_db() as conn:
@@ -149,7 +145,7 @@ def init_db():
             pro_address_label TEXT,
             pro_address_url TEXT,
             pro_description TEXT,
-            auth_key TEXT,
+            auth_key TEXT,                             -- clé d’accès publique
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS leads (
@@ -239,8 +235,7 @@ def load_user(user_id: str):
 
 def sanitize_color(val: str) -> str:
     c = (val or "").strip()
-    if not c.startswith("#"):
-        c = "#" + c
+    if not c.startswith("#"): c = "#" + c
     return c if len(c) in (4, 7) else "#4F46E5"
 
 def is_guest_user() -> bool:
@@ -271,6 +266,7 @@ def ensure_user_bot(user_id: int) -> sqlite3.Row:
                  "", "", "", "", auth_key))
         row = get_bot(user_id)
     else:
+        # sqlite3.Row -> dict pour utiliser .get()
         row_dict = dict(row)
         if not (row_dict.get("auth_key") or "").strip():
             db_exec("UPDATE bots SET auth_key=? WHERE id=?", (make_bot_key(), row_dict["id"]))
@@ -599,6 +595,7 @@ def pay():
         "user_email": getattr(current_user, "email", None),
         "checkout_path": url_for("pay_stripe"),
         "base_url": base_url_for_checkout(),
+        "signup_path": url_for("signup"),  # ✅ ajout pour le lien d’inscription
     }
 
     # Essaye de rendre le template. Si échec (ex: Jinja error), fallback minimal
@@ -606,6 +603,7 @@ def pay():
         return render_template("pay.html", **ctx)
     except Exception as e:
         logger.error("Exception on /pay [GET]: %s", e, exc_info=True)
+        # ✅ fallback avec lien vers /signup si guest
         fallback_html = f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paiement — Betty Bots</title>
@@ -617,6 +615,7 @@ def pay():
   .price{{font-size:28px;margin:12px 0 24px}}
   form button{{background:#4F46E5;border:0;color:#fff;padding:12px 18px;border-radius:10px;cursor:pointer}}
   .muted{{opacity:.7;font-size:13px;margin-top:14px}}
+  a{{color:#a5b4fc;text-decoration:none}}
 </style></head><body>
   <div class="card">
     <h1>Abonnement Betty Bots</h1>
@@ -628,6 +627,8 @@ def pay():
         Payer avec Stripe
       </button>
     </form>
+    {("<p class='muted'>Pas encore de compte ? <a href='" + url_for('signup') + "'>Créer un compte</a></p>") if ctx.get("is_guest") else ""}
+    <p class="muted">← <a href="/preview">Retour au test du bot</a></p>
     <p class="muted">Page fallback: si le template casse, cette version minimaliste s’affiche.</p>
   </div>
 </body></html>"""
@@ -636,9 +637,10 @@ def pay():
 @app.post("/pay/stripe")
 @login_required
 def pay_stripe():
+    # ✅ redirection guest → /signup (au lieu de revenir sur /pay)
     if is_guest_user():
-        flash("Créez votre compte avec un email valide avant de payer.", "warning")
-        return redirect(url_for("pay"))
+        flash("Créez votre compte avec un email valide pour procéder au paiement.", "warning")
+        return redirect(url_for("signup"))
     if not STRIPE_SECRET_KEY:
         flash("Paiement indisponible (clé Stripe).", "error")
         return redirect(url_for("pay"))
