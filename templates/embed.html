@@ -1,90 +1,332 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>Betty — Embed</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  {% set bot_id  = (bot.get('id') if bot else None) %}
-  {% set authkey = (bot.get('auth_key') if bot else None) %}
-  {% set src_url = ("/chat?bot=" ~ bot_id ~ (("&key=" ~ authkey) if authkey else "")) %}
+  <meta charset="utf-8">
+  <title>Betty Bot — Intégration</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  {# ====== CONFIG (venues d’app.py) ====== #}
+  {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
+  {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
+  {% set bot_name   = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
+  {% set pack_slug  = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilier') %}
+  {% set persona    = (cfg.persona if (cfg and cfg.persona) else 'neutre') %}
+  {% set bot_id     = (bot.get('id') if bot else None) %}
+
+  {% set show_brand      = True %}
+  {% set brand_text      = (cfg.brand_text if cfg and cfg.brand_text else 'Betty Bot — propulsé par Spectra Media') %}
+  {% set brand_link      = (cfg.brand_link if cfg and cfg.brand_link else 'https://spectramedia.ai') %}
+
+  {% set pack_labels = {
+    'agent_immobilier':'Agent immobilier',
+    'avocat':'Avocat',
+    'medecin':'Médecin'
+  } %}
+  {% set pack_label = pack_labels.get(pack_slug, pack_slug) %}
+  {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '/avatar/agent_immo') %}
 
   <style>
     :root{
       --bg:#0b0b0c;
-      --card:#0f1115;
+      --card:#111214;
       --line:#23262d;
       --text:#e7e9ee;
       --muted:#a7adbb;
-      --accent:#4F46E5; /* sobre, n'altère pas les couleurs du bot */
+      --primary:{{ primary }};
     }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
       margin:0;
-      background:transparent; /* permet d’être posé sur n’importe quel site */
+      background:var(--bg);
       color:var(--text);
-      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif
     }
 
-    .wrap{
-      max-width: 520px;
-      margin: 0 auto;
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    /* Bandeau branding */
+    .bb-brand{
+      position:sticky;top:0;left:0;right:0;height:34px;z-index:999;
+      background:#0b0b0f;color:#cbd5e1;border-bottom:1px solid rgba(255,255,255,.06);
+      font:500 12px/34px Inter,system-ui,sans-serif;text-align:center;letter-spacing:.2px
     }
+    .bb-brand a{color:#a5b4fc;text-decoration:none}
 
-    .brandbar{
-      display:flex; align-items:center; gap:10px;
-      background: #0d0f12;
-      border-bottom:1px solid var(--line);
-      padding:10px 14px;
-      font-size:13px; color:var(--muted);
+    .wrap{max-width:860px;margin:22px auto;padding:0 18px}
+    .row{display:flex;align-items:center;gap:14px;margin:6px 0 18px}
+    .avatar{
+      width:64px;height:64px;border:1px solid var(--line);overflow:hidden;background:#0f1012;
+      border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
+      flex:0 0 64px
     }
-    .dot{
-      width:8px;height:8px;border-radius:50%;background:var(--accent);
-      box-shadow:0 0 0 2px rgba(79,70,229,.25);
-    }
-    .brandbar b{ color:#fff; }
-    .brandbar a{
-      color:#a5b4fc; text-decoration:none; margin-left:auto; font-weight:600;
-    }
-    .brandbar a:hover{ text-decoration:underline; }
+    .avatar img{width:100%;height:100%;object-fit:cover}
+    h1{margin:0;font-size:18px}
+    .sub{color:var(--muted);font-size:12px;margin-top:2px}
 
-    .frame{
-      width:100%;
-      height: 620px; /* même gabarit que le preview */
-      border:0;
-      display:block;
-      background:#0b0b0c;
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+    .chat{display:flex;flex-direction:column;height:62vh;min-height:420px}
+    .messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
+    .bubble{
+      max-width:80%;
+      padding:10px 12px;
+      border-radius:14px;
+      line-height:1.35;
+      border:1px solid var(--line);
+      white-space:pre-wrap
     }
+    .me{align-self:flex-end;background:#1a1d24}
+    .bot{align-self:flex-start;background:#101216}
+    .bubble.warn{color:#ffdb6e;border-color:#3b2f0b;background:#1c1606}
 
-    /* Mobile plein écran */
-    @media (max-width:540px){
-      .wrap{ border-radius: 0; max-width:100%; }
-      .frame{ height: 80vh; }
+    .input{display:flex;gap:8px;margin-top:10px}
+    .input input{
+      flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);
+      background:#0f1012;color:var(--text)
     }
+    .input button{
+      padding:12px 14px;border-radius:12px;border:0;background:var(--primary);color:#fff;font-weight:600;cursor:pointer
+    }
+    .input button[disabled]{opacity:.6;cursor:not-allowed}
+    .small{color:var(--muted);font-size:12px;margin-top:6px}
+    .kbd{display:inline-block;background:#0f1012;border:1px solid var(--line);padding:0 6px;border-radius:6px}
   </style>
 </head>
+
 <body>
+  <div class="bb-brand">
+    <a href="{{ brand_link }}" target="_blank" rel="noopener">{{ brand_text }}</a>
+  </div>
+
   <div class="wrap">
-    <div class="brandbar" role="banner" aria-label="Bandeau Betty">
-      <span class="dot" aria-hidden="true"></span>
-      <span><b>Betty Bot</b> — propulsé par Spectra Media</span>
-      <a href="https://spectramedia.gumroad.com/l/haubanai" target="_blank" rel="noopener">Spectra&nbsp;Media</a>
+    <div class="row">
+      <div class="avatar"><img src="{{ avatar_url }}" alt="avatar"></div>
+      <div>
+        <h1>{{ bot_name }}</h1>
+        <div class="sub">Pack : {{ pack_label }}</div>
+      </div>
     </div>
 
-    <!-- On charge le vrai widget (protégé par key) -->
-    <iframe
-      class="frame"
-      title="Betty Bot"
-      src="{{ src_url }}"
-      allow="clipboard-write; autoplay"
-      referrerpolicy="no-referrer"
-      loading="eager">
-    </iframe>
+    <div class="card">
+      <div class="chat">
+        <div id="messages" class="messages"></div>
+        <div class="input">
+          <input id="msg" placeholder="Écrivez votre message…" autocomplete="off">
+          <button id="send">Envoyer</button>
+        </div>
+        <div class="small">
+          Astuce : tapez <span class="kbd">Entrée</span> pour envoyer. Exemple : “je veux un rendez-vous demain”.
+        </div>
+      </div>
+    </div>
   </div>
+
+  <!-- =========================== -->
+  <!-- ========== SCRIPT ========= -->
+  <!-- =========================== -->
+  <script>
+    // -------- Contexte transmis par le serveur --------
+    const BOT_ID   = {{ bot_id|tojson }};
+    const PACK     = {{ pack_slug|tojson }};
+    const PRIMARY  = {{ primary|tojson }};
+    let   persona  = {{ persona|tojson }};
+
+    // Coordonnées publiques (si configurées dans le dashboard)
+    const PRO_PHONE         = {{ (cfg.pro_phone or '')|tojson }};
+    const PRO_ADDRESS_LABEL = {{ (cfg.pro_address_label or '')|tojson }};
+    const PRO_ADDRESS_URL   = {{ (cfg.pro_address_url or '')|tojson }};
+    const MAP_URL = (PRO_ADDRESS_URL && PRO_ADDRESS_URL.trim())
+      ? PRO_ADDRESS_URL
+      : (PRO_ADDRESS_LABEL ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(PRO_ADDRESS_LABEL)}` : null);
+
+    // -------- Amorce par pack (strict) --------
+    const LEAD_PROMPTS = {
+      agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ? Sur quelle zone ?",
+      avocat:           "Quel type de dossier (famille, travail, pénal...) et quel degré d’urgence ?",
+      medecin:          "Quel est votre motif de consultation et vos disponibilités ?"
+    };
+    const START_GREETING = {{ (cfg.welcome_text or 'Bonjour 👋')|tojson }};
+
+    // -------- UI --------
+    const messagesEl = document.getElementById('messages');
+    const msgInput   = document.getElementById('msg');
+    const sendBtn    = document.getElementById('send');
+
+    // Bulle texte
+    function addBubble(text, who='bot', cls=null){
+      const b = document.createElement('div');
+      b.className = 'bubble ' + (who === 'me' ? 'me' : 'bot') + (cls ? (' ' + cls) : '');
+      b.textContent = String(text || '');
+      messagesEl.appendChild(b);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // Bulle HTML (pour coordonnées cliquables)
+    function addHtmlBubble(html){
+      const b = document.createElement('div');
+      b.className = 'bubble bot';
+      b.innerHTML = html;
+      messagesEl.appendChild(b);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // Historique minimal (contenu utilisateur uniquement)
+    function userHistory(){
+      return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
+    }
+
+    // -------- Lead universel --------
+    const lead = { nom:"", prenom:"", telephone:"", email:"" };
+    let leadStep = 0; // 0:nom,1:prenom,2:tel,3:email,4:done
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+
+    function isLeadComplete(l){ return l.nom && l.prenom && l.telephone && l.email; }
+
+    function nextLeadQuestion(){
+      if (leadStep === 0) return addBubble("Quel est votre NOM ?");
+      if (leadStep === 1) return addBubble("Et votre PRÉNOM ?");
+      if (leadStep === 2) return addBubble("Votre TÉLÉPHONE (mobile de préférence) ?");
+      if (leadStep === 3) return addBubble("Enfin, votre ADRESSE EMAIL ?");
+    }
+
+    function acceptLeadAnswer(text){
+      const t = (text || "").trim();
+      if (!t) return false;
+
+      if (leadStep === 0) { lead.nom = t.toUpperCase(); leadStep = 1; return true; }
+      if (leadStep === 1) { lead.prenom = t.charAt(0).toUpperCase() + t.slice(1); leadStep = 2; return true; }
+      if (leadStep === 2) {
+        const digits = t.replace(/[^\d+]/g,"");
+        if (digits.length < 8) { addBubble("Le numéro semble trop court. Pouvez-vous le vérifier ?", "bot", "warn"); return true; }
+        lead.telephone = digits; leadStep = 3; return true;
+      }
+      if (leadStep === 3) {
+        if (!emailRe.test(t)) { addBubble("L’email ne semble pas valide. Pouvez-vous le retaper ?", "bot", "warn"); return true; }
+        lead.email = t; leadStep = 4; return true;
+      }
+      return false;
+    }
+
+    async function submitLeadIfComplete(){
+      if (!isLeadComplete(lead)) return;
+
+      addBubble(
+        `Merci ${lead.prenom} ${lead.nom}. J’ai bien noté :\n- Téléphone : ${lead.telephone}\n- Email : ${lead.email}\nUn conseiller vous rappellera rapidement.`,
+        "bot", null
+      );
+
+      const payload = {
+        name: `${lead.prenom} ${lead.nom}`,
+        email: lead.email,
+        message: `Lead ${PACK}\nNom: ${lead.nom}\nPrénom: ${lead.prenom}\nTéléphone: ${lead.telephone}\nEmail: ${lead.email}`,
+        extra: { metier: PACK }
+      };
+
+      try{
+        await fetch('/api/lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+      } catch {/* silencieux dans l’embed */}
+    }
+
+    // -------- Réponse coordonnées si demandé --------
+    function userAsksForBusinessInfo(text){
+      const t = (text || '').toLowerCase();
+      const askPhone = /t(é|e)l(é|e)phone|num(é|e)ro|joindre|appeler|appel/i.test(t) && !!PRO_PHONE;
+      const askAddr  = /(adresse|o(ù|u)\s+(vous\s+)?(situez|trouvez)|venir|localisation|plan|map|google\s+maps)/i.test(t)
+                        && (!!PRO_ADDRESS_LABEL || !!MAP_URL);
+      return { askPhone, askAddr };
+    }
+
+    function answerBusinessInfoIfAsked(text){
+      const { askPhone, askAddr } = userAsksForBusinessInfo(text);
+      if (!askPhone && !askAddr) return false;
+
+      const parts = [];
+      if (askPhone && PRO_PHONE) { parts.push(`📞 Téléphone : <b>${PRO_PHONE}</b>`); }
+      if (askAddr && (PRO_ADDRESS_LABEL || MAP_URL)) {
+        const link = MAP_URL ? `<a href="${MAP_URL}" target="_blank" rel="noopener">ouvrir dans Google Maps</a>` : '';
+        const label = PRO_ADDRESS_LABEL ? `<b>${PRO_ADDRESS_LABEL}</b>` : '';
+        parts.push(`📍 Adresse : ${label}${label && link ? " — " : ""}${link}`);
+      }
+      if (parts.length) addHtmlBubble(parts.join("<br>"));
+      return true;
+    }
+
+    // -------- Appel API “métier” --------
+    async function callChatAPI(text){
+      const payload = {
+        message: text,
+        history: userHistory(),
+        pack: PACK,
+        persona,
+        color: PRIMARY,
+        bot_id: BOT_ID,
+        lead,
+        business: { phone: PRO_PHONE, address_label: PRO_ADDRESS_LABEL, address_url: MAP_URL }
+      };
+      try{
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+        const ctype = (res.headers.get('content-type')||'').toLowerCase();
+        if (!ctype.includes('application/json')) return { ok:false };
+        const data = await res.json().catch(()=>null);
+        return { ok: res.ok && !!data, data };
+      } catch { return { ok:false }; }
+    }
+
+    // -------- Envoi --------
+    let sending = false;
+    async function send(text){
+      const t = (text || '').trim();
+      if (!t || sending) return;
+      sending = true; sendBtn.disabled = true;
+
+      addBubble(t, 'me'); msgInput.value = '';
+
+      answerBusinessInfoIfAsked(t);
+
+      const progressed = acceptLeadAnswer(t);
+      if (progressed) {
+        if (leadStep < 4) { nextLeadQuestion(); sending = false; sendBtn.disabled = false; msgInput.focus(); return; }
+        await submitLeadIfComplete();  // envoi silencieux
+      }
+
+      const { ok, data } = await callChatAPI(t);
+      if (!ok || !data || typeof data.reply !== 'string') {
+        addBubble('Je n’ai pas bien compris, pouvez-vous préciser ?', 'bot', 'warn');
+      } else {
+        // Filtrage strict : ne jamais poser une question d’un autre pack
+        const safePrompts = {
+          agent_immobilier: /acheter|vendre|louer|budget|zone|quartier|surface|pi[eè]ces/i,
+          avocat: /(dossier|p[ée]nal|travail|famille|prud.hom|urgence|tribunal)/i,
+          medecin: /(consultation|douleur|sympt[oô]me|disponibilit[eé]s|rdv|rendez)/i
+        };
+        const reply = (data.reply || '').trim();
+        const okPack = safePrompts[PACK] ? safePrompts[PACK].test(reply) || /^bonjour/i.test(reply) : true;
+        addBubble(okPack ? reply : (LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?"), 'bot');
+      }
+
+      sending = false; sendBtn.disabled = false; msgInput.focus();
+    }
+
+    // UI events
+    sendBtn.addEventListener('click', ()=> send(msgInput.value));
+    msgInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); } });
+
+    // -------- Démarrage (auto-focus + amorce pack) --------
+    (()=>{
+      addBubble(START_GREETING, 'bot');
+      const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
+      addBubble(hint, 'bot');
+      nextLeadQuestion(); // NOM d’abord
+      msgInput.focus();
+    })();
+  </script>
 </body>
 </html>
