@@ -51,13 +51,41 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("betty")
 
 # -----------------------------------------------------------------------------
-# SQLite helpers
+# SQLite helpers (compatibles avec Vercel)
 # -----------------------------------------------------------------------------
+import sqlite3
+from contextlib import contextmanager
+
+def pick_db_path() -> Path:
+    """
+    En environnements serverless (Vercel, AWS Lambda), on DOIT écrire dans /tmp.
+    On laisse la possibilité d’override via DB_PATH.
+    """
+    env_db = os.getenv("DB_PATH", "").strip()
+    if env_db:
+        return Path(env_db)
+
+    # Si on est dans un environnement serverless (Vercel, AWS)
+    if any(os.getenv(k) for k in ("VERCEL", "VERCEL_URL", "AWS_LAMBDA_FUNCTION_NAME", "VERCEL_ENV")):
+        return Path("/tmp/bettybots.sqlite3")
+
+    # Mode local (dev)
+    return Path(__file__).resolve().parent / "bettybots.sqlite3"
+
+DB_PATH = pick_db_path()
+
+def _ensure_parent_dir(path: Path) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
 def get_db() -> sqlite3.Connection:
+    """Ouvre une connexion SQLite compatible Vercel (lecture/écriture)."""
     if "db" not in g:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        g.db = conn
+        _ensure_parent_dir(DB_PATH)
+        g.db = sqlite3.connect(str(DB_PATH), timeout=10, check_same_thread=False)
+        g.db.row_factory = sqlite3.Row
     return g.db
 
 @app.teardown_appcontext
@@ -67,9 +95,9 @@ def close_db(exception: Optional[BaseException]):
         conn.close()
 
 def init_db():
+    """Crée les tables si besoin."""
     conn = get_db()
     cur = conn.cursor()
-    # table bots (clé = bot_id; key publique pour l’iframe; slug, avatar…)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS bots(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +113,6 @@ def init_db():
         updated_at TEXT
     );
     """)
-    # table leads (collectés depuis preview/embed)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS leads(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,9 +125,6 @@ def init_db():
     );
     """)
     conn.commit()
-
-with app.app_context():
-    init_db()
 
 # -----------------------------------------------------------------------------
 # Utils
