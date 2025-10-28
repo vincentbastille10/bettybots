@@ -103,7 +103,14 @@ def init_db():
         name TEXT,
         color_hex TEXT,
         persona TEXT,
+        avatar_key INTEGER DEFAULT 0,
         avatar_url TEXT,
+        widget_size TEXT DEFAULT 'm',
+        greeting TEXT,
+        pro_activity TEXT,
+        pro_phone TEXT,
+        pro_address_label TEXT,
+        pro_address_url TEXT,
         welcome_text TEXT,
         created_at TEXT,
         updated_at TEXT
@@ -149,6 +156,18 @@ def normalize_metier(v: Optional[str]) -> str:
 def generate_public_key() -> str:
     return secrets.token_urlsafe(24)
 
+def get_avatar_url_from_key(avatar_key: int, pack_slug: str) -> str:
+    """Retourne l'URL de l'avatar selon la clé (0, 1, 2)."""
+    avatars = [
+        "/avatar/agent_immo",
+        "/avatar/avocat",
+        "/avatar/medecin"
+    ]
+    try:
+        return avatars[int(avatar_key)]
+    except (ValueError, IndexError):
+        return f"/avatar/{pack_slug}"
+
 def current_cfg() -> Dict[str, Any]:
     """Configuration en session, avec défauts sûrs pour la preview."""
     cfg = dict(session.get("cfg") or {})
@@ -156,8 +175,15 @@ def current_cfg() -> Dict[str, Any]:
     cfg.setdefault("name", "Mon Betty Bot")
     cfg.setdefault("color_hex", "#4F46E5")
     cfg.setdefault("persona", "neutre")
+    cfg.setdefault("avatar_key", 0)
     cfg.setdefault("avatar_url", None)
+    cfg.setdefault("widget_size", "m")
+    cfg.setdefault("greeting", "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous aujourd'hui ?")
     cfg.setdefault("welcome_text", None)
+    cfg.setdefault("pro_activity", None)
+    cfg.setdefault("pro_phone", None)
+    cfg.setdefault("pro_address_label", None)
+    cfg.setdefault("pro_address_url", None)
     # flags UI preview
     cfg.setdefault("show_controls", True)
     cfg.setdefault("inject_hide_css", False)
@@ -169,9 +195,11 @@ def current_cfg() -> Dict[str, Any]:
 # -----------------------------------------------------------------------------
 @app.route("/")
 def index():
+    cfg = current_cfg()
     try:
-        return render_template("dashboard.html", cfg=current_cfg())
-    except Exception:
+        return render_template("dashboard.html", cfg=cfg, bot=None)
+    except Exception as e:
+        log.error(f"Template error: {e}")
         return "<h1>Dashboard</h1><p>POST /dashboard pour enregistrer le pack puis /preview</p>"
 
 # -----------------------------------------------------------------------------
@@ -186,12 +214,26 @@ def dashboard_save():
         form.get("pack_slug") or form.get("slug") or cfg.get("slug") or "agent_immobilier"
     )
 
+    # Récupère avatar_key (0, 1, 2)
+    avatar_key = 0
+    try:
+        avatar_key = int(form.get("avatar_key", 0))
+    except ValueError:
+        avatar_key = 0
+
     cfg.update({
         "slug": pack_slug,
-        "name": form.get("name") or cfg.get("name") or "Mon Betty Bot",
+        "name": form.get("bot_name") or form.get("name") or cfg.get("name") or "Mon Betty Bot",
         "color_hex": form.get("color_hex") or cfg.get("color_hex") or "#4F46E5",
         "persona": form.get("persona") or cfg.get("persona") or "neutre",
-        "avatar_url": form.get("avatar_url") or cfg.get("avatar_url"),
+        "avatar_key": avatar_key,
+        "avatar_url": get_avatar_url_from_key(avatar_key, pack_slug),
+        "widget_size": form.get("widget_size") or cfg.get("widget_size") or "m",
+        "greeting": form.get("greeting") or cfg.get("greeting") or "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous aujourd'hui ?",
+        "pro_activity": form.get("pro_activity") or cfg.get("pro_activity"),
+        "pro_phone": form.get("pro_phone") or cfg.get("pro_phone"),
+        "pro_address_label": form.get("pro_address_label") or cfg.get("pro_address_label"),
+        "pro_address_url": form.get("pro_address_url") or cfg.get("pro_address_url"),
         "welcome_text": form.get("welcome_text") or cfg.get("welcome_text"),
         "show_controls": True,
         "inject_hide_css": False,
@@ -221,11 +263,18 @@ def pay():
     cfg = current_cfg()
     metadata = {
         "pack_slug": cfg.get("slug", "agent_immobilier"),
+        "avatar_key": str(cfg.get("avatar_key", 0)),
         "avatar_url": cfg.get("avatar_url") or "",
+        "widget_size": cfg.get("widget_size", "m"),
+        "greeting": cfg.get("greeting") or "",
         "welcome_text": cfg.get("welcome_text") or "",
         "name": cfg.get("name") or "Mon Betty Bot",
         "color_hex": cfg.get("color_hex") or "#4F46E5",
         "persona": cfg.get("persona") or "neutre",
+        "pro_activity": cfg.get("pro_activity") or "",
+        "pro_phone": cfg.get("pro_phone") or "",
+        "pro_address_label": cfg.get("pro_address_label") or "",
+        "pro_address_url": cfg.get("pro_address_url") or "",
     }
 
     try:
@@ -270,15 +319,38 @@ def pay_success():
     name = meta.get("name") or "Mon Betty Bot"
     color_hex = meta.get("color_hex") or "#4F46E5"
     persona = meta.get("persona") or "neutre"
-    avatar_url = meta.get("avatar_url") or None
+    
+    avatar_key = 0
+    try:
+        avatar_key = int(meta.get("avatar_key", 0))
+    except ValueError:
+        avatar_key = 0
+    
+    avatar_url = meta.get("avatar_url") or get_avatar_url_from_key(avatar_key, slug)
+    widget_size = meta.get("widget_size") or "m"
+    greeting = meta.get("greeting") or "Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous aujourd'hui ?"
     welcome_text = meta.get("welcome_text") or None
+    pro_activity = meta.get("pro_activity") or None
+    pro_phone = meta.get("pro_phone") or None
+    pro_address_label = meta.get("pro_address_label") or None
+    pro_address_url = meta.get("pro_address_url") or None
 
     public_key = generate_public_key()
 
     cur.execute("""
-        INSERT INTO bots(owner_email, key, slug, name, color_hex, persona, avatar_url, welcome_text, created_at, updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?)
-    """, (owner_email, public_key, slug, name, color_hex, persona, avatar_url, welcome_text, now_iso(), now_iso()))
+        INSERT INTO bots(
+            owner_email, key, slug, name, color_hex, persona, 
+            avatar_key, avatar_url, widget_size, greeting, 
+            pro_activity, pro_phone, pro_address_label, pro_address_url,
+            welcome_text, created_at, updated_at
+        )
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (
+        owner_email, public_key, slug, name, color_hex, persona,
+        avatar_key, avatar_url, widget_size, greeting,
+        pro_activity, pro_phone, pro_address_label, pro_address_url,
+        welcome_text, now_iso(), now_iso()
+    ))
     conn.commit()
 
     iframe_src = url_for("chat_embed", _external=True)
@@ -432,6 +504,7 @@ def avatar_proxy(slug: str):
     slug = normalize_metier(slug)
     defaults = {
         "agent_immobilier": "static/avatars/agent_immo.jpg",
+        "agent_immo": "static/avatars/agent_immo.jpg",
         "avocat": "static/avatars/avocat.jpg",
         "medecin": "static/avatars/medecin.jpg",
         "coiffeur": "static/avatars/coiffeur.jpg",
