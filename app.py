@@ -145,7 +145,7 @@ def init_db():
             pro_address_label TEXT,
             pro_address_url TEXT,
             pro_description TEXT,
-            auth_key TEXT,                             -- clé d’accès publique
+            auth_key TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS leads (
@@ -166,16 +166,9 @@ def ensure_bot_extra_columns():
             cur = conn.execute("PRAGMA table_info(bots)")
             existing = {row["name"] for row in cur.fetchall()}
             alters = []
-            if "pro_phone" not in existing:
-                alters.append("ALTER TABLE bots ADD COLUMN pro_phone TEXT")
-            if "pro_address_label" not in existing:
-                alters.append("ALTER TABLE bots ADD COLUMN pro_address_label TEXT")
-            if "pro_address_url" not in existing:
-                alters.append("ALTER TABLE bots ADD COLUMN pro_address_url TEXT")
-            if "pro_description" not in existing:
-                alters.append("ALTER TABLE bots ADD COLUMN pro_description TEXT")
-            if "auth_key" not in existing:
-                alters.append("ALTER TABLE bots ADD COLUMN auth_key TEXT")
+            for col in ("pro_phone","pro_address_label","pro_address_url","pro_description","auth_key"):
+                if col not in existing:
+                    alters.append(f"ALTER TABLE bots ADD COLUMN {col} TEXT")
             for sql in alters:
                 conn.execute(sql)
             if alters:
@@ -309,7 +302,7 @@ def normalize_metier(raw: str) -> tuple[str, str]:
     """
     Retourne (internal_slug, pack_slug)
     internal_slug -> pour /avatar/<slug>   (agent_immo|avocat|medecin)
-    pack_slug     -> pour l'API/chat & affichage (agent_immobilier|avocat|medecin)
+    pack_slug     -> pour l’API/chat & affichage (agent_immobilier|avocat|medecin)
     """
     v = (raw or "").strip().lower()
     if v in PACK_TO_INTERNAL:
@@ -423,43 +416,38 @@ def dashboard():
             "pro_address_label": (bot or {}).get("pro_address_label"),
             "pro_address_url": (bot or {}).get("pro_address_url"),
             "pro_description": (bot or {}).get("pro_description"),
+            # Flags UI par défaut pour preview
+            "show_controls": True,
+            "show_brand": False,
+            "inject_hide_css": False,
         }
         return render_template("dashboard.html", bot=bot, cfg=cfg)
 
-    # --- POST: sauvegarde (robuste sur le champ pack) -----------------
+    # --- POST: sauvegarde (on enregistre le slug pack tel quel) — ROBUSTE
     raw_pack = (
         request.form.get("pack_slug")
         or request.form.get("metier")
         or request.form.get("pack")
         or "agent_immobilier"
     )
-    raw_pack = (raw_pack or "").strip().lower()
-
-    # normalisation interne -> pack officiel
-    _internal_to_pack = {
-        "agent_immo": "agent_immobilier",
-        "avocat": "avocat",
-        "medecin": "medecin",
-    }
-    pack_slug = _internal_to_pack.get(raw_pack, raw_pack)
-    if pack_slug not in {"agent_immobilier", "avocat", "medecin"}:
-        pack_slug = "agent_immobilier"
+    pack_slug = (raw_pack or "").strip().lower()
+    if pack_slug not in ("agent_immobilier","avocat","medecin"):
+        # Tente une normalisation rapide (labels)
+        _, pack_slug = normalize_metier(pack_slug)
 
     name       = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
     color_hex  = sanitize_color(request.form.get("color_hex") or "#4F46E5")
-    welcome    = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
-    persona    = (request.form.get("persona") or "neutre").strip()
-    widget_sz  = (request.form.get("widget_size") or "m").strip()
+    welcome    = (request.form.get("greeting") or (bot.get("welcome_text") if bot else "") or "Bonjour 👋").strip()[:500]
+    persona    = (request.form.get("persona") or (bot.get("persona") if bot else "neutre")).strip()
+    widget_sz  = (request.form.get("widget_size") or (bot.get("widget_size") if bot else "m")).strip()
     shape_map  = {"s":"circle","m":"square","l":"rounded"}
-    shape      = shape_map.get(widget_sz, "square")
+    shape      = shape_map.get(widget_sz, (bot.get("shape") if bot else "square"))
 
     # Nouveaux champs (facultatifs)
-    pro_phone        = (request.form.get("pro_phone") or "").strip()[:100]
-    pro_address_lbl  = (request.form.get("pro_address_label") or "").strip()[:200]
-    pro_address_url  = (request.form.get("pro_address_url") or "").strip()[:300]
-    pro_description  = (request.form.get("pro_description") or "").strip()[:400]
-
-    app.logger.info(f"[DASHBOARD SAVE] raw_pack={raw_pack!r} -> pack_slug={pack_slug!r}")
+    pro_phone        = (request.form.get("pro_phone") or (bot.get("pro_phone") if bot else "")).strip()[:100]
+    pro_address_lbl  = (request.form.get("pro_address_label") or (bot.get("pro_address_label") if bot else "")).strip()[:200]
+    pro_address_url  = (request.form.get("pro_address_url") or (bot.get("pro_address_url") if bot else "")).strip()[:300]
+    pro_description  = (request.form.get("pro_description") or (bot.get("pro_description") if bot else "")).strip()[:400]
 
     if bot:
         db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=?,
@@ -508,6 +496,12 @@ def preview():
         "pro_address_label": bot.get("pro_address_label"),
         "pro_address_url": bot.get("pro_address_url"),
         "pro_description": bot.get("pro_description"),
+        # Flags UI : en preview on garde les contrôles
+        "show_controls": True,
+        "show_brand": False,
+        "inject_hide_css": False,
+        "brand_text": "Betty Bot — propulsé par Spectra Media",
+        "brand_link": "https://spectramedia.ai",
     }
 
     return render_template("preview.html", bot=bot, cfg=cfg)
@@ -544,12 +538,6 @@ def chat_public():
             return "Accès non autorisé (clé invalide).", 403
 
     bot = dict(row)
-
-    # Option d’override pack via ?pack=..., utile si front legacy
-    pack_override = (request.args.get("pack") or "").strip().lower()
-    if pack_override in {"agent_immobilier", "avocat", "medecin"}:
-        bot["metier"] = pack_override
-
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
     shape_to_size = {"circle":"s","square":"m","rounded":"l"}
@@ -569,9 +557,15 @@ def chat_public():
         "pro_address_label": bot.get("pro_address_label"),
         "pro_address_url": bot.get("pro_address_url"),
         "pro_description": bot.get("pro_description"),
+        # Flags UI : EMBED propre (cache les boutons, ajoute bandeau)
+        "show_controls": False,
+        "show_brand": True,
+        "inject_hide_css": True,
+        "brand_text": "Betty Bot — propulsé par Spectra Media",
+        "brand_link": "https://spectramedia.ai",
     }
 
-    # On réutilise le template de test (UI identique à /preview)
+    # On réutilise le template de test mais sans les contrôles
     return render_template("preview.html", bot=bot, cfg=cfg)
 
 # ---------------------------- SIGNUP ---------------------------------
@@ -620,7 +614,7 @@ def pay():
         "user_email": getattr(current_user, "email", None),
         "checkout_path": url_for("pay_stripe"),
         "base_url": base_url_for_checkout(),
-        "signup_path": url_for("signup"),  # ✅ ajout pour le lien d’inscription
+        "signup_path": url_for("signup"),
     }
 
     # Essaye de rendre le template. Si échec (ex: Jinja error), fallback minimal
@@ -628,7 +622,7 @@ def pay():
         return render_template("pay.html", **ctx)
     except Exception as e:
         logger.error("Exception on /pay [GET]: %s", e, exc_info=True)
-        # ✅ fallback avec lien vers /signup si guest
+        # fallback avec lien vers /signup si guest
         fallback_html = f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paiement — Betty Bots</title>
@@ -662,7 +656,7 @@ def pay():
 @app.post("/pay/stripe")
 @login_required
 def pay_stripe():
-    # ✅ redirection guest → /signup (au lieu de revenir sur /pay)
+    # redirection guest → /signup (au lieu de revenir sur /pay)
     if is_guest_user():
         flash("Créez votre compte avec un email valide pour procéder au paiement.", "warning")
         return redirect(url_for("signup"))
@@ -811,7 +805,10 @@ def api_chat():
         message = raw_msg.strip().lower()
         pack    = (data.get("pack") or "agent_immobilier").strip().lower()
 
-        # Réponse très simple + amorce de qualif par pack (proactif)
+        # Normalisation pack reçue du front (évite décalages)
+        _, pack = normalize_metier(pack)
+
+        # Réponse simple + amorce de qualif par pack (proactif)
         lead_prompts = {
             "agent_immobilier": "Souhaitez-vous acheter, vendre ou louer ? Quel budget et sur quelle zone ?",
             "avocat": "Pouvez-vous préciser le type de dossier (famille, travail, pénal...), l'urgence et vos coordonnées ?",
@@ -821,15 +818,17 @@ def api_chat():
         }
 
         if not message or "bonjour" in message:
-            return jsonify({"reply": "Bonjour 👋", "ask_lead": False})
+            return jsonify({"reply": "Bonjour 👋", "ask_lead": False}), 200
 
         if any(k in message for k in ["rdv", "rendez", "dispo", "disponibilit"]):
-            return jsonify({"reply": "D’accord. Préférez-vous matin, après-midi ou soir ?", "ask_lead": True})
+            return jsonify({"reply": "D’accord. Préférez-vous matin, après-midi ou soir ?", "ask_lead": True}), 200
 
-        return jsonify({"reply": lead_prompts.get(pack, "Pouvez-vous préciser votre besoin, votre budget et votre délai ?"), "ask_lead": True})
+        return jsonify({"reply": lead_prompts.get(pack, "Pouvez-vous préciser votre besoin, votre budget et votre délai ?"), "ask_lead": True}), 200
 
-    except Exception:
-        return jsonify({"reply": "Erreur.", "ask_lead": False}), 500
+    except Exception as e:
+        logger.error(f"/api/chat error: {e}", exc_info=True)
+        # Fallback non bloquant (évite ⚠️ Erreur serveur.)
+        return jsonify({"reply": "Je n’ai pas bien compris, pouvez-vous préciser ?", "ask_lead": True}), 200
 
 # ----------- API LEAD : enregistrement + email au propriétaire --------
 @app.post("/api/lead")
@@ -881,7 +880,7 @@ def api_lead():
 
     except Exception as e:
         logger.error(f"/api/lead error: {e}", exc_info=True)
-        return jsonify({"status": "error"}), 500
+        return jsonify({"status": "error"}), 200  # jamais 500 côté UI
 
 # ----------- API : envoi du code d’intégration à l’email d’inscription ----
 @app.post("/api/send_code")
@@ -909,7 +908,7 @@ def api_send_code():
         return jsonify({"ok": bool(ok)})
     except Exception as e:
         logger.error(f"/api/send_code error: {e}", exc_info=True)
-        return jsonify({"ok": False}), 500
+        return jsonify({"ok": False}), 200
 
 # --------------------------- EMBED WRAPPER ---------------------------
 @app.get("/embed/<int:bot_id>")
@@ -938,8 +937,14 @@ def embed(bot_id: int):
         "pro_address_label": bot.get("pro_address_label"),
         "pro_address_url": bot.get("pro_address_url"),
         "pro_description": bot.get("pro_description"),
+        # Flags UI : version “embed propre”
+        "show_controls": False,
+        "show_brand": True,
+        "inject_hide_css": True,
+        "brand_text": "Betty Bot — propulsé par Spectra Media",
+        "brand_link": "https://spectramedia.ai",
     }
-    # Template d’intégration minimal (ou crée templates/embed.html si tu préfères)
+    # Template d’intégration
     try:
         return render_template("embed.html", bot=bot, cfg=cfg)
     except Exception:
