@@ -5,23 +5,30 @@
   <title>Aperçu du bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
-  {# ====== CONFIG (reçue depuis app.py) ====== #}
+  {# =========================
+     CONFIG FOURNIE PAR app.py
+     ========================= #}
   {% set primary    = (cfg.color_hex if (cfg and cfg.color_hex) else '#4F46E5') %}
   {% set shape      = (cfg.shape if (cfg and cfg.shape) else 'rounded') %}
   {% set bot_name   = (cfg.name if (cfg and cfg.name) else 'Mon Betty Bot') %}
   {% set pack_slug  = (cfg.slug if (cfg and cfg.slug) else 'agent_immobilier') %}
   {% set persona    = (cfg.persona if (cfg and cfg.persona) else 'neutre') %}
+  {% set welcome    = (cfg.welcome_text if (cfg and cfg.welcome_text) else 'Bonjour 👋') %}
   {% set user_id    = (current_user.get_id() if current_user.is_authenticated else None) %}
   {% set bot_id     = (bot.get('id') if bot else None) %}
 
-  {# flags UI #}
+  {# =============================
+     FLAGS (preview vs embed clean)
+     ============================= #}
   {% set show_controls   = (cfg.show_controls if cfg is defined and cfg.show_controls is not none else True) %}
   {% set show_brand      = (cfg.show_brand if cfg is defined and cfg.show_brand is not none else False) %}
   {% set inject_hide_css = (cfg.inject_hide_css if cfg is defined and cfg.inject_hide_css is not none else False) %}
   {% set brand_text      = (cfg.brand_text if cfg is defined and cfg.brand_text else 'Betty Bot — propulsé par Spectra Media') %}
   {% set brand_link      = (cfg.brand_link if cfg is defined and cfg.brand_link else 'https://spectramedia.ai') %}
 
-  {# Libellé lisible du pack pour affichage #}
+  {# ==========================
+     LIBELLÉ LISIBLE DU “PACK”
+     ========================== #}
   {% set pack_labels = {
     'agent_immobilier':'Agent immobilier',
     'avocat':'Avocat',
@@ -31,14 +38,21 @@
   } %}
   {% set pack_label = pack_labels.get(pack_slug, pack_slug) %}
 
-  {# Avatar final (vient d’app.py si défini) #}
+  {# =========
+     AVATAR
+     ========= #}
   {% set avatar_url = (cfg.avatar_url if (cfg and cfg.avatar_url) else '/avatar/agent_immo') %}
 
-  {# Coordonnées publiques (depuis dashboard) #}
+  {# =================================
+     COORDONNÉES PUBLIQUES (facultatif)
+     ================================= #}
   {% set pro_phone         = (cfg.pro_phone if (cfg and cfg.pro_phone) else None) %}
   {% set pro_address_label = (cfg.pro_address_label if (cfg and cfg.pro_address_label) else None) %}
   {% set pro_address_url   = (cfg.pro_address_url if (cfg and cfg.pro_address_url) else None) %}
 
+  {# =====
+     CSS
+     ===== #}
   <style>
     :root{
       --bg:#0b0b0c;
@@ -57,7 +71,7 @@
       font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif
     }
 
-    /* Bandeau branding (embed) */
+    /* Bandeau branding optionnel (embed) */
     .bb-brand{
       position:sticky;top:0;left:0;right:0;height:34px;z-index:999;
       background:#0b0b0f;color:#cbd5e1;border-bottom:1px solid rgba(255,255,255,.06);
@@ -65,9 +79,13 @@
     }
     .bb-brand a{color:#a5b4fc;text-decoration:none}
 
+    /* Layout principal */
     .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
     .row{display:flex;align-items:center;gap:14px;margin:18px 0}
     h1{margin:0;font-size:20px}
+    .sub{margin-top:4px;font-size:13px;color:var(--muted)} /* Pack sous le nom */
+
+    /* Boutons d’action (preview) */
     .btnbar{display:flex;gap:10px;margin-left:auto}
     .btn{
       display:inline-block;
@@ -81,20 +99,14 @@
     }
     .btn.primary{background:rgba(79,70,229,.2);border-color:var(--primary)}
 
+    /* Avatar */
     .avatar{
       width:72px;height:72px;border:1px solid var(--line);overflow:hidden;background:#0f1012;
       border-radius:{% if shape=='circle' %}50%{% elif shape=='rounded' %}12px{% else %}8px{% endif %};
     }
     .avatar img{width:100%;height:100%;object-fit:cover}
 
-    .badge{
-      display:inline-flex;align-items:center;gap:8px;
-      background:rgba(255,255,255,.08);
-      border:1px solid var(--line);
-      padding:4px 10px;border-radius:999px;color:var(--muted);font-size:12px
-    }
-    .chip{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--primary);border:1px solid var(--line)}
-
+    /* Carte chat */
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
     .chat{display:flex;flex-direction:column;height:62vh;min-height:420px}
     .messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
@@ -110,13 +122,7 @@
     .bot{align-self:flex-start;background:#101216}
     .bubble.warn{color:#ffdb6e;border-color:#3b2f0b;background:#1c1606}
 
-    .toolbar{display:flex;align-items:center;gap:10px;margin:0 0 14px 0}
-    .seg{display:flex;background:#0f1012;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-    .seg button{
-      border:0;background:transparent;color:var(--muted);padding:8px 12px;font-size:12px;cursor:pointer
-    }
-    .seg button.active{background:rgba(79,70,229,.15);color:#fff}
-
+    /* Saisie */
     .input{display:flex;gap:8px;margin-top:10px}
     .input input{
       flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);
@@ -128,42 +134,44 @@
     .input button[disabled]{opacity:.6;cursor:not-allowed}
 
     .small{color:var(--muted);font-size:12px;margin-top:6px}
-    .hint{color:var(--muted);font-size:13px;margin:10px 0 0 2px}
     .kbd{display:inline-block;background:#0f1012;border:1px solid var(--line);padding:0 6px;border-radius:6px}
-  </style>
 
-  {% if inject_hide_css %}
-  <style>
-    /* Masque la barre de boutons preview quand on embarque en clean=1 */
-    .btnbar, .preview-toolbar, .header-actions { display:none !important; }
+    /* Cache les éléments preview si on injecte le mode “clean” */
+    {% if inject_hide_css %}
+    .btnbar,.header-actions,.promo{display:none!important}
+    {% endif %}
   </style>
-  {% endif %}
 </head>
 
 <body>
+  {# ======================
+     BANDEAU BRANDING (opt)
+     ====================== #}
   {% if show_brand %}
     <div class="bb-brand">
       <a href="{{ brand_link }}" target="_blank" rel="noopener">{{ brand_text }}</a>
     </div>
   {% endif %}
 
-  <!-- Bandeau présentation + prix (uniquement si on garde l’UX preview) -->
+  {# ==================================
+     BANDEAU D’ACCROCHE (preview only)
+     ================================== #}
   {% if show_controls %}
   <div class="promo" style="background:linear-gradient(to right, rgba(255,255,255,.06), rgba(255,255,255,.02));border-bottom:1px solid var(--line);padding:10px 20px;text-align:center;font-size:14px;color:#a7adbb">
     <b>Betty</b> — votre assistante AI pour votre activité. <b>9,99 € / mois</b>, sans engagement.
   </div>
   {% endif %}
 
+  {# ======================
+     EN-TÊTE (avatar + nom)
+     ====================== #}
   <div class="wrap">
     <div class="row">
-      <div class="avatar"><img src="{{ avatar_url }}" alt="avatar"></div>
+      <div class="avatar"><img src="{{ avatar_url }}" alt="avatar" decoding="async"></div>
       <div>
         <h1>{{ bot_name }}</h1>
-        <div class="badge">
-          <span>Pack : {{ pack_label }}</span>
-          <span class="chip" title="{{ primary }}"></span>
-          <span>{{ primary }}</span>
-        </div>
+        <div class="sub">Pack : {{ pack_label }}</div>
+        {# 👉 ici, aucune puce couleur ni code hex pour respecter ta demande #}
       </div>
 
       {% if show_controls %}
@@ -174,26 +182,15 @@
       {% endif %}
     </div>
 
-    <!-- Choix des 4 personnalités (masqué si embed clean) -->
-    {% if show_controls %}
-    <div class="toolbar">
-      <div class="seg" id="personaSeg">
-        <button data-val="neutre">Neutre</button>
-        <button data-val="chaleureuse">Chaleureuse</button>
-        <button data-val="directe">Directe</button>
-        <button data-val="experte">Experte</button>
-      </div>
-    </div>
-    {% else %}
-    <div id="personaSeg" style="display:none"></div>
-    {% endif %}
-
+    {# =========================
+       BLOC CHAT (messages + UI)
+       ========================= #}
     <div class="card">
       <div class="chat">
-        <div id="messages" class="messages"></div>
+        <div id="messages" class="messages" aria-live="polite"></div>
         <div class="input">
-          <input id="msg" placeholder="Écrivez votre message…" autocomplete="off">
-          <button id="send">Envoyer</button>
+          <input id="msg" placeholder="Écrivez votre message…" autocomplete="off" autofocus>
+          <button id="send" type="button">Envoyer</button>
         </div>
         <div class="small">
           Astuce : tapez <span class="kbd">Entrée</span> pour envoyer. Exemple : “je veux un rendez-vous demain”.
@@ -202,18 +199,20 @@
     </div>
   </div>
 
-  <!-- =========================== -->
-  <!-- ========== SCRIPT ========= -->
-  <!-- =========================== -->
+  {# =================
+     SCRIPT PRINCIPAL
+     ================= #}
   <script>
-    // -------- Contexte transmis par le serveur --------
-    const USER_ID  = {{ user_id|tojson }};
-    const BOT_ID   = {{ bot_id|tojson }};
-    const PACK     = {{ pack_slug|tojson }};
-    const PRIMARY  = {{ primary|tojson }};
-    let   persona  = {{ persona|tojson }};
+    // ==========================
+    // Contexte fourni par Flask
+    // ==========================
+    const USER_ID = {{ user_id|tojson }};
+    const BOT_ID  = {{ bot_id|tojson }};
+    const PACK    = {{ pack_slug|tojson }};
+    const PRIMARY = {{ primary|tojson }};
+    const WELCOME = {{ welcome|tojson }};
+    const persona = {{ persona|tojson }}; // non affichée, transmise si besoin à l’API
 
-    // Coordonnées publiques (depuis dashboard)
     const PRO_PHONE         = {{ pro_phone|tojson }};
     const PRO_ADDRESS_LABEL = {{ pro_address_label|tojson }};
     const PRO_ADDRESS_URL   = {{ pro_address_url|tojson }};
@@ -221,29 +220,40 @@
       ? PRO_ADDRESS_URL
       : (PRO_ADDRESS_LABEL ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(PRO_ADDRESS_LABEL)}` : null);
 
-    // -------- Amorce par pack (pour guider la qualif) --------
-    const LEAD_PROMPTS = {
-      agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ? Sur quelle zone ?",
-      avocat:           "Pouvez-vous préciser le type de dossier (famille, travail, pénal...) et l’urgence ?",
+    // ===========================================
+    // Phrase de départ “intelligente” par métier
+    // ===========================================
+    const FIRST_QUESTION = {
+      agent_immobilier: "Souhaitez-vous acheter, vendre ou louer ?",
+      avocat:           "Quel type de dossier (famille, travail, pénal…) et quel degré d’urgence ?",
       medecin:          "Quel est votre motif de consultation et vos disponibilités ?",
       coiffeur:         "Quel service souhaitez-vous et quand êtes-vous disponible ?",
-      coach_sportif:    "Quel objectif (perte de poids, performance, remise en forme) et quels créneaux ?"
+      coach_sportif:    "Quel est votre objectif (remise en forme, performance, perte de poids) ?"
     };
-    const START_GREETING = "Bonjour, je suis Betty. Pour être rappelé(e) rapidement, je prends vos coordonnées.";
 
-    // -------- UI minimale --------
+    // ==========================
+    // DOM + utilitaires d’affich.
+    // ==========================
     const messagesEl = document.getElementById('messages');
     const msgInput   = document.getElementById('msg');
     const sendBtn    = document.getElementById('send');
 
-    // Personae
-    const personaSeg = document.getElementById('personaSeg');
-    const personaButtons = Array.from(personaSeg.querySelectorAll('button'));
-    function renderPersona(){ personaButtons.forEach(b=> b.classList.toggle('active', b.dataset.val === persona)); }
-    personaButtons.forEach(b=> b.addEventListener('click', ()=>{ persona=b.dataset.val; renderPersona(); }));
-    renderPersona();
+    const seenBotTexts = new Set();
 
-    // Bulle HTML contrôlée (pour lien Maps, etc.)
+    function addBubble(text, who='bot', cls=null, {allowDuplicate=false}={}){
+      const txt = String(text ?? '');
+      if (who !== 'me' && !allowDuplicate) {
+        const key = txt.trim().toLowerCase();
+        if (seenBotTexts.has(key)) return;
+        seenBotTexts.add(key);
+      }
+      const b = document.createElement('div');
+      b.className = 'bubble ' + (who === 'me' ? 'me' : 'bot') + (cls ? (' '+cls) : '');
+      b.textContent = txt;
+      messagesEl.appendChild(b);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
     function addHtmlBubble(html){
       const b = document.createElement('div');
       b.className = 'bubble bot';
@@ -252,53 +262,35 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    // -------- Historique utilisateur (pour /api/chat) --------
-    function userHistory(){
-      return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
-    }
-
-    // -------- Lead universel --------
+    // ================================
+    // “Intelligence” front : mini-lead
+    // ================================
     const lead = { nom:"", prenom:"", telephone:"", email:"" };
-    let leadStep = 0; // 0:nom,1:prenom,2:tel,3:email,4:done
+    let leadStep = 0; // 0 nom, 1 prénom, 2 tel, 3 email, 4 done
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 
     function isLeadComplete(l){ return l.nom && l.prenom && l.telephone && l.email; }
 
     function nextLeadQuestion(){
-      if (leadStep === 0) { addBubble("Quel est votre NOM ?", "bot"); return; }
-      if (leadStep === 1) { addBubble("Et votre PRÉNOM ?", "bot"); return; }
-      if (leadStep === 2) { addBubble("Votre TÉLÉPHONE (mobile de préférence) ?", "bot"); return; }
-      if (leadStep === 3) { addBubble("Enfin, votre ADRESSE EMAIL ?", "bot"); return; }
+      if (leadStep === 0) { addBubble("Quel est votre NOM ?"); return; }
+      if (leadStep === 1) { addBubble("Et votre PRÉNOM ?"); return; }
+      if (leadStep === 2) { addBubble("Votre TÉLÉPHONE (mobile de préférence) ?"); return; }
+      if (leadStep === 3) { addBubble("Enfin, votre ADRESSE EMAIL ?"); return; }
     }
 
     function acceptLeadAnswer(text){
-      const t = (text || "").trim();
+      const t = (text||'').trim();
       if (!t) return false;
-
-      if (leadStep === 0) {
-        lead.nom = t.toUpperCase();
-        leadStep = 1; return true;
+      if (leadStep === 0){ lead.nom = t.toUpperCase(); leadStep = 1; return true; }
+      if (leadStep === 1){ lead.prenom = t.charAt(0).toUpperCase()+t.slice(1); leadStep = 2; return true; }
+      if (leadStep === 2){
+        const digits = t.replace(/[^\d+]/g,'');
+        if (digits.length < 8){ addBubble("Le numéro semble trop court, pouvez-vous vérifier ?", 'bot', 'warn', {allowDuplicate:true}); return true; }
+        lead.telephone = digits; leadStep = 3; return true;
       }
-      if (leadStep === 1) {
-        lead.prenom = t.charAt(0).toUpperCase() + t.slice(1);
-        leadStep = 2; return true;
-      }
-      if (leadStep === 2) {
-        const digits = t.replace(/[^\d+]/g,"");
-        if (digits.length < 8) {
-          addBubble("Le numéro semble trop court. Pouvez-vous le vérifier ?", "bot", "warn", {allowDuplicate:true});
-          return true;
-        }
-        lead.telephone = digits;
-        leadStep = 3; return true;
-      }
-      if (leadStep === 3) {
-        if (!emailRe.test(t)) {
-          addBubble("L’email ne semble pas valide. Pouvez-vous le retaper ?", "bot", "warn", {allowDuplicate:true});
-          return true;
-        }
-        lead.email = t;
-        leadStep = 4; return true;
+      if (leadStep === 3){
+        if (!emailRe.test(t)){ addBubble("L’email ne semble pas valide. Pouvez-vous le retaper ?", 'bot', 'warn', {allowDuplicate:true}); return true; }
+        lead.email = t; leadStep = 4; return true;
       }
       return false;
     }
@@ -306,201 +298,160 @@
     async function submitLeadIfComplete(){
       if (!isLeadComplete(lead)) return;
 
-      // Récapitulatif clair à l'écran (doublon autorisé)
+      // Récapitulatif visuel
       addBubble(
-        `Merci ${lead.prenom} ${lead.nom}. J’ai bien noté :\n- Téléphone : ${lead.telephone}\n- Email : ${lead.email}\nUn conseiller vous rappellera rapidement.`,
-        "bot",
-        null,
-        {allowDuplicate:true}
+        `Merci ${lead.prenom} ${lead.nom}. J’ai noté :\n- Téléphone : ${lead.telephone}\n- Email : ${lead.email}\nUn conseiller vous rappelle rapidement.`,
+        'bot', null, {allowDuplicate:true}
       );
 
-      // Envoi vers /api/lead (comme avant)
-      const payload = {
-        name: `${lead.prenom} ${lead.nom}`,
-        email: lead.email,
-        message: `Lead ${PACK}\nNom: ${lead.nom}\nPrénom: ${lead.prenom}\nTéléphone: ${lead.telephone}\nEmail: ${lead.email}`,
-        extra: { metier: PACK }
-      };
-
+      // Envoi backend (non bloquant)
       try{
         const res = await fetch('/api/lead', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(payload)
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          credentials:'same-origin',
+          body: JSON.stringify({
+            name:`${lead.prenom} ${lead.nom}`,
+            email:lead.email,
+            message:`Lead ${PACK}\nNom:${lead.nom}\nPrénom:${lead.prenom}\nTéléphone:${lead.telephone}\nEmail:${lead.email}`,
+            extra:{metier:PACK}
+          })
         });
-        if (res.ok) {
-          addBubble("✅ Vos informations ont été transmises. Souhaitez-vous ajouter un message pour préciser votre besoin ?", "bot");
+        if (res.ok){
+          addBubble("✅ Infos transmises. Souhaitez-vous ajouter un message pour préciser votre besoin ?", 'bot');
         } else {
-          addBubble("ℹ️ J’ai noté vos informations. (Si l’envoi échoue, elles restent visibles ici.)", "bot", null, {allowDuplicate:true});
+          addBubble("ℹ️ Infos notées (transmission différée).", 'bot', null, {allowDuplicate:true});
         }
-      } catch {
-        addBubble("ℹ️ J’ai noté vos informations. (Envoi temporairement indisponible.)", "bot", null, {allowDuplicate:true});
+      }catch{
+        addBubble("ℹ️ Réseau instable — je conserve vos infos.", 'bot', null, {allowDuplicate:true});
       }
 
-      // Relance unique de la question métier
-      const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
-      addBubble(hint, 'bot');
+      // Rebond pertinent unique
+      const hint = FIRST_QUESTION[PACK] || "Pouvez-vous préciser votre besoin ?";
+      addBubble(hint);
     }
 
-    // -------- Anti-redite & affichage bulles --------
-    const seenBotTexts = new Set();
-
-    // Règles génériques (tous métiers) + extensions par pack au besoin
-    const REDUNDANCY_RULES = {
-      generic: [
-        { test: t => /num(é|e)ro.*t(é|e)l(é|e)phone|t(é|e)l(é|e)phone|mobile/i.test(t), satisfied: () => !!lead.telephone },
-        { test: t => /e[-\s]?mail|mail|adresse\s*email/i.test(t),                       satisfied: () => !!lead.email }
-      ],
-      avocat: [],
-      medecin: [],
-      agent_immobilier: [],
-      coiffeur: [],
-      coach_sportif: []
-    };
-
-    function isRedundantRequest(txt){
-      const t = (txt||'').toLowerCase();
-      const rules = [...REDUNDANCY_RULES.generic, ...(REDUNDANCY_RULES[PACK]||[])];
-      return rules.some(r => r.test(t) && r.satisfied());
-    }
-
-    function addBubble(text, who, cls, {allowDuplicate=false} = {}){
-      const txt = String(text ?? '');
-
-      if (who !== 'me') {
-        // anti-doublon exact
-        if (!allowDuplicate) {
-          const key = txt.trim().toLowerCase();
-          if (seenBotTexts.has(key)) return;
-          seenBotTexts.add(key);
-        }
-        // masque les demandes déjà satisfaites (tel/email…)
-        if (isRedundantRequest(txt)) return;
-      }
-
-      const b = document.createElement('div');
-      b.className = 'bubble ' + (who === 'me' ? 'me' : 'bot') + (cls ? (' ' + cls) : '');
-      b.textContent = txt;
-      messagesEl.appendChild(b);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-
-    // -------- Détection : l'utilisateur demande nos coordonnées ? --------
-    function userAsksForBusinessInfo(text){
-      const t = (text || '').toLowerCase();
-
-      const askPhone =
-        /t(é|e)l(é|e)phone|num(é|e)ro|joindre|appeler|appel/i.test(t) && !!PRO_PHONE;
-
-      const askAddr =
-        /(adresse|o(ù|u)\s+(vous\s+)?(situez|trouvez)|venir|localisation|plan|map|google\s+maps)/i.test(t)
-        && (!!PRO_ADDRESS_LABEL || !!MAP_URL);
-
-      return { askPhone, askAddr };
-    }
-
-    function answerBusinessInfoIfAsked(text){
-      const { askPhone, askAddr } = userAsksForBusinessInfo(text);
-      if (!askPhone && !askAddr) return false;
-
-      const parts = [];
-      if (askPhone && PRO_PHONE) {
-        parts.push(`📞 Téléphone : <b>${PRO_PHONE}</b>`);
-      }
-      if (askAddr && (PRO_ADDRESS_LABEL || MAP_URL)) {
-        const link = MAP_URL ? `<a href="${MAP_URL}" target="_blank" rel="noopener">ouvrir dans Google Maps</a>` : '';
+    // ===========================================
+    // Répond aux demandes de coordonnées si posées
+    // ===========================================
+    function maybeAnswerBusinessInfo(t){
+      const txt = (t||'').toLowerCase();
+      const askTel  = /t(é|e)l(é|e)phone|num(é|e)ro|joindre|appeler|appel/.test(txt) && !!PRO_PHONE;
+      const askAddr = /(adresse|o(ù|u)\s+(vous\s+)?(situez|trouvez)|venir|localisation|plan|map|google\s+maps)/.test(txt)
+                      && (!!PRO_ADDRESS_LABEL || !!MAP_URL);
+      if (!askTel && !askAddr) return;
+      const parts=[];
+      if (askTel)  parts.push(`📞 Téléphone : <b>${PRO_PHONE}</b>`);
+      if (askAddr){
+        const link  = MAP_URL ? `<a href="${MAP_URL}" target="_blank" rel="noopener">ouvrir dans Google Maps</a>` : '';
         const label = PRO_ADDRESS_LABEL ? `<b>${PRO_ADDRESS_LABEL}</b>` : '';
         parts.push(`📍 Adresse : ${label}${label && link ? " — " : ""}${link}`);
       }
-      if (parts.length) {
-        addHtmlBubble(parts.join("<br>"));
-        return true;
-      }
-      return false;
+      addHtmlBubble(parts.join("<br>"));
     }
 
-    // -------- Appel API “métier” --------
+    // ===========================
+    // Historique → /api/chat (opt)
+    // ===========================
+    function userHistory(){
+      return Array.from(messagesEl.querySelectorAll('.bubble.me')).map(el => el.textContent);
+    }
+
+    // ===========================
+    // Appel à l’API “métier”
+    // ===========================
     async function callChatAPI(text){
       const payload = {
-        message: text,
-        history: userHistory(),
-        pack: PACK,
+        message:text,
+        history:userHistory(),
+        pack:PACK,
         persona,
-        color: PRIMARY,
-        bot_id: BOT_ID,
-        user_id: USER_ID,
+        color:PRIMARY,
+        bot_id:BOT_ID,
+        user_id:USER_ID,
         lead,
-        // Option déjà prête si tu veux exploiter côté backend :
-        business: { phone: PRO_PHONE, address_label: PRO_ADDRESS_LABEL, address_url: MAP_URL }
+        business:{ phone:PRO_PHONE, address_label:PRO_ADDRESS_LABEL, address_url:MAP_URL }
       };
       const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
         body: JSON.stringify(payload)
       });
       const ctype = (res.headers.get('content-type')||'').toLowerCase();
-      if (!ctype.includes('application/json')) return { ok:false, data:null, status:res.status };
+      if (!ctype.includes('application/json')) return {ok:false};
       const data = await res.json().catch(()=>null);
-      return { ok: res.ok && !!data, data, status: res.status };
+      return {ok: !!(res.ok && data), data};
     }
 
-    // -------- Envoi d’un message --------
+    // =======================
+    // Envoi d’un message
+    // =======================
     let sending = false;
-    async function send(text){
-      const t = (text || '').trim();
+
+    async function sendMessage(text){
+      const t = (text||'').trim();
       if (!t || sending) return;
       sending = true; sendBtn.disabled = true;
 
-      addBubble(t, 'me'); msgInput.value = '';
+      // Ajoute la bulle locale utilisateur
+      addBubble(t, 'me');
+      msgInput.value = '';
 
-      // Si l’utilisateur demande nos coordonnées, répondre subtilement (sans interrompre le flow)
-      answerBusinessInfoIfAsked(t);
+      // Si l’utilisateur demande nos coordonnées, réponds immédiatement
+      maybeAnswerBusinessInfo(t);
 
-      // 1) Phase lead
+      // Étapes du lead
       const progressed = acceptLeadAnswer(t);
-      if (progressed) {
-        if (leadStep < 4) {
+      if (progressed){
+        if (leadStep < 4){
           nextLeadQuestion();
           sending = false; sendBtn.disabled = false; msgInput.focus();
           return;
         } else {
           await submitLeadIfComplete();
-          // on continue vers l'API métier ensuite
+          // puis on laisse filer vers l’API métier
         }
       }
 
-      // 2) Conversation métier
+      // Conversation “métier”
       try{
-        const { ok, data } = await callChatAPI(t);
-        if (!ok || !data || typeof data.reply !== 'string') {
-          addBubble('⚠️ Erreur serveur.', 'bot', 'warn', {allowDuplicate:true});
+        const {ok, data} = await callChatAPI(t);
+        if (!ok || !data || typeof data.reply !== 'string'){
+          // Fallback simple mais utile
+          addBubble("Je n’ai pas bien compris, pouvez-vous préciser ? (ex. budget, délai, zone)", 'bot');
         } else {
-          addBubble(data.reply, 'bot'); // anti-doublon déjà actif
-          if ((data.reply || '').trim().toLowerCase().startsWith('bonjour')) {
-            const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
-            addBubble(hint, 'bot');
-          }
+          addBubble(data.reply, 'bot');
         }
-      } catch {
-        addBubble('⚠️ Impossible de joindre le serveur.', 'bot', 'warn', {allowDuplicate:true});
-      } finally {
+      }catch{
+        addBubble("⚠️ Réseau indisponible. Je vous guide tout de même :", 'bot', 'warn', {allowDuplicate:true});
+        const hint = FIRST_QUESTION[PACK] || "Pouvez-vous préciser votre besoin ?";
+        addBubble(hint);
+      }finally{
         sending = false; sendBtn.disabled = false; msgInput.focus();
       }
     }
 
-    const sendBtn = document.getElementById('send');
-    sendBtn.addEventListener('click', ()=> send(msgInput.value));
-    msgInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); send(msgInput.value); } });
+    // =======================
+    // Événements UI
+    // =======================
+    sendBtn.addEventListener('click', ()=> sendMessage(msgInput.value));
+    msgInput.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter'){
+        e.preventDefault();
+        sendMessage(msgInput.value);
+      }
+    });
 
-    // -------- Démarrage --------
+    // =======================
+    // Démarrage de la vue
+    // =======================
     (()=>{
-      addBubble(START_GREETING, 'bot');
-      nextLeadQuestion(); // NOM en premier
-      const hint = LEAD_PROMPTS[PACK] || "Pouvez-vous préciser votre besoin ?";
-      addBubble(hint, 'bot');
-      msgInput.focus();
+      const greet = (WELCOME && WELCOME.trim()) ? WELCOME.trim() : "Bonjour 👋";
+      addBubble(greet); // phrase de présentation depuis le dashboard
+      const q = FIRST_QUESTION[PACK] || "Pouvez-vous préciser votre besoin ?";
+      addBubble(q);     // une seule question d’accroche, utile
+      msgInput.focus(); // focus direct (souris non nécessaire)
     })();
   </script>
 </body>
