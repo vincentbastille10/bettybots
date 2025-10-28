@@ -25,41 +25,37 @@ except Exception:  # pragma: no cover
 load_dotenv()
 
 # -----------------------------------------------------------------------------
-# App & secrets
-# -----------------------------------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = os.getenv("BETTY_DB_PATH", str(BASE_DIR / "bettybots.sqlite3"))
-
-app = Flask(__name__, static_folder="static", template_folder="templates")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)  # si déployé derrière proxy
-app.secret_key = os.getenv("FLASK_SECRET_KEY", secrets.token_hex(32))
-
-# -----------------------------------------------------------------------------
-# Stripe config (safe en l'absence de lib)
-# -----------------------------------------------------------------------------
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
-STRIPE_PRICE_ID_1990 = os.getenv("STRIPE_PRICE_ID_1990", "")  # 19,90 €
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-
-if stripe and STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
-
-# -----------------------------------------------------------------------------
 # Logging propre
 # -----------------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("betty")
 
 # -----------------------------------------------------------------------------
+# App & secrets
+# -----------------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", secrets.token_hex(32))
+
+# -----------------------------------------------------------------------------
+# Stripe config (safe en l'absence de lib)
+# -----------------------------------------------------------------------------
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PRICE_ID_1990 = os.getenv("STRIPE_PRICE_ID_1990", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+if stripe and STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+
+# -----------------------------------------------------------------------------
 # SQLite helpers (compatibles avec Vercel)
 # -----------------------------------------------------------------------------
-import sqlite3
-from contextlib import contextmanager
-
 def pick_db_path() -> Path:
     """
     En environnements serverless (Vercel, AWS Lambda), on DOIT écrire dans /tmp.
-    On laisse la possibilité d’override via DB_PATH.
+    On laisse la possibilité d'override via DB_PATH.
     """
     env_db = os.getenv("DB_PATH", "").strip()
     if env_db:
@@ -168,18 +164,14 @@ def current_cfg() -> Dict[str, Any]:
     cfg.setdefault("show_brand", True)
     return cfg
 
-# app.py  — Betty Bots (corrigé)  [PART 2/4]
-
 # -----------------------------------------------------------------------------
 # Dashboard (accueil simple)
 # -----------------------------------------------------------------------------
 @app.route("/")
 def index():
-    # ton template dashboard.html existant, sinon page minimale
     try:
         return render_template("dashboard.html", cfg=current_cfg())
     except Exception:
-        # fallback ultra simple si template manquant
         return "<h1>Dashboard</h1><p>POST /dashboard pour enregistrer le pack puis /preview</p>"
 
 # -----------------------------------------------------------------------------
@@ -201,7 +193,6 @@ def dashboard_save():
         "persona": form.get("persona") or cfg.get("persona") or "neutre",
         "avatar_url": form.get("avatar_url") or cfg.get("avatar_url"),
         "welcome_text": form.get("welcome_text") or cfg.get("welcome_text"),
-        # flags preview : la preview garde les contrôles
         "show_controls": True,
         "inject_hide_css": False,
         "show_brand": True,
@@ -217,7 +208,6 @@ def dashboard_save():
 @app.route("/preview")
 def preview():
     cfg = current_cfg()
-    # IMPORTANT : Pas de badges couleur/persona visibles ici (géré par template)
     return render_template("preview.html", cfg=cfg, bot=None)
 
 # -----------------------------------------------------------------------------
@@ -246,7 +236,7 @@ def pay():
             cancel_url=url_for("preview", _external=True),
             metadata=metadata,
         )
-    except Exception as e:  # pragma: no cover
+    except Exception as e:
         log.exception("Stripe error: %s", e)
         abort(500, "Erreur paiement")
 
@@ -263,21 +253,18 @@ def pay_success():
 
     try:
         s = stripe.checkout.Session.retrieve(session_id, expand=["subscription", "customer"])
-    except Exception:  # pragma: no cover
+    except Exception:
         abort(400)
 
-    # On retrouve/assigne un bot_id + clé publique
     conn = get_db()
     cur = conn.cursor()
 
-    # email client si dispo côté Stripe
     owner_email = None
     try:
         owner_email = (s.customer_details or {}).get("email")
     except Exception:
-        owner_email = None
+        pass
 
-    # récupère metadata du checkout (pack, avatar…)
     meta = dict(getattr(s, "metadata", {}) or {})
     slug = normalize_metier(meta.get("pack_slug") or "agent_immobilier")
     name = meta.get("name") or "Mon Betty Bot"
@@ -294,8 +281,7 @@ def pay_success():
     """, (owner_email, public_key, slug, name, color_hex, persona, avatar_url, welcome_text, now_iso(), now_iso()))
     conn.commit()
 
-    # Code d'intégration (iframe) – même host (Vercel) ou domaine public
-    iframe_src = url_for("chat_embed", _external=True)  # /chat
+    iframe_src = url_for("chat_embed", _external=True)
     embed_code = f'<iframe src="{iframe_src}?bot={cur.lastrowid}&key={public_key}" width="420" height="580" style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" title="{name}"></iframe>'
 
     try:
@@ -304,10 +290,7 @@ def pay_success():
                                paid_status="Payé / Abonnement actif",
                                embed_code=embed_code)
     except Exception:
-        # fallback si template manquant
         return f"<h1>Merci pour votre abonnement !</h1><pre>{embed_code}</pre>"
-
-# app.py  — Betty Bots (corrigé)  [PART 3/4]
 
 # -----------------------------------------------------------------------------
 # STRIPE Webhook — sécurise la persistance des métadonnées
@@ -315,7 +298,7 @@ def pay_success():
 @app.route("/stripe/webhook", methods=["POST"])
 def stripe_webhook():
     if not stripe:
-        return "", 200  # en dev sans stripe
+        return "", 200
 
     payload = request.get_data(as_text=True)
     sig_header = request.headers.get("Stripe-Signature")
@@ -324,7 +307,7 @@ def stripe_webhook():
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-    except Exception as e:  # pragma: no cover
+    except Exception as e:
         log.warning("Webhook invalid: %s", e)
         return "", 400
 
@@ -332,19 +315,6 @@ def stripe_webhook():
         obj = event["data"]["object"]
         meta = dict(obj.get("metadata") or {})
         slug = normalize_metier(meta.get("pack_slug") or "agent_immobilier")
-        avatar_url = meta.get("avatar_url") or None
-        welcome_text = meta.get("welcome_text") or None
-        name = meta.get("name") or "Mon Betty Bot"
-        color_hex = meta.get("color_hex") or "#4F46E5"
-        persona = meta.get("persona") or "neutre"
-
-        conn = get_db()
-        cur = conn.cursor()
-
-        # si tu relies le session_id -> bot_id, tu peux faire un UPDATE ici.
-        # Ici, on ne fait rien : la page /thanks a déjà créé l'entrée.
-        # Tu peux mettre en place une logique plus stricte si besoin.
-
         log.info("Webhook completed: slug=%s", slug)
 
     return "", 200
@@ -368,11 +338,10 @@ def chat_embed():
         abort(404)
 
     bot = dict(row)
-    # On affiche un template dédié embed.html (UI compacte, bandeau Spectra)
     return render_template("embed.html", bot=bot)
 
 # -----------------------------------------------------------------------------
-# API Lead — preview & embed déposent ici (mail à faire si besoin)
+# API Lead — preview & embed déposent ici
 # -----------------------------------------------------------------------------
 @app.route("/api/lead", methods=["POST"])
 def api_lead():
@@ -389,7 +358,7 @@ def api_lead():
     try:
         bot_id = int(extra.get("bot_id")) if "bot_id" in extra else None
     except Exception:
-        bot_id = None
+        pass
 
     cur.execute("""
         INSERT INTO leads(bot_id, name, email, message, extra_json, created_at)
@@ -400,7 +369,7 @@ def api_lead():
     return jsonify({"ok": True})
 
 # -----------------------------------------------------------------------------
-# API Chat — “petit LLM” pack-aware (fallback déterministe)
+# API Chat — "petit LLM" pack-aware (fallback déterministe)
 # -----------------------------------------------------------------------------
 def tiny_pack_brain(pack: str, user_text: str) -> str:
     t = (user_text or "").strip().lower()
@@ -410,7 +379,7 @@ def tiny_pack_brain(pack: str, user_text: str) -> str:
             return "Dossier famille : je note. Avez-vous une urgence (audience proche) ?"
         if any(k in t for k in ["licenciement", "prud'h", "travail"]):
             return "Dossier travail : avez-vous reçu une lettre de licenciement ? À quelle date ?"
-        return "Pouvez-vous préciser le type de dossier (famille, travail, pénal…) et le degré d’urgence ?"
+        return "Pouvez-vous préciser le type de dossier (famille, travail, pénal…) et le degré d'urgence ?"
 
     if pack == "medecin":
         if any(k in t for k in ["douleur", "fièvre", "épaule", "dos", "toux"]):
@@ -419,7 +388,7 @@ def tiny_pack_brain(pack: str, user_text: str) -> str:
 
     if pack == "coiffeur":
         if any(k in t for k in ["coupe", "color", "mèches", "balayage"]):
-            return "D’accord. Quel jour vous conviendrait et à quelle heure ?"
+            return "D'accord. Quel jour vous conviendrait et à quelle heure ?"
         return "Quel service souhaitez-vous et quand êtes-vous disponible ?"
 
     if pack == "coach_sportif":
@@ -440,17 +409,13 @@ def tiny_pack_brain(pack: str, user_text: str) -> str:
 def api_chat():
     payload = request.get_json(force=True, silent=True) or {}
     pack = normalize_metier(payload.get("pack") or "agent_immobilier")
-    user_text = (payload.get("message") or "")[:500]  # coupe dur
-    # persona/couleur ignorés côté logique simple
+    user_text = (payload.get("message") or "")[:500]
 
-    # Ici tu peux brancher un vrai modèle “petit LLM” (Together/Mistral) avec un limiteur.
     reply = tiny_pack_brain(pack, user_text)
     return jsonify({"reply": reply})
 
-# app.py  — Betty Bots (corrigé)  [PART 4/4]
-
 # -----------------------------------------------------------------------------
-# CORS très léger pour l’iframe si besoin (optionnel)
+# CORS très léger pour l'iframe si besoin
 # -----------------------------------------------------------------------------
 @app.after_request
 def add_headers(resp):
@@ -459,15 +424,12 @@ def add_headers(resp):
     return resp
 
 # -----------------------------------------------------------------------------
-# Route basique d’avatar proxy (optionnelle) — /avatar/<slug>
+# Route basique d'avatar proxy
 # -----------------------------------------------------------------------------
 @app.route("/avatar/<slug>")
 def avatar_proxy(slug: str):
-    """Permet d’avoir une URL stable même si l’avatar n’est pas fourni.
-    En prod, remplace par une vraie statique CDN si dispo.
-    """
+    """Permet d'avoir une URL stable même si l'avatar n'est pas fourni."""
     slug = normalize_metier(slug)
-    # mapping d'images par défaut
     defaults = {
         "agent_immobilier": "static/avatars/agent_immo.jpg",
         "avocat": "static/avatars/avocat.jpg",
@@ -483,6 +445,12 @@ def avatar_proxy(slug: str):
             return resp
     except Exception:
         abort(404)
+
+# -----------------------------------------------------------------------------
+# Init DB au démarrage
+# -----------------------------------------------------------------------------
+with app.app_context():
+    init_db()
 
 # -----------------------------------------------------------------------------
 # Main
