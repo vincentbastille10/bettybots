@@ -27,6 +27,22 @@ import stripe
 # Jinja loader patch (pour error.html manquant)
 from jinja2 import ChoiceLoader, FileSystemLoader, DictLoader
 
+@app.get("/__ping")
+def __ping():
+    try:
+        _ = db_one("SELECT 1 as ok", ())
+        db_ok = True
+    except Exception:
+        db_ok = False
+    return jsonify({
+        "ok": True,
+        "db_ok": db_ok,
+        "db_path": str(DB_PATH),
+        "vercel": bool(os.getenv("VERCEL")),
+        "python": os.getenv("PYTHON_VERSION", "3.x"),
+    })
+
+
 # -----------------------------------------------------------------------------
 # LOGGING
 # -----------------------------------------------------------------------------
@@ -243,7 +259,12 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    row = db_one("SELECT * FROM users WHERE id=?", (user_id,))
+    try:
+        # Flask-Login peut passer une str; on tolère int/str
+        uid = int(str(user_id).strip())
+    except Exception:
+        return None
+    row = db_one("SELECT id, email FROM users WHERE id=?", (uid,))
     return User(row["id"], row["email"]) if row else None
 
 def is_guest_user() -> bool:
@@ -408,23 +429,50 @@ def favicon_png():
     )
 
 # -----------------------------------------------------------------------------
-# ROOT / ALIAS INDEX / SESSION INVITÉ
+# ROOT / ALIAS INDEX / SESSION INVITÉ  (robuste sur Vercel)
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
-    if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
-    email = f"guest-{secrets.token_urlsafe(8)}@guest.local"
-    db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (email,))
-    row = db_one("SELECT * FROM users WHERE email=?", (email,))
-    if row:
-        login_user(User(row["id"], row["email"]))
-    return redirect(url_for("dashboard"))
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for("dashboard"))
 
-# Alias pour les templates qui appellent url_for('index')
-@app.get("/index")
-def index():
-    return redirect(url_for("dashboard"))
+        # Génère un email invité stable et très peu collisionnable
+        guest_email = f"guest-{secrets.token_urlsafe(9)}@guest.local"
+
+        # Insert avec gestion race-condition (IGNORE) + reselect fiable
+        db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (guest_email,))
+        row = db_one("SELECT id, email FROM users WHERE email=?", (guest_email,))
+
+        # Si, contre toute attente, l'INSERT + SELECT n'a rien renvoyé, on retente une fois
+        if not row:
+            db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (guest_email,))
+            row = db_one("SELECT id, email FROM users WHERE email=?", (guest_email,))
+
+        # Si toujours rien: on affiche une page lisible au lieu d'un 500
+        if not row:
+            app.logger.error("Impossible de créer un utilisateur invité.")
+            return Response(
+                "<h1>Initialisation en cours…</h1><p>Réessayez dans quelques secondes.</p>",
+                mimetype="text/html",
+                status=503
+            )
+
+        # Login Flask-Login
+        login_user(User(row["id"], row["email"]), remember=True)
+        return redirect(url_for("dashboard"))
+
+    except Exception as e:
+        app.logger.error(f"Exception in / (root): {e}", exc_info=True)
+        # Pas de 500 brut : page de secours + lien ping/health
+        html = """<!doctype html><meta charset="utf-8">
+<title>Initialisation</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
+  <h1>Oups…</h1>
+  <p>Une étape d’initialisation a échoué. Réessayez, ou vérifiez <a href="/healthz" style="color:#a5b4fc">/healthz</a>.</p>
+</body>"""
+        return Response(html, mimetype="text/html", status=503)
+
 # ============================== app.py — PART 2/2 ==============================
 # Compléments : /install, /code, /logout, /leads, /healthz, robots.txt,
 # en-têtes de sécurité, erreurs 403/404. Zéro conflit avec la PART 1/2.
