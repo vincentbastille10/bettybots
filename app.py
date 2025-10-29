@@ -1,4 +1,4 @@
-# app.py — BettyBots (full, Vercel-ready)
+# app.py — BettyBots (corrigé et optimisé)
 from __future__ import annotations
 
 import os, re, json, logging, secrets, sqlite3, smtplib, urllib.request, base64
@@ -16,6 +16,7 @@ from flask_login import (
     current_user, login_required
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
+from markupsafe import Markup
 
 try:
     import requests
@@ -24,24 +25,8 @@ except Exception:
 
 import stripe
 
-# Jinja loader patch (pour error.html manquant)
+# Jinja loader patch
 from jinja2 import ChoiceLoader, FileSystemLoader, DictLoader
-
-@app.get("/__ping")
-def __ping():
-    try:
-        _ = db_one("SELECT 1 as ok", ())
-        db_ok = True
-    except Exception:
-        db_ok = False
-    return jsonify({
-        "ok": True,
-        "db_ok": db_ok,
-        "db_path": str(DB_PATH),
-        "vercel": bool(os.getenv("VERCEL")),
-        "python": os.getenv("PYTHON_VERSION", "3.x"),
-    })
-
 
 # -----------------------------------------------------------------------------
 # LOGGING
@@ -57,20 +42,27 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-# Jinja: fournir error.html (et _base.html) au cas où un include est présent
+# Jinja: fournir error.html et _base.html au cas où
 _builtin_templates = {
-    # très minimal pour ne pas casser les includes {% include 'error.html' %}
     "error.html": (
-        "<!-- injected by app.py -->"
-        "<div style='display:none'></div>"
+        "<!doctype html><meta charset='utf-8'>"
+        "<title>Erreur {{ code }}</title>"
+        "<body style='background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px'>"
+        "<h1>Erreur {{ code }}</h1>"
+        "<p>{{ message }}</p>"
+        "<a href='/' style='color:#a5b4fc'>← Retour</a>"
+        "</body>"
     ),
-    # si ton preview inclut une base inexistante
-    "_base.html": "<!-- empty base injected by app.py -->"
+    "_base.html": "{% block content %}{% endblock %}"
 }
+
 if isinstance(app.jinja_loader, FileSystemLoader):
     app.jinja_loader = ChoiceLoader([app.jinja_loader, DictLoader(_builtin_templates)])
 else:
-    app.jinja_loader = ChoiceLoader([FileSystemLoader(str(BASE_DIR / "templates")), DictLoader(_builtin_templates)])
+    app.jinja_loader = ChoiceLoader([
+        FileSystemLoader(str(BASE_DIR / "templates")), 
+        DictLoader(_builtin_templates)
+    ])
 
 # -----------------------------------------------------------------------------
 # ENV / STRIPE
@@ -81,9 +73,9 @@ def _env_int(key: str, default: int) -> int:
     except Exception:
         return default
 
-STRIPE_SECRET_KEY   = os.getenv("STRIPE_SECRET_KEY", "")
-STRIPE_PRICE_CENTS  = _env_int("STRIPE_PRICE_CENTS", 1990)  # 19,90€
-STRIPE_CURRENCY     = os.getenv("STRIPE_CURRENCY", "eur")
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PRICE_CENTS = _env_int("STRIPE_PRICE_CENTS", 1990)
+STRIPE_CURRENCY = os.getenv("STRIPE_CURRENCY", "eur")
 PUBLIC_BASE_URL_ENV = (os.getenv("PUBLIC_BASE_URL") or os.getenv("BASE_URL") or "").strip()
 
 if STRIPE_SECRET_KEY:
@@ -99,7 +91,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "1025"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "no-reply@bettybots.local")
-SMTP_TLS  = os.getenv("SMTP_TLS", "0") in ("1", "true", "True", "yes", "on")
+SMTP_TLS = os.getenv("SMTP_TLS", "0") in ("1", "true", "True", "yes", "on")
 
 def send_mail(to_email: str, subject: str, body: str) -> bool:
     try:
@@ -211,7 +203,7 @@ def ensure_bot_extra_columns():
         cur = get_db().execute("PRAGMA table_info(bots)")
         existing = {row["name"] for row in cur.fetchall()}
         alters = []
-        for col in ("pro_phone","pro_address_label","pro_address_url","pro_description","auth_key","avatar_url"):
+        for col in ("pro_phone", "pro_address_label", "pro_address_url", "pro_description", "auth_key", "avatar_url"):
             if col not in existing:
                 alters.append(f"ALTER TABLE bots ADD COLUMN {col} TEXT")
         if alters:
@@ -260,7 +252,6 @@ class User(UserMixin):
 @login_manager.user_loader
 def load_user(user_id: str):
     try:
-        # Flask-Login peut passer une str; on tolère int/str
         uid = int(str(user_id).strip())
     except Exception:
         return None
@@ -306,13 +297,13 @@ def normalize_metier(raw: str) -> tuple[str, str]:
 
 EXTERNAL_AVATARS = {
     "agent_immo": "https://i.postimg.cc/zBWtZ8MH/Betty-Agent-immo-copie.jpg",
-    "avocat":     "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
-    "medecin":    "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
+    "avocat": "https://i.postimg.cc/bv4CBs6h/Betty-Avocate-copie.jpg",
+    "medecin": "https://i.postimg.cc/PxZ3sTcL/Betty-Medecine-copie.jpg",
 }
 _LOCAL_FILES = {
     "agent_immo": "Betty Agent immo copie.jpg",
-    "avocat":     "Betty Avocate copie.jpg",
-    "medecin":    "Betty Medecine copie.jpg",
+    "avocat": "Betty Avocate copie.jpg",
+    "medecin": "Betty Medecine copie.jpg",
 }
 _PLACEHOLDER_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
 <svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
@@ -352,9 +343,9 @@ def avatar_proxy(slug: str):
             resp = Response(data, mimetype="image/jpeg")
             resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
             return resp
-    except Exception:
-        pass
-    return Response(_PLACEHOLDER_SVG, mimetype="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
+    except Exception as e:
+        logger.error(f"Avatar proxy error for {slug}: {e}")
+    return Response(_PLACEHOLDER_SVG, mimetype="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
 
 # -----------------------------------------------------------------------------
 # Utils: base URL, user/bot helpers
@@ -399,98 +390,15 @@ def ensure_user_bot(user_id: int) -> sqlite3.Row:
 
 def sanitize_color(val: str) -> str:
     c = (val or "").strip()
-    if not c.startswith("#"): c = "#" + c
+    if not c.startswith("#"):
+        c = "#" + c
     return c if len(c) in (4, 7) else "#4F46E5"
 
 # -----------------------------------------------------------------------------
-# FAVICONS (évite 500 sur /favicon.ico et /favicon.png)
-# -----------------------------------------------------------------------------
-# PNG 1x1 transparent (base64 valide)
-_FAVICON_PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
-    "/x8AAwMCAO+Xad8AAAAASUVORK5CYII="
-)
-
-@app.get("/favicon.ico")
-def favicon_ico():
-    # Servez le PNG même pour .ico : suffisant pour éviter les 404/500
-    return Response(
-        _FAVICON_PNG,
-        mimetype="image/png",
-        headers={"Cache-Control": "public, max-age=86400, immutable"}
-    )
-
-@app.get("/favicon.png")
-def favicon_png():
-    return Response(
-        _FAVICON_PNG,
-        mimetype="image/png",
-        headers={"Cache-Control": "public, max-age=86400, immutable"}
-    )
-
-# -----------------------------------------------------------------------------
-# ROOT / ALIAS INDEX / SESSION INVITÉ  (robuste sur Vercel)
-# -----------------------------------------------------------------------------
-@app.get("/")
-def root():
-    try:
-        if current_user.is_authenticated:
-            return redirect(url_for("dashboard"))
-
-        # Génère un email invité stable et très peu collisionnable
-        guest_email = f"guest-{secrets.token_urlsafe(9)}@guest.local"
-
-        # Insert avec gestion race-condition (IGNORE) + reselect fiable
-        db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (guest_email,))
-        row = db_one("SELECT id, email FROM users WHERE email=?", (guest_email,))
-
-        # Si, contre toute attente, l'INSERT + SELECT n'a rien renvoyé, on retente une fois
-        if not row:
-            db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (guest_email,))
-            row = db_one("SELECT id, email FROM users WHERE email=?", (guest_email,))
-
-        # Si toujours rien: on affiche une page lisible au lieu d'un 500
-        if not row:
-            app.logger.error("Impossible de créer un utilisateur invité.")
-            return Response(
-                "<h1>Initialisation en cours…</h1><p>Réessayez dans quelques secondes.</p>",
-                mimetype="text/html",
-                status=503
-            )
-
-        # Login Flask-Login
-        login_user(User(row["id"], row["email"]), remember=True)
-        return redirect(url_for("dashboard"))
-
-    except Exception as e:
-        app.logger.error(f"Exception in / (root): {e}", exc_info=True)
-        # Pas de 500 brut : page de secours + lien ping/health
-        html = """<!doctype html><meta charset="utf-8">
-<title>Initialisation</title>
-<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
-  <h1>Oups…</h1>
-  <p>Une étape d’initialisation a échoué. Réessayez, ou vérifiez <a href="/healthz" style="color:#a5b4fc">/healthz</a>.</p>
-</body>"""
-        return Response(html, mimetype="text/html", status=503)
-
-
-# ============================== app.py — PART 2/2 ==============================
-# Compléments : /install, /code, /logout, /leads, /healthz, robots.txt,
-# en-têtes de sécurité, erreurs 403/404. Zéro conflit avec la PART 1/2.
-
-from markupsafe import Markup
-
-# -----------------------------------------------------------------------------
-# Helpers : fabrication du snippet d’embed à partir d’un bot
+# Helpers : fabrication du snippet d'embed
 # -----------------------------------------------------------------------------
 def build_embed_urls(bot: dict) -> dict:
-    """
-    Construit:
-      - embed_url_simple: /chat?bot=<id>&key=<auth_key> (publique, protégée par clé)
-      - embed_url_page  : /embed/<id> (page wrapper)
-      - iframe          : <iframe ...> prêt à coller
-      - code_block      : snippet HTML complet (div + iframe)
-    """
+    """Construit les URLs d'embed et le code HTML"""
     base = base_url_for_checkout().rstrip("/")
     bot_id = bot.get("id")
     auth_key = (bot.get("auth_key") or "").strip()
@@ -502,15 +410,14 @@ def build_embed_urls(bot: dict) -> dict:
             new_key = make_bot_key()
             db_exec("UPDATE bots SET auth_key=? WHERE id=?", (new_key, bot_id))
             auth_key = new_key
-            # refresh
             row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
             if row:
                 bot.update(dict(row))
-        except Exception as _e:
-            logger.error(f"build_embed_urls: impossible de créer auth_key: {_e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"build_embed_urls: impossible de créer auth_key: {e}", exc_info=True)
 
     embed_url_simple = f"{base}/chat?bot={bot_id}&key={auth_key}" if auth_key else f"{base}/chat?bot={bot_id}"
-    embed_url_page   = f"{base}/embed/{bot_id}"
+    embed_url_page = f"{base}/embed/{bot_id}"
 
     iframe = (
         f'<iframe src="{embed_url_simple}" '
@@ -533,7 +440,69 @@ def build_embed_urls(bot: dict) -> dict:
     }
 
 # -----------------------------------------------------------------------------
-# INSTALL (compatibilité avec anciens parcours : preview -> pay -> install)
+# FAVICONS
+# -----------------------------------------------------------------------------
+_FAVICON_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+    "/x8AAwMCAO+Xad8AAAAASUVORK5CYII="
+)
+
+@app.get("/favicon.ico")
+def favicon_ico():
+    return Response(
+        _FAVICON_PNG,
+        mimetype="image/png",
+        headers={"Cache-Control": "public, max-age=86400, immutable"}
+    )
+
+@app.get("/favicon.png")
+def favicon_png():
+    return Response(
+        _FAVICON_PNG,
+        mimetype="image/png",
+        headers={"Cache-Control": "public, max-age=86400, immutable"}
+    )
+
+# -----------------------------------------------------------------------------
+# ROOT / INDEX / SESSION INVITÉ
+# -----------------------------------------------------------------------------
+@app.get("/")
+def root():
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for("dashboard"))
+
+        guest_email = f"guest-{secrets.token_urlsafe(9)}@guest.local"
+        db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (guest_email,))
+        row = db_one("SELECT id, email FROM users WHERE email=?", (guest_email,))
+
+        if not row:
+            db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (guest_email,))
+            row = db_one("SELECT id, email FROM users WHERE email=?", (guest_email,))
+
+        if not row:
+            logger.error("Impossible de créer un utilisateur invité.")
+            return Response(
+                "<h1>Initialisation en cours…</h1><p>Réessayez dans quelques secondes.</p>",
+                mimetype="text/html",
+                status=503
+            )
+
+        login_user(User(row["id"], row["email"]), remember=True)
+        return redirect(url_for("dashboard"))
+
+    except Exception as e:
+        logger.error(f"Exception in / (root): {e}", exc_info=True)
+        html = """<!doctype html><meta charset="utf-8">
+<title>Initialisation</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
+  <h1>Oups…</h1>
+  <p>Une étape d'initialisation a échoué. Réessayez, ou vérifiez <a href="/healthz" style="color:#a5b4fc">/healthz</a>.</p>
+</body>"""
+        return Response(html, mimetype="text/html", status=503)
+
+# -----------------------------------------------------------------------------
+# INSTALL
 # -----------------------------------------------------------------------------
 @app.get("/install")
 @login_required
@@ -543,7 +512,6 @@ def install():
         return redirect(url_for("dashboard"))
     bot = dict(row)
     urls = build_embed_urls(bot)
-    # Si le template existe, on l’utilise, sinon fallback HTML.
     try:
         return render_template(
             "install.html",
@@ -559,14 +527,14 @@ def install():
 <title>Installation — Betty Bot</title>
 <body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
   <h1>Installation</h1>
-  <p>Copiez-collez ce code d’intégration dans votre site&nbsp;:</p>
+  <p>Copiez-collez ce code d'intégration dans votre site&nbsp;:</p>
   <pre style="white-space:pre-wrap;background:#111827;padding:16px;border-radius:12px">{urls.get('code_block') or ''}</pre>
-  <p><a style="color:#a5b4fc" href="/preview">← Retour au test du bot</a></p>
+  <p><a style="color:#a5b4fc" href="/dashboard">← Retour au dashboard</a></p>
 </body>"""
         return Response(html, mimetype="text/html")
 
 # -----------------------------------------------------------------------------
-# CODE (page minimale qui affiche uniquement le snippet propre à copier)
+# CODE
 # -----------------------------------------------------------------------------
 @app.get("/code")
 @login_required
@@ -586,14 +554,13 @@ def code_snippet():
             embed_url_page=urls.get("embed_url_page"),
         )
     except Exception:
-        # Fallback texte brut pour copier facilement (Content-Type HTML pour compat copier)
         return Response(
             f"<pre>{urls.get('code_block') or ''}</pre>",
             mimetype="text/html"
         )
 
 # -----------------------------------------------------------------------------
-# LEADS (liste simple, interne)
+# LEADS
 # -----------------------------------------------------------------------------
 @app.get("/leads")
 @login_required
@@ -636,7 +603,6 @@ def logout():
 @app.get("/healthz")
 def healthz():
     try:
-        # ping DB léger
         _ = db_one("SELECT 1 as ok", ())
         ok = True
     except Exception:
@@ -650,18 +616,14 @@ def robots_txt():
     return Response(txt, mimetype="text/plain")
 
 # -----------------------------------------------------------------------------
-# HEADERS DE SÉCURITÉ (CSP douce pour éviter de casser l’embed)
+# HEADERS DE SÉCURITÉ
 # -----------------------------------------------------------------------------
 @app.after_request
 def add_security_headers(resp: Response):
     try:
-        # X-Frame-Options: autorise l'embed sur n'importe quel site (nécessaire pour l’iframe client),
-        # si tu veux restreindre : 'SAMEORIGIN' ou des ACL précises via CSP frame-ancestors
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         resp.headers.setdefault("X-XSS-Protection", "0")
-        # CSP minimale : autorise self + data: pour images + inline styles du snippet,
-        # et frame-ancestors * pour permettre l’intégration (ajuste si besoin)
         csp = (
             "default-src 'self'; "
             "img-src 'self' data: https:; "
@@ -676,7 +638,7 @@ def add_security_headers(resp: Response):
     return resp
 
 # -----------------------------------------------------------------------------
-# ERREURS 403/404 (déjà un 500 dans PART 1/2)
+# ERREURS 403/404/500
 # -----------------------------------------------------------------------------
 @app.errorhandler(403)
 def on_403(err):
@@ -692,4 +654,16 @@ def on_404(err):
     except Exception:
         return Response("<h1>404 — Page introuvable</h1>", mimetype="text/html"), 404
 
-# ============================ fin app.py — PART 2/2 ============================
+@app.errorhandler(500)
+def on_500(err):
+    logger.error(f"Erreur 500: {err}", exc_info=True)
+    try:
+        return render_template("error.html", code=500, message="Erreur serveur"), 500
+    except Exception:
+        return Response("<h1>500 — Erreur serveur</h1>", mimetype="text/html"), 500
+
+# -----------------------------------------------------------------------------
+# POINT D'ENTRÉE (pour développement local)
+# -----------------------------------------------------------------------------
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
