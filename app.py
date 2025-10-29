@@ -1,11 +1,10 @@
-# app.py — BettyBots (corrigé, Vercel-ready)
+# app.py — BettyBots (full, Vercel-ready) — PART 1/2
 from __future__ import annotations
 
-import os, re, json, logging, secrets, sqlite3, smtplib, urllib.request, traceback
+import os, re, json, logging, secrets, sqlite3, smtplib, urllib.request, base64
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Optional, Dict, Any
-from contextlib import contextmanager
 from datetime import datetime
 
 from flask import (
@@ -25,6 +24,9 @@ except Exception:
 
 import stripe
 
+# Jinja loader patch (pour error.html manquant)
+from jinja2 import ChoiceLoader, FileSystemLoader, DictLoader
+
 # -----------------------------------------------------------------------------
 # LOGGING
 # -----------------------------------------------------------------------------
@@ -38,6 +40,21 @@ BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.getenv("FLASK_SECRET", secrets.token_hex(32))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Jinja: fournir error.html (et _base.html) au cas où un include est présent
+_builtin_templates = {
+    # très minimal pour ne pas casser les includes {% include 'error.html' %}
+    "error.html": (
+        "<!-- injected by app.py -->"
+        "<div style='display:none'></div>"
+    ),
+    # si ton preview inclut une base inexistante
+    "_base.html": "<!-- empty base injected by app.py -->"
+}
+if isinstance(app.jinja_loader, FileSystemLoader):
+    app.jinja_loader = ChoiceLoader([app.jinja_loader, DictLoader(_builtin_templates)])
+else:
+    app.jinja_loader = ChoiceLoader([FileSystemLoader(str(BASE_DIR / "templates")), DictLoader(_builtin_templates)])
 
 # -----------------------------------------------------------------------------
 # ENV / STRIPE
@@ -364,7 +381,25 @@ def sanitize_color(val: str) -> str:
     return c if len(c) in (4, 7) else "#4F46E5"
 
 # -----------------------------------------------------------------------------
-# ROOT / SESSION INVITÉ
+# FAVICONS (évite 500 sur /favicon.ico et /favicon.png)
+# -----------------------------------------------------------------------------
+# petit PNG 16x16 transparent (base64)
+_FAVICON_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAAAHElEQVQoka3NsQkAMAgEwXf/"
+    "z1a4w6xIYwV8Fh8jXo8HcQk3e0b9a8gQ9j2z0AAAAASUVORK5CYII="
+)
+
+@app.get("/favicon.ico")
+def favicon_ico():
+    # renvoyer le PNG même pour .ico, suffisant pour éviter 500
+    return Response(_FAVICON_PNG, mimetype="image/png", headers={"Cache-Control":"public, max-age=86400"})
+
+@app.get("/favicon.png")
+def favicon_png():
+    return Response(_FAVICON_PNG, mimetype="image/png", headers={"Cache-Control":"public, max-age=86400"})
+
+# -----------------------------------------------------------------------------
+# ROOT / ALIAS INDEX / SESSION INVITÉ
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
@@ -377,6 +412,12 @@ def root():
         login_user(User(row["id"], row["email"]))
     return redirect(url_for("dashboard"))
 
+# Alias pour les templates qui appellent url_for('index')
+@app.get("/index")
+def index():
+    return redirect(url_for("dashboard"))
+# app.py — PART 2/2 (suite)
+
 # -----------------------------------------------------------------------------
 # DASHBOARD (enregistrement fiable du pack choisi)
 # -----------------------------------------------------------------------------
@@ -388,19 +429,15 @@ def dashboard():
 
     if request.method == "GET":
         internal_slug, pack_slug = normalize_metier((bot or {}).get("metier") or "")
-        # avatar_url canonique si absent/erroné
         avatar_url = (bot or {}).get("avatar_url") or f"/avatar/{internal_slug}"
-        greeting = (bot or {}).get("welcome_text", "Bonjour 👋")
         cfg = {
             "name": (bot or {}).get("name", "Mon Betty Bot"),
             "color_hex": (bot or {}).get("color_hex", "#4F46E5"),
-            "welcome_text": greeting,
-            "greeting": greeting,                  # <-- clé ajoutée (certains templates l'utilisent)
+            "welcome_text": (bot or {}).get("welcome_text", "Bonjour 👋"),
             "persona": (bot or {}).get("persona", "neutre"),
             "shape": (bot or {}).get("shape", "rounded"),
             "widget_size": (bot or {}).get("widget_size", "m"),
             "slug": pack_slug,
-            "pack_slug": pack_slug,               # <-- clé ajoutée
             "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
             "avatar_url": avatar_url,
             "metier": (bot or {}).get("metier") or pack_slug,
@@ -409,7 +446,11 @@ def dashboard():
             "pro_address_url": (bot or {}).get("pro_address_url"),
             "pro_description": (bot or {}).get("pro_description"),
         }
-        return render_template("dashboard.html", bot=bot, cfg=cfg)
+        try:
+            return render_template("dashboard.html", bot=bot, cfg=cfg)
+        except Exception as e:
+            logger.error(f"dashboard GET template error: {e}", exc_info=True)
+            return Response("<h1>Dashboard</h1><p>Template introuvable.</p>", mimetype="text/html")
 
     # POST
     name       = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
@@ -453,44 +494,48 @@ def dashboard():
 @app.get("/preview")
 @login_required
 def preview():
+    row = get_bot(int(current_user.id))
+    if not row:
+        flash("Configure d'abord ton bot.", "warning")
+        return redirect(url_for("dashboard"))
+
+    bot = dict(row)
+    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
+    shape = bot.get("shape") or "rounded"
+    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
+
+    cfg = {
+        "name": bot.get("name", "Mon Betty Bot"),
+        "color_hex": bot.get("color_hex", "#4F46E5"),
+        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
+        "persona": bot.get("persona", "neutre"),
+        "shape": shape,
+        "widget_size": shape_to_size.get(shape, "m"),
+        "slug": pack_slug,
+        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
+        "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
+        "metier": bot.get("metier") or pack_slug,
+        "pro_phone": bot.get("pro_phone"),
+        "pro_address_label": bot.get("pro_address_label"),
+        "pro_address_url": bot.get("pro_address_url"),
+        "pro_description": bot.get("pro_description"),
+        "show_controls": True,
+        "show_brand": False,
+        "inject_hide_css": False
+    }
     try:
-        row = get_bot(int(current_user.id))
-        if not row:
-            flash("Configure d'abord ton bot.", "warning")
-            return redirect(url_for("dashboard"))
-
-        bot = dict(row)
-        internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
-        shape = bot.get("shape") or "rounded"
-        shape_to_size = {"circle":"s","square":"m","rounded":"l"}
-        greeting = bot.get("welcome_text", "Bonjour 👋")
-
-        cfg = {
-            "name": bot.get("name", "Mon Betty Bot"),
-            "color_hex": bot.get("color_hex", "#4F46E5"),
-            "welcome_text": greeting,
-            "greeting": greeting,                # <-- clé ajoutée
-            "persona": bot.get("persona", "neutre"),
-            "shape": shape,
-            "widget_size": shape_to_size.get(shape, "m"),
-            "slug": pack_slug,
-            "pack_slug": pack_slug,             # <-- clé ajoutée
-            "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
-            "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
-            "metier": bot.get("metier") or pack_slug,
-            "pro_phone": bot.get("pro_phone"),
-            "pro_address_label": bot.get("pro_address_label"),
-            "pro_address_url": bot.get("pro_address_url"),
-            "pro_description": bot.get("pro_description"),
-            # Flags UI preview
-            "show_controls": True,
-            "show_brand": False,
-            "inject_hide_css": False
-        }
         return render_template("preview.html", bot=bot, cfg=cfg)
     except Exception as e:
-        logger.error("Erreur /preview: %s\n%s", e, traceback.format_exc())
-        return render_template("error.html"), 500
+        # Si preview.html appelle un include inexistant, on renvoie un fallback simple
+        logger.error(f"preview template error: {e}", exc_info=True)
+        html = f"""<!doctype html><meta charset="utf-8">
+<title>Aperçu</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
+  <h1>Prévisualisation</h1>
+  <p>Template introuvable. Pack: {cfg['slug']}</p>
+  <p><a href="/dashboard" style="color:#a5b4fc">← Retour au dashboard</a></p>
+</body>"""
+        return Response(html, mimetype="text/html")
 
 # -----------------------------------------------------------------------------
 # CHAT PUBLIC (iframe) — sécurisé par bot_id + auth_key (si visiteur externe)
@@ -499,7 +544,7 @@ def preview():
 def chat_public():
     bot_id = request.args.get("bot", type=int)
     key    = (request.args.get("key") or "").strip()
-    clean  = request.args.get("clean")  # when embedding clean UI
+    clean  = request.args.get("clean")
 
     if not bot_id:
         return "Aucun bot à afficher. Fournissez ?bot=<id>.", 400
@@ -523,18 +568,15 @@ def chat_public():
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
     shape_to_size = {"circle":"s","square":"m","rounded":"l"}
-    greeting = bot.get("welcome_text", "Bonjour 👋")
 
     cfg = {
         "name": bot.get("name", "Mon Betty Bot"),
         "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": greeting,
-        "greeting": greeting,                # <-- clé ajoutée
+        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
         "persona": bot.get("persona", "neutre"),
         "shape": shape,
         "widget_size": shape_to_size.get(shape, "m"),
         "slug": pack_slug,
-        "pack_slug": pack_slug,             # <-- clé ajoutée
         "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
         "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
         "metier": bot.get("metier") or pack_slug,
@@ -549,7 +591,11 @@ def chat_public():
         "brand_text": "Betty Bot — propulsé par Spectra Media",
         "brand_link": "https://spectramedia.ai"
     }
-    return render_template("preview.html", bot=bot, cfg=cfg)
+    try:
+        return render_template("preview.html", bot=bot, cfg=cfg)
+    except Exception as e:
+        logger.error(f"chat_public template error: {e}", exc_info=True)
+        return Response("<h1>Chat</h1><p>Template introuvable.</p>", mimetype="text/html")
 
 # -----------------------------------------------------------------------------
 # SIGNUP
@@ -557,7 +603,12 @@ def chat_public():
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "GET":
-        return render_template("signup.html")
+        try:
+            return render_template("signup.html")
+        except Exception:
+            return Response("<h1>Créer un compte</h1><form method='post'>"
+                            "<input name='email' placeholder='email'><input name='email_confirm' placeholder='confirmez'>"
+                            "<button>OK</button></form>", mimetype="text/html")
     email = (request.form.get("email") or "").strip().lower()
     email2 = (request.form.get("email_confirm") or "").strip().lower()
     if not email or email != email2 or not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
@@ -672,13 +723,8 @@ def pay_stripe():
         return redirect(url_for("pay"))
 
 # -----------------------------------------------------------------------------
-# CONFIRM (normalisation robuste des objets Stripe)
+# CONFIRM
 # -----------------------------------------------------------------------------
-def _get_attr(obj, key):
-    if obj is None: return None
-    if isinstance(obj, dict): return obj.get(key)
-    return getattr(obj, key, None)
-
 @app.get("/confirm")
 @login_required
 def confirm():
@@ -690,13 +736,11 @@ def confirm():
     try:
         checkout = stripe.checkout.Session.retrieve(session_id, expand=["subscription", "customer"])
         payment_status = (checkout.get("payment_status") or "").lower()
-
         subscription = checkout.get("subscription")
-        sub_id = _get_attr(subscription, "id")
-        sub_status = _get_attr(subscription, "status")
-
+        sub_id = getattr(subscription, "id", None) if subscription else None
+        sub_status = getattr(subscription, "status", None) if subscription else None
         customer = checkout.get("customer")
-        cust_id = _get_attr(customer, "id") or (customer if isinstance(customer, str) else None)
+        cust_id = getattr(customer, "id", None) if customer else (checkout.get("customer") if isinstance(checkout.get("customer"), str) else None)
 
         if cust_id:
             db_exec("UPDATE users SET stripe_customer_id=? WHERE id=?", (cust_id, int(current_user.id)))
@@ -769,12 +813,12 @@ def confirm():
             embed_iframe=embed_iframe,
         )
     except Exception as e:
-        logger.error(f"Confirm error: {e}\n{traceback.format_exc()}")
+        logger.error(f"Confirm error: {e}", exc_info=True)
         flash("Erreur lors de la confirmation.", "error")
         return redirect(url_for("pay"))
 
 # -----------------------------------------------------------------------------
-# API CHAT (simple + “qualif lead” intelligente par pack)
+# API CHAT (simple + “qualif lead” par pack)
 # -----------------------------------------------------------------------------
 @app.post("/api/chat")
 def api_chat():
@@ -784,7 +828,6 @@ def api_chat():
         message = raw_msg.strip().lower()
         pack    = (data.get("pack") or "agent_immobilier").strip().lower()
 
-        # Réponses guidées par pack + funnel lead
         lead_prompts = {
             "agent_immobilier": "Souhaitez-vous acheter, vendre ou louer ? Quel budget et sur quelle zone ?",
             "avocat": "Pouvez-vous préciser le type de dossier (famille, travail, pénal...), l'urgence et vos coordonnées ?",
@@ -798,14 +841,14 @@ def api_chat():
 
         if pack == "avocat":
             if any(w in message for w in ("divorce","garde","pension","famille")):
-                return jsonify({"reply": "Dossier de droit de la famille — avez-vous déjà une date d’audience ou une échéance ?", "ask_lead": True})
+                return jsonify({"reply": "Droit de la famille — avez-vous une date d’audience ou une échéance ?", "ask_lead": True})
             if any(w in message for w in ("licenciement","prud'h","prudhom","contrat de travail")):
                 return jsonify({"reply": "Contentieux du travail — quel est votre délai et votre ville ?", "ask_lead": True})
             return jsonify({"reply": lead_prompts["avocat"], "ask_lead": True})
 
         if pack == "medecin":
             if "douleur" in message or "rdv" in message or "dispon" in message:
-                return jsonify({"reply": "D’accord. Préférez-vous matin, après-midi ou soir ? Et avez-vous une date ?", "ask_lead": True})
+                return jsonify({"reply": "Très bien. Matin, après-midi ou soir ? Et une date souhaitée ?", "ask_lead": True})
             return jsonify({"reply": lead_prompts["medecin"], "ask_lead": True})
 
         if pack == "agent_immobilier":
@@ -813,10 +856,10 @@ def api_chat():
                 return jsonify({"reply": "Merci. Quel budget et quelle zone recherchez-vous ?", "ask_lead": True})
             return jsonify({"reply": lead_prompts["agent_immobilier"], "ask_lead": True})
 
-        # fallback
         return jsonify({"reply": "Pouvez-vous préciser votre besoin, votre budget et votre délai ?", "ask_lead": True})
 
-    except Exception:
+    except Exception as e:
+        logger.error(f"/api/chat error: {e}", exc_info=True)
         return jsonify({"reply": "Erreur.", "ask_lead": False}), 500
 
 # -----------------------------------------------------------------------------
@@ -885,7 +928,7 @@ def api_send_code():
         return jsonify({"ok": False}), 500
 
 # -----------------------------------------------------------------------------
-# EMBED WRAPPER (page dédiée avec bandeau “propulsé par Spectra Media”)
+# EMBED WRAPPER (page dédiée)
 # -----------------------------------------------------------------------------
 @app.get("/embed/<int:bot_id>")
 def embed(bot_id: int):
@@ -896,18 +939,15 @@ def embed(bot_id: int):
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
     shape_to_size = {"circle":"s","square":"m","rounded":"l"}
-    greeting = bot.get("welcome_text", "Bonjour 👋")
 
     cfg = {
         "name": bot.get("name", "Mon Betty Bot"),
         "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": greeting,
-        "greeting": greeting,              # <-- clé ajoutée
+        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
         "persona": bot.get("persona", "neutre"),
         "shape": shape,
         "widget_size": shape_to_size.get(shape, "m"),
         "slug": pack_slug,
-        "pack_slug": pack_slug,           # <-- clé ajoutée
         "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
         "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
         "metier": bot.get("metier") or pack_slug,
@@ -934,21 +974,18 @@ def embed(bot_id: int):
         return Response(html, mimetype="text/html")
 
 # -----------------------------------------------------------------------------
-# ERREURS GLOBALES (log stacktrace + page “Oups…”)
+# ERREUR 500 (fallback)
 # -----------------------------------------------------------------------------
-@app.errorhandler(Exception)
-def on_any_error(err):
-    logger.error("Unhandled error: %s\n%s", err, traceback.format_exc())
-    try:
-        return render_template("error.html"), 500
-    except Exception:
-        html = """<!doctype html><meta charset="utf-8">
+@app.errorhandler(500)
+def on_500(err):
+    logger.error("HTTP 500: %s", err, exc_info=True)
+    html = """<!doctype html><meta charset="utf-8">
 <title>Erreur</title>
 <body style="background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;padding:40px">
   <h1>Oups…</h1>
   <p>Une erreur s’est produite. Vous pouvez réessayer ou <a href="/pay">aller au paiement</a>.</p>
 </body>"""
-        return Response(html, mimetype="text/html"), 500
+    return Response(html, mimetype="text/html"), 500
 
 # -----------------------------------------------------------------------------
 # MAIN (local)
