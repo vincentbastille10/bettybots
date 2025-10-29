@@ -383,20 +383,28 @@ def sanitize_color(val: str) -> str:
 # -----------------------------------------------------------------------------
 # FAVICONS (évite 500 sur /favicon.ico et /favicon.png)
 # -----------------------------------------------------------------------------
-# petit PNG 16x16 transparent (base64)
+# PNG 1x1 transparent (base64 valide)
 _FAVICON_PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAAAHElEQVQoka3NsQkAMAgEwXf/"
-    "z1a4w6xIYwV8Fh8jXo8HcQk3e0b9a8gQ9j2z0AAAAASUVORK5CYII="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+    "/x8AAwMCAO+Xad8AAAAASUVORK5CYII="
 )
 
 @app.get("/favicon.ico")
 def favicon_ico():
-    # renvoyer le PNG même pour .ico, suffisant pour éviter 500
-    return Response(_FAVICON_PNG, mimetype="image/png", headers={"Cache-Control":"public, max-age=86400"})
+    # Servez le PNG même pour .ico : suffisant pour éviter les 404/500
+    return Response(
+        _FAVICON_PNG,
+        mimetype="image/png",
+        headers={"Cache-Control": "public, max-age=86400, immutable"}
+    )
 
 @app.get("/favicon.png")
 def favicon_png():
-    return Response(_FAVICON_PNG, mimetype="image/png", headers={"Cache-Control":"public, max-age=86400"})
+    return Response(
+        _FAVICON_PNG,
+        mimetype="image/png",
+        headers={"Cache-Control": "public, max-age=86400, immutable"}
+    )
 
 # -----------------------------------------------------------------------------
 # ROOT / ALIAS INDEX / SESSION INVITÉ
