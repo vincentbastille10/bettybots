@@ -473,6 +473,7 @@ def root():
 </body>"""
         return Response(html, mimetype="text/html", status=503)
 
+
 # ============================== app.py — PART 2/2 ==============================
 # Compléments : /install, /code, /logout, /leads, /healthz, robots.txt,
 # en-têtes de sécurité, erreurs 403/404. Zéro conflit avec la PART 1/2.
