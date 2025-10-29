@@ -1,4 +1,4 @@
-# app.py — BettyBots (full, Vercel-ready) — PART 1/2
+# app.py — BettyBots (full, Vercel-ready)
 from __future__ import annotations
 
 import os, re, json, logging, secrets, sqlite3, smtplib, urllib.request, base64
@@ -263,6 +263,7 @@ INTERNAL_TO_PACK = {v: k for k, v in PACK_TO_INTERNAL.items()}
 LABEL_TO_INTERNAL = {
     "agent immo": "agent_immo",
     "agent immobilier": "agent_immo",
+    "agent-immobilier": "agent_immo",
     "avocate": "avocat",
     "avocat": "avocat",
     "médecin": "medecin",
@@ -424,580 +425,222 @@ def root():
 @app.get("/index")
 def index():
     return redirect(url_for("dashboard"))
-# app.py — PART 2/2 (suite)
+# ============================== app.py — PART 2/2 ==============================
+# Compléments : /install, /code, /logout, /leads, /healthz, robots.txt,
+# en-têtes de sécurité, erreurs 403/404. Zéro conflit avec la PART 1/2.
+
+from markupsafe import Markup
 
 # -----------------------------------------------------------------------------
-# DASHBOARD (enregistrement fiable du pack choisi)
+# Helpers : fabrication du snippet d’embed à partir d’un bot
 # -----------------------------------------------------------------------------
-@app.route("/dashboard", methods=["GET", "POST"])
-@login_required
-def dashboard():
-    row = get_bot(int(current_user.id))
-    bot = dict(row) if row else None
-
-    if request.method == "GET":
-        internal_slug, pack_slug = normalize_metier((bot or {}).get("metier") or "")
-        avatar_url = (bot or {}).get("avatar_url") or f"/avatar/{internal_slug}"
-        cfg = {
-            "name": (bot or {}).get("name", "Mon Betty Bot"),
-            "color_hex": (bot or {}).get("color_hex", "#4F46E5"),
-            "welcome_text": (bot or {}).get("welcome_text", "Bonjour 👋"),
-            "persona": (bot or {}).get("persona", "neutre"),
-            "shape": (bot or {}).get("shape", "rounded"),
-            "widget_size": (bot or {}).get("widget_size", "m"),
-            "slug": pack_slug,
-            "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
-            "avatar_url": avatar_url,
-            "metier": (bot or {}).get("metier") or pack_slug,
-            "pro_phone": (bot or {}).get("pro_phone"),
-            "pro_address_label": (bot or {}).get("pro_address_label"),
-            "pro_address_url": (bot or {}).get("pro_address_url"),
-            "pro_description": (bot or {}).get("pro_description"),
-        }
-        try:
-            return render_template("dashboard.html", bot=bot, cfg=cfg)
-        except Exception as e:
-            logger.error(f"dashboard GET template error: {e}", exc_info=True)
-            return Response("<h1>Dashboard</h1><p>Template introuvable.</p>", mimetype="text/html")
-
-    # POST
-    name       = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
-    pack_input = (request.form.get("pack_slug") or "agent_immobilier").strip().lower()
-    internal_slug, pack_slug = normalize_metier(pack_input)
-
-    color_hex  = sanitize_color(request.form.get("color_hex") or "#4F46E5")
-    welcome    = (request.form.get("greeting") or "Bonjour 👋").strip()[:500]
-    persona    = (request.form.get("persona") or "neutre").strip()
-    widget_sz  = (request.form.get("widget_size") or "m").strip()
-    shape_map  = {"s":"circle","m":"square","l":"rounded"}
-    shape      = shape_map.get(widget_sz, "square")
-
-    pro_phone        = (request.form.get("pro_phone") or "").strip()[:100]
-    pro_address_lbl  = (request.form.get("pro_address_label") or "").strip()[:200]
-    pro_address_url  = (request.form.get("pro_address_url") or "").strip()[:300]
-    pro_description  = (request.form.get("pro_description") or "").strip()[:400]
-
-    avatar_url = f"/avatar/{internal_slug}"
-
-    if bot:
-        db_exec("""UPDATE bots SET name=?, metier=?, color_hex=?, welcome_text=?, persona=?, widget_size=?, shape=?,
-                                   pro_phone=?, pro_address_label=?, pro_address_url=?, pro_description=?, avatar_url=?
-                   WHERE user_id=?""",
-                (name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-                 pro_phone, pro_address_lbl, pro_address_url, pro_description, avatar_url, current_user.id))
-    else:
-        auth_key = make_bot_key()
-        db_exec("""INSERT INTO bots(user_id, name, metier, color_hex, welcome_text, persona, widget_size, shape,
-                                    pro_phone, pro_address_label, pro_address_url, pro_description, auth_key, avatar_url)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (current_user.id, name, pack_slug, color_hex, welcome, persona, widget_sz, shape,
-                 pro_phone, pro_address_lbl, pro_address_url, pro_description, auth_key, avatar_url))
-
-    flash("✅ Bot sauvegardé.", "success")
-    return redirect(url_for("preview"))
-
-# -----------------------------------------------------------------------------
-# PREVIEW
-# -----------------------------------------------------------------------------
-@app.get("/preview")
-@login_required
-def preview():
-    row = get_bot(int(current_user.id))
-    if not row:
-        flash("Configure d'abord ton bot.", "warning")
-        return redirect(url_for("dashboard"))
-
-    bot = dict(row)
-    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
-    shape = bot.get("shape") or "rounded"
-    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
-
-    cfg = {
-        "name": bot.get("name", "Mon Betty Bot"),
-        "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
-        "persona": bot.get("persona", "neutre"),
-        "shape": shape,
-        "widget_size": shape_to_size.get(shape, "m"),
-        "slug": pack_slug,
-        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
-        "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
-        "metier": bot.get("metier") or pack_slug,
-        "pro_phone": bot.get("pro_phone"),
-        "pro_address_label": bot.get("pro_address_label"),
-        "pro_address_url": bot.get("pro_address_url"),
-        "pro_description": bot.get("pro_description"),
-        "show_controls": True,
-        "show_brand": False,
-        "inject_hide_css": False
-    }
-    try:
-        return render_template("preview.html", bot=bot, cfg=cfg)
-    except Exception as e:
-        # Si preview.html appelle un include inexistant, on renvoie un fallback simple
-        logger.error(f"preview template error: {e}", exc_info=True)
-        html = f"""<!doctype html><meta charset="utf-8">
-<title>Aperçu</title>
-<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
-  <h1>Prévisualisation</h1>
-  <p>Template introuvable. Pack: {cfg['slug']}</p>
-  <p><a href="/dashboard" style="color:#a5b4fc">← Retour au dashboard</a></p>
-</body>"""
-        return Response(html, mimetype="text/html")
-
-# -----------------------------------------------------------------------------
-# CHAT PUBLIC (iframe) — sécurisé par bot_id + auth_key (si visiteur externe)
-# -----------------------------------------------------------------------------
-@app.get("/chat")
-def chat_public():
-    bot_id = request.args.get("bot", type=int)
-    key    = (request.args.get("key") or "").strip()
-    clean  = request.args.get("clean")
-
+def build_embed_urls(bot: dict) -> dict:
+    """
+    Construit:
+      - embed_url_simple: /chat?bot=<id>&key=<auth_key> (publique, protégée par clé)
+      - embed_url_page  : /embed/<id> (page wrapper)
+      - iframe          : <iframe ...> prêt à coller
+      - code_block      : snippet HTML complet (div + iframe)
+    """
+    base = base_url_for_checkout().rstrip("/")
+    bot_id = bot.get("id")
+    auth_key = (bot.get("auth_key") or "").strip()
     if not bot_id:
-        return "Aucun bot à afficher. Fournissez ?bot=<id>.", 400
+        return {}
 
-    row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
-    if not row:
-        return "Bot introuvable.", 404
-
-    is_owner = False
-    if current_user.is_authenticated:
-        owners_bot = get_bot(int(current_user.id))
-        if owners_bot and dict(owners_bot)["id"] == bot_id:
-            is_owner = True
-
-    if not is_owner:
-        db_key = (row["auth_key"] or "").strip()
-        if not db_key or key != db_key:
-            return "Accès non autorisé (clé invalide).", 403
-
-    bot = dict(row)
-    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
-    shape = bot.get("shape") or "rounded"
-    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
-
-    cfg = {
-        "name": bot.get("name", "Mon Betty Bot"),
-        "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
-        "persona": bot.get("persona", "neutre"),
-        "shape": shape,
-        "widget_size": shape_to_size.get(shape, "m"),
-        "slug": pack_slug,
-        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
-        "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
-        "metier": bot.get("metier") or pack_slug,
-        "pro_phone": bot.get("pro_phone"),
-        "pro_address_label": bot.get("pro_address_label"),
-        "pro_address_url": bot.get("pro_address_url"),
-        "pro_description": bot.get("pro_description"),
-        # Flags embedding (nettoyage des contrôles)
-        "show_controls": False,
-        "show_brand": True,
-        "inject_hide_css": True,
-        "brand_text": "Betty Bot — propulsé par Spectra Media",
-        "brand_link": "https://spectramedia.ai"
-    }
-    try:
-        return render_template("preview.html", bot=bot, cfg=cfg)
-    except Exception as e:
-        logger.error(f"chat_public template error: {e}", exc_info=True)
-        return Response("<h1>Chat</h1><p>Template introuvable.</p>", mimetype="text/html")
-
-# -----------------------------------------------------------------------------
-# SIGNUP
-# -----------------------------------------------------------------------------
-@app.route("/signup", methods=["GET", "POST"])
-def signup():
-    if request.method == "GET":
+    if not auth_key:
         try:
-            return render_template("signup.html")
-        except Exception:
-            return Response("<h1>Créer un compte</h1><form method='post'>"
-                            "<input name='email' placeholder='email'><input name='email_confirm' placeholder='confirmez'>"
-                            "<button>OK</button></form>", mimetype="text/html")
-    email = (request.form.get("email") or "").strip().lower()
-    email2 = (request.form.get("email_confirm") or "").strip().lower()
-    if not email or email != email2 or not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
-        flash("Email invalide.", "warning")
-        return redirect(url_for("signup"))
-    row = db_one("SELECT * FROM users WHERE email=?", (email,))
-    if row:
-        login_user(User(row["id"], row["email"]), remember=True)
-    else:
-        db_exec("INSERT INTO users(email) VALUES(?)", (email,))
-        row = db_one("SELECT * FROM users WHERE email=?", (email,))
-        login_user(User(row["id"], row["email"]), remember=True)
-    return redirect(url_for("pay"))
-
-# -----------------------------------------------------------------------------
-# PAY
-# -----------------------------------------------------------------------------
-@app.get("/pay")
-@login_required
-def pay():
-    row = ensure_user_bot(int(current_user.id))
-    bot = dict(row) if row else None
-    is_guest = is_guest_user()
-    ctx = {
-        "bot": bot,
-        "stripe_enabled": bool(STRIPE_SECRET_KEY),
-        "is_guest": is_guest,
-        "STRIPE_CURRENCY": STRIPE_CURRENCY,
-        "STRIPE_PRICE_CENTS": STRIPE_PRICE_CENTS,
-        "price_eur": round(STRIPE_PRICE_CENTS / 100, 2),
-        "user_email": getattr(current_user, "email", None),
-        "checkout_path": url_for("pay_stripe"),
-        "base_url": base_url_for_checkout(),
-        "signup_path": url_for("signup"),
-    }
-    try:
-        return render_template("pay.html", **ctx)
-    except Exception as e:
-        logger.error("Exception on /pay [GET]: %s", e, exc_info=True)
-        fallback_html = f"""<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Paiement — Betty Bots</title>
-<style>
-  body{{background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;margin:0;padding:40px}}
-  .card{{max-width:520px;margin:0 auto;background:#111827;border-radius:16px;padding:24px;box-shadow:0 0 25px rgba(0,0,0,.4)}}
-  h1{{font-size:22px;margin:0 0 12px}}
-  p{{opacity:.85;line-height:1.5}}
-  .price{{font-size:28px;margin:12px 0 24px}}
-  form button{{background:#4F46E5;border:0;color:#fff;padding:12px 18px;border-radius:10px;cursor:pointer}}
-  .muted{{opacity:.7;font-size:13px;margin-top:14px}}
-  a{{color:#a5b4fc;text-decoration:none}}
-</style></head><body>
-  <div class="card">
-    <h1>Abonnement Betty Bots</h1>
-    <p>Compte : {ctx.get('user_email') or '—'}</p>
-    <div class="price">{ctx.get('price_eur')} {ctx.get('STRIPE_CURRENCY').upper()} / mois</div>
-    {"<p style='color:#fca5a5'>Le paiement est désactivé (clé Stripe manquante).</p>" if not ctx.get("stripe_enabled") else ""}
-    <form method="post" action="{ctx.get('checkout_path')}">
-      <button type="submit" {"disabled" if not ctx.get('stripe_enabled') else ""}>
-        Payer avec Stripe
-      </button>
-    </form>
-    {("<p class='muted'>Pas encore de compte ? <a href='" + url_for('signup') + "'>Créer un compte</a></p>") if ctx.get("is_guest") else ""}
-    <p class="muted">← <a href="/preview">Retour au test du bot</a></p>
-    <p class="muted">Page fallback: si le template casse, cette version s’affiche.</p>
-  </div>
-</body></html>"""
-        return Response(fallback_html, mimetype="text/html")
-
-@app.post("/pay/stripe")
-@login_required
-def pay_stripe():
-    if is_guest_user():
-        flash("Créez votre compte avec un email valide pour procéder au paiement.", "warning")
-        return redirect(url_for("signup"))
-    if not STRIPE_SECRET_KEY:
-        flash("Paiement indisponible (clé Stripe).", "error")
-        return redirect(url_for("pay"))
-
-    base = base_url_for_checkout()
-    row = ensure_user_bot(int(current_user.id))
-    bot = dict(row) if row else {}
-    _, pack_slug = normalize_metier(bot.get("metier") or "")
-    label_map = {"agent_immobilier":"Agent immobilier","avocat":"Avocat","medecin":"Médecin"}
-    metier_label = label_map.get(pack_slug, "Générique")
-    product_name = f"Abonnement mensuel Betty {metier_label}"
-
-    try:
-        session = stripe.checkout.Session.create(
-            mode="subscription",
-            ui_mode="hosted",
-            payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency": STRIPE_CURRENCY,
-                    "recurring": {"interval": "month"},
-                    "unit_amount": STRIPE_PRICE_CENTS,
-                    "product_data": {"name": product_name}
-                },
-                "quantity": 1
-            }],
-            customer_email=(current_user.email or None),
-            client_reference_id=str(current_user.id),
-            allow_promotion_codes=True,
-            success_url=f"{base}/confirm?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{base}/pay",
-        )
-        return redirect(session.url, code=303)
-    except Exception as e:
-        logger.error(f"Stripe error: {e}", exc_info=True)
-        flash("Erreur Stripe.", "error")
-        return redirect(url_for("pay"))
-
-# -----------------------------------------------------------------------------
-# CONFIRM
-# -----------------------------------------------------------------------------
-@app.get("/confirm")
-@login_required
-def confirm():
-    session_id = request.args.get("session_id")
-    if not session_id:
-        flash("Session Stripe introuvable.", "warning")
-        return redirect(url_for("pay"))
-
-    try:
-        checkout = stripe.checkout.Session.retrieve(session_id, expand=["subscription", "customer"])
-        payment_status = (checkout.get("payment_status") or "").lower()
-        subscription = checkout.get("subscription")
-        sub_id = getattr(subscription, "id", None) if subscription else None
-        sub_status = getattr(subscription, "status", None) if subscription else None
-        customer = checkout.get("customer")
-        cust_id = getattr(customer, "id", None) if customer else (checkout.get("customer") if isinstance(checkout.get("customer"), str) else None)
-
-        if cust_id:
-            db_exec("UPDATE users SET stripe_customer_id=? WHERE id=?", (cust_id, int(current_user.id)))
-        if sub_id:
-            db_exec("UPDATE users SET stripe_subscription_id=? WHERE id=?", (sub_id, int(current_user.id)))
-
-        row = ensure_user_bot(int(current_user.id))
-        bot = dict(row) if row else {}
-        base = base_url_for_checkout()
-        _, pack_slug = normalize_metier(bot.get("metier") or "")
-        welcome = bot.get("welcome_text", "Bonjour 👋")
-
-        bot_id = bot.get("id")
-        auth_key = (bot.get("auth_key") or "").strip() if bot_id else None
-        if bot_id and not auth_key:
-            try:
-                new_key = make_bot_key()
-                db_exec("UPDATE bots SET auth_key=? WHERE id=?", (new_key, bot_id))
-                auth_key = new_key
-                row = get_bot(int(current_user.id))
-                bot = dict(row) if row else bot
-            except Exception as _e:
-                logger.error(f"Impossible de créer l'auth_key: {_e}", exc_info=True)
-
-        embed_url_simple = None
-        if bot_id and auth_key:
-            embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}&key={auth_key}"
-        if not embed_url_simple and bot_id:
-            embed_url_simple = f"{base.rstrip('/')}/chat?bot={bot_id}"
-
-        embed_iframe = (
-            f'<iframe src="{embed_url_simple}" '
-            'width="420" height="580" style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);" '
-            'title="Mon Betty Bot"></iframe>'
-        ) if embed_url_simple else None
-
-        embed_url_page = f"{base.rstrip('/')}/embed/{bot_id}" if bot_id else None
-
-        try:
-            owner_to = "spectramediabots@gmail.com"
-            buyer_email = getattr(current_user, "email", None) or "inconnu"
-            bot_info = f"bot_id={bot_id or '—'} pack={pack_slug} base={base.rstrip('/')}"
-            subject = f"[BettyBots] Nouveau paiement — {payment_status} — {buyer_email}"
-            body = (
-                "Nouveau paiement Betty Bots.\n\n"
-                f"Acheteur : {buyer_email}\n"
-                f"{bot_info}\n\n"
-                f"Session ID : {session_id or '—'}\n"
-                f"Subscription ID : {sub_id or '—'}\n"
-                f"Customer ID : {cust_id or '—'}\n"
-            )
-            send_mail(owner_to, subject, body)
+            new_key = make_bot_key()
+            db_exec("UPDATE bots SET auth_key=? WHERE id=?", (new_key, bot_id))
+            auth_key = new_key
+            # refresh
+            row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
+            if row:
+                bot.update(dict(row))
         except Exception as _e:
-            logger.error(f"Owner email send failed: {_e}", exc_info=True)
+            logger.error(f"build_embed_urls: impossible de créer auth_key: {_e}", exc_info=True)
 
-        return render_template(
-            "confirm.html",
-            session_id=session_id,
-            payment_status=payment_status,
-            sub_id=sub_id,
-            sub_status=sub_status,
-            cust_id=cust_id,
-            base_url=base.rstrip("/"),
-            pack=pack_slug,
-            welcome_text=welcome,
-            embed_code=None,
-            bot_id=bot_id,
-            embed_url_simple=embed_url_simple,
-            embed_url_page=embed_url_page,
-            embed_iframe=embed_iframe,
-        )
-    except Exception as e:
-        logger.error(f"Confirm error: {e}", exc_info=True)
-        flash("Erreur lors de la confirmation.", "error")
-        return redirect(url_for("pay"))
+    embed_url_simple = f"{base}/chat?bot={bot_id}&key={auth_key}" if auth_key else f"{base}/chat?bot={bot_id}"
+    embed_url_page   = f"{base}/embed/{bot_id}"
 
-# -----------------------------------------------------------------------------
-# API CHAT (simple + “qualif lead” par pack)
-# -----------------------------------------------------------------------------
-@app.post("/api/chat")
-def api_chat():
-    try:
-        data = request.get_json(force=True) or {}
-        raw_msg = data.get("message") or ""
-        message = raw_msg.strip().lower()
-        pack    = (data.get("pack") or "agent_immobilier").strip().lower()
+    iframe = (
+        f'<iframe src="{embed_url_simple}" '
+        'width="420" height="580" style="border:0;border-radius:18px;'
+        'box-shadow:0 0 25px rgba(0,0,0,.4);" title="Mon Betty Bot"></iframe>'
+    )
 
-        lead_prompts = {
-            "agent_immobilier": "Souhaitez-vous acheter, vendre ou louer ? Quel budget et sur quelle zone ?",
-            "avocat": "Pouvez-vous préciser le type de dossier (famille, travail, pénal...), l'urgence et vos coordonnées ?",
-            "medecin": "Quel est votre motif de consultation et vos disponibilités ?",
-            "coiffeur": "Quel service souhaitez-vous et quand êtes-vous disponible ?",
-            "coach_sportif": "Quel objectif (perte de poids, performance, remise en forme) et quels créneaux ?",
-        }
+    code_block = (
+        '<!-- Betty Bot — copiez/collez ce bloc dans votre page -->\n'
+        '<div id="bettybot-container" style="max-width:520px">\n'
+        f'  {iframe}\n'
+        '</div>\n'
+    )
 
-        if not message:
-            return jsonify({"reply": "Bonjour 👋", "ask_lead": False})
-
-        if pack == "avocat":
-            if any(w in message for w in ("divorce","garde","pension","famille")):
-                return jsonify({"reply": "Droit de la famille — avez-vous une date d’audience ou une échéance ?", "ask_lead": True})
-            if any(w in message for w in ("licenciement","prud'h","prudhom","contrat de travail")):
-                return jsonify({"reply": "Contentieux du travail — quel est votre délai et votre ville ?", "ask_lead": True})
-            return jsonify({"reply": lead_prompts["avocat"], "ask_lead": True})
-
-        if pack == "medecin":
-            if "douleur" in message or "rdv" in message or "dispon" in message:
-                return jsonify({"reply": "Très bien. Matin, après-midi ou soir ? Et une date souhaitée ?", "ask_lead": True})
-            return jsonify({"reply": lead_prompts["medecin"], "ask_lead": True})
-
-        if pack == "agent_immobilier":
-            if any(w in message for w in ("acheter","vente","vendre","louer","location")):
-                return jsonify({"reply": "Merci. Quel budget et quelle zone recherchez-vous ?", "ask_lead": True})
-            return jsonify({"reply": lead_prompts["agent_immobilier"], "ask_lead": True})
-
-        return jsonify({"reply": "Pouvez-vous préciser votre besoin, votre budget et votre délai ?", "ask_lead": True})
-
-    except Exception as e:
-        logger.error(f"/api/chat error: {e}", exc_info=True)
-        return jsonify({"reply": "Erreur.", "ask_lead": False}), 500
-
-# -----------------------------------------------------------------------------
-# API LEAD
-# -----------------------------------------------------------------------------
-@app.post("/api/lead")
-@login_required
-def api_lead():
-    try:
-        data = request.get_json(force=True) or {}
-        name    = (data.get("name") or "").strip()
-        email   = (data.get("email") or "").strip()
-        message = (data.get("message") or "").strip()
-        metier  = ((data.get("extra") or {}).get("metier") or "inconnu").strip()
-
-        db_exec("INSERT INTO leads (name, email, message, metier) VALUES (?, ?, ?, ?)",
-                (name, email, message, metier))
-
-        owner_email = getattr(current_user, "email", None)
-        subject = f"Nouveau lead — {metier} — {name or 'inconnu'}"
-        body = (
-            "Vous avez reçu un nouveau lead depuis votre bot Betty.\n\n"
-            f"Métier (pack) : {metier}\n"
-            f"Nom complet   : {name}\n"
-            f"Email lead    : {email}\n"
-            f"Message       :\n{message}\n\n"
-            "---\n"
-            "Vous pouvez répondre directement à ce message pour recontacter le prospect."
-        )
-        emailed = False
-        if owner_email:
-            emailed = send_mail(owner_email, subject, body)
-
-        return jsonify({"status": "saved", "emailed": bool(emailed)}), 200
-    except Exception as e:
-        logger.error(f"/api/lead error: {e}", exc_info=True)
-        return jsonify({"status": "error"}), 500
-
-# -----------------------------------------------------------------------------
-# ENVOI DU CODE PAR EMAIL
-# -----------------------------------------------------------------------------
-@app.post("/api/send_code")
-@login_required
-def api_send_code():
-    try:
-        data = request.get_json(force=True) or {}
-        code = (data.get("code") or "").strip()
-        if not code:
-            return jsonify({"ok": False, "error": "missing code"}), 400
-        to_email = getattr(current_user, "email", None)
-        if not to_email:
-            return jsonify({"ok": False, "error": "no user email"}), 400
-
-        subject = "Votre code d’intégration Betty Bot"
-        body = (
-            "Bonjour,\n\n"
-            "Voici le code d’intégration de votre bot Betty, prêt à copier-coller dans votre site :\n\n"
-            f"{code}\n\n"
-            "Besoin d’aide ? Répondez simplement à cet email.\n\n"
-            "— L’équipe Betty Bots"
-        )
-        ok = send_mail(to_email, subject, body)
-        return jsonify({"ok": bool(ok)})
-    except Exception as e:
-        logger.error(f"/api/send_code error: {e}", exc_info=True)
-        return jsonify({"ok": False}), 500
-
-# -----------------------------------------------------------------------------
-# EMBED WRAPPER (page dédiée)
-# -----------------------------------------------------------------------------
-@app.get("/embed/<int:bot_id>")
-def embed(bot_id: int):
-    row = db_one("SELECT * FROM bots WHERE id=?", (bot_id,))
-    if not row:
-        return "Bot introuvable.", 404
-    bot = dict(row)
-    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
-    shape = bot.get("shape") or "rounded"
-    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
-
-    cfg = {
-        "name": bot.get("name", "Mon Betty Bot"),
-        "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
-        "persona": bot.get("persona", "neutre"),
-        "shape": shape,
-        "widget_size": shape_to_size.get(shape, "m"),
-        "slug": pack_slug,
-        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
-        "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
-        "metier": bot.get("metier") or pack_slug,
-        "pro_phone": bot.get("pro_phone"),
-        "pro_address_label": bot.get("pro_address_label"),
-        "pro_address_url": bot.get("pro_address_url"),
-        "pro_description": bot.get("pro_description"),
-        "show_controls": False,
-        "show_brand": True,
-        "inject_hide_css": True,
-        "brand_text": "Betty Bot — propulsé par Spectra Media",
-        "brand_link": "https://spectramedia.ai"
+    return {
+        "embed_url_simple": embed_url_simple,
+        "embed_url_page": embed_url_page,
+        "iframe": iframe,
+        "code_block": code_block,
     }
+
+# -----------------------------------------------------------------------------
+# INSTALL (compatibilité avec anciens parcours : preview -> pay -> install)
+# -----------------------------------------------------------------------------
+@app.get("/install")
+@login_required
+def install():
+    row = ensure_user_bot(int(current_user.id))
+    if not row:
+        return redirect(url_for("dashboard"))
+    bot = dict(row)
+    urls = build_embed_urls(bot)
+    # Si le template existe, on l’utilise, sinon fallback HTML.
     try:
-        return render_template("embed.html", bot=bot, cfg=cfg)
-    except Exception:
+        return render_template(
+            "install.html",
+            bot=bot,
+            embed_url_simple=urls.get("embed_url_simple"),
+            embed_url_page=urls.get("embed_url_page"),
+            embed_iframe=Markup(urls.get("iframe", "")),
+            embed_code=urls.get("code_block"),
+        )
+    except Exception as e:
+        logger.error(f"install template error: {e}", exc_info=True)
         html = f"""<!doctype html><meta charset="utf-8">
-<title>Betty — Embed</title>
-<div style="position:sticky;top:0;background:#0b0b0f;color:#cbd5e1;border-bottom:1px solid rgba(255,255,255,.06);padding:8px;text-align:center;font:500 12px/18px Inter,system-ui">
-  <a href="https://spectramedia.ai" target="_blank" style="color:#a5b4fc;text-decoration:none">Betty Bot — propulsé par Spectra Media</a>
-</div>
-<iframe src="/chat?bot={bot['id']}" width="420" height="580"
- style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4);"></iframe>"""
+<title>Installation — Betty Bot</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
+  <h1>Installation</h1>
+  <p>Copiez-collez ce code d’intégration dans votre site&nbsp;:</p>
+  <pre style="white-space:pre-wrap;background:#111827;padding:16px;border-radius:12px">{urls.get('code_block') or ''}</pre>
+  <p><a style="color:#a5b4fc" href="/preview">← Retour au test du bot</a></p>
+</body>"""
         return Response(html, mimetype="text/html")
 
 # -----------------------------------------------------------------------------
-# ERREUR 500 (fallback)
+# CODE (page minimale qui affiche uniquement le snippet propre à copier)
 # -----------------------------------------------------------------------------
-@app.errorhandler(500)
-def on_500(err):
-    logger.error("HTTP 500: %s", err, exc_info=True)
-    html = """<!doctype html><meta charset="utf-8">
-<title>Erreur</title>
-<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;padding:40px">
-  <h1>Oups…</h1>
-  <p>Une erreur s’est produite. Vous pouvez réessayer ou <a href="/pay">aller au paiement</a>.</p>
-</body>"""
-    return Response(html, mimetype="text/html"), 500
+@app.get("/code")
+@login_required
+def code_snippet():
+    row = ensure_user_bot(int(current_user.id))
+    if not row:
+        return "Bot introuvable.", 404
+    bot = dict(row)
+    urls = build_embed_urls(bot)
+    try:
+        return render_template(
+            "code.html",
+            bot=bot,
+            embed_code=urls.get("code_block"),
+            embed_iframe=Markup(urls.get("iframe", "")),
+            embed_url_simple=urls.get("embed_url_simple"),
+            embed_url_page=urls.get("embed_url_page"),
+        )
+    except Exception:
+        # Fallback texte brut pour copier facilement (Content-Type HTML pour compat copier)
+        return Response(
+            f"<pre>{urls.get('code_block') or ''}</pre>",
+            mimetype="text/html"
+        )
 
 # -----------------------------------------------------------------------------
-# MAIN (local)
+# LEADS (liste simple, interne)
 # -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port, debug=True)
+@app.get("/leads")
+@login_required
+def leads_list():
+    try:
+        cur = get_db().execute(
+            "SELECT id, name, email, message, metier, created_at FROM leads ORDER BY id DESC LIMIT 200"
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    except Exception as e:
+        logger.error(f"/leads query error: {e}", exc_info=True)
+        rows = []
+    try:
+        return render_template("leads.html", leads=rows)
+    except Exception:
+        items = "\n".join(
+            f"<li><strong>{r.get('name') or '—'}</strong> &lt;{r.get('email') or '—'}&gt; "
+            f"[{r.get('metier') or '—'}] — {r.get('message') or ''}</li>"
+            for r in rows
+        )
+        return Response(
+            f"<!doctype html><meta charset='utf-8'><h1>Leads</h1><ul>{items}</ul>",
+            mimetype="text/html"
+        )
+
+# -----------------------------------------------------------------------------
+# LOGOUT
+# -----------------------------------------------------------------------------
+@app.get("/logout")
+def logout():
+    try:
+        logout_user()
+    except Exception:
+        pass
+    return redirect(url_for("root"))
+
+# -----------------------------------------------------------------------------
+# HEALTHCHECK & ROBOTS
+# -----------------------------------------------------------------------------
+@app.get("/healthz")
+def healthz():
+    try:
+        # ping DB léger
+        _ = db_one("SELECT 1 as ok", ())
+        ok = True
+    except Exception:
+        ok = False
+    status = 200 if ok else 500
+    return jsonify({"ok": ok, "time": datetime.utcnow().isoformat() + "Z"}), status
+
+@app.get("/robots.txt")
+def robots_txt():
+    txt = "User-agent: *\nDisallow: /leads\nDisallow: /pay\nDisallow: /confirm\n"
+    return Response(txt, mimetype="text/plain")
+
+# -----------------------------------------------------------------------------
+# HEADERS DE SÉCURITÉ (CSP douce pour éviter de casser l’embed)
+# -----------------------------------------------------------------------------
+@app.after_request
+def add_security_headers(resp: Response):
+    try:
+        # X-Frame-Options: autorise l'embed sur n'importe quel site (nécessaire pour l’iframe client),
+        # si tu veux restreindre : 'SAMEORIGIN' ou des ACL précises via CSP frame-ancestors
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        resp.headers.setdefault("X-XSS-Protection", "0")
+        # CSP minimale : autorise self + data: pour images + inline styles du snippet,
+        # et frame-ancestors * pour permettre l’intégration (ajuste si besoin)
+        csp = (
+            "default-src 'self'; "
+            "img-src 'self' data: https:; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; "
+            "frame-src 'self'; "
+            "frame-ancestors *"
+        )
+        resp.headers.setdefault("Content-Security-Policy", csp)
+    except Exception:
+        pass
+    return resp
+
+# -----------------------------------------------------------------------------
+# ERREURS 403/404 (déjà un 500 dans PART 1/2)
+# -----------------------------------------------------------------------------
+@app.errorhandler(403)
+def on_403(err):
+    try:
+        return render_template("error.html", code=403, message="Accès interdit"), 403
+    except Exception:
+        return Response("<h1>403 — Accès interdit</h1>", mimetype="text/html"), 403
+
+@app.errorhandler(404)
+def on_404(err):
+    try:
+        return render_template("error.html", code=404, message="Page introuvable"), 404
+    except Exception:
+        return Response("<h1>404 — Page introuvable</h1>", mimetype="text/html"), 404
+
+# ============================ fin app.py — PART 2/2 ============================
