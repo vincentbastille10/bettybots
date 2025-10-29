@@ -500,6 +500,258 @@ def root():
   <p>Une étape d'initialisation a échoué. Réessayez, ou vérifiez <a href="/healthz" style="color:#a5b4fc">/healthz</a>.</p>
 </body>"""
         return Response(html, mimetype="text/html", status=503)
+# -----------------------------------------------------------------------------
+# DASHBOARD (Page 1) — configuration du bot
+# -----------------------------------------------------------------------------
+@app.route("/dashboard", methods=["GET", "POST"])
+@login_required
+def dashboard():
+    row = ensure_user_bot(int(current_user.id))
+    if not row:
+        return Response("Impossible de charger le bot.", 500)
+    bot = dict(row)
+
+    if request.method == "POST":
+        name       = (request.form.get("name") or "Mon Betty Bot").strip()
+        metier_raw = (request.form.get("metier") or "agent_immobilier").strip().lower()
+        color_hex  = sanitize_color(request.form.get("color_hex") or "#4F46E5")
+        persona    = (request.form.get("persona") or "neutre").strip().lower()
+        widget_sz  = (request.form.get("widget_size") or "m").strip().lower()
+        shape      = (request.form.get("shape") or "rounded").strip().lower()
+
+        internal_slug, pack_slug = normalize_metier(metier_raw)
+        avatar_url = f"/avatar/{internal_slug}"
+
+        db_exec("""UPDATE bots 
+                   SET name=?, metier=?, color_hex=?, persona=?, widget_size=?, shape=?, avatar_url=?
+                   WHERE id=?""",
+                (name, pack_slug, color_hex, persona, widget_sz, shape, avatar_url, bot["id"]))
+        flash("Configuration enregistrée.", "success")
+        return redirect(url_for("preview"))
+
+    # GET
+    try:
+        return render_template("dashboard.html", cfg=bot)
+    except Exception:
+        # Fallback minimal si le template n'existe pas
+        html = f"""<!doctype html><meta charset="utf-8">
+<title>Dashboard — BettyBots</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
+  <h1>Configuration du bot</h1>
+  <form method="post" style="display:grid;gap:10px;max-width:480px">
+    <input name="name" value="{bot.get('name') or 'Mon Betty Bot'}" placeholder="Nom du bot" />
+    <select name="metier">
+      <option value="agent_immobilier">Agent immobilier</option>
+      <option value="avocat">Avocat</option>
+      <option value="medecin">Médecin</option>
+    </select>
+    <input name="color_hex" value="{bot.get('color_hex') or '#4F46E5'}" placeholder="#4F46E5" />
+    <input name="persona" value="{bot.get('persona') or 'neutre'}" placeholder="persona (ex: chaleureux)" />
+    <select name="widget_size">
+      <option value="s">s</option><option value="m" selected>m</option><option value="l">l</option>
+    </select>
+    <select name="shape">
+      <option value="rounded" selected>rounded</option><option value="square">square</option>
+    </select>
+    <button type="submit">Enregistrer & Tester</button>
+  </form>
+  <p style="margin-top:20px"><a href="/preview" style="color:#a5b4fc">Aller au preview →</a></p>
+</body>"""
+        return Response(html, mimetype="text/html")
+
+# -----------------------------------------------------------------------------
+# PREVIEW (Page 2) — test du bot
+# -----------------------------------------------------------------------------
+@app.get("/preview")
+@login_required
+def preview():
+    row = ensure_user_bot(int(current_user.id))
+    if not row:
+        return redirect(url_for("dashboard"))
+    bot = dict(row)
+    urls = build_embed_urls(bot)
+
+    try:
+        return render_template(
+            "preview.html",
+            bot=bot,
+            embed_iframe=Markup(urls.get("iframe", "")),
+            embed_url_simple=urls.get("embed_url_simple"),
+        )
+    except Exception:
+        html = f"""<!doctype html><meta charset="utf-8">
+<title>Prévisualisation — BettyBots</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px;text-align:center">
+  <h1>Prévisualisation</h1>
+  <iframe src="{urls.get('embed_url_simple','/chat')}" width="420" height="580"
+          style="border:0;border-radius:18px;box-shadow:0 0 25px rgba(0,0,0,.4)"></iframe>
+  <div style="margin-top:20px">
+    <a href="/pay" style="color:#a5b4fc">S’abonner →</a> ·
+    <a href="/dashboard" style="color:#a5b4fc">Modifier le bot</a>
+  </div>
+</body>"""
+        return Response(html, mimetype="text/html")
+
+# -----------------------------------------------------------------------------
+# SIGNUP (Page 3) — inscription très simple (email)
+# -----------------------------------------------------------------------------
+@app.route("/signup", methods=["GET","POST"])
+def signup():
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            flash("Email invalide.", "error")
+        else:
+            # upsert user puis login
+            try:
+                db_exec("INSERT OR IGNORE INTO users(email) VALUES(?)", (email,))
+                row = db_one("SELECT id, email FROM users WHERE email=?", (email,))
+                if row:
+                    login_user(User(row["id"], row["email"]), remember=True)
+                    ensure_user_bot(int(row["id"]))
+                    return redirect(url_for("preview"))
+            except Exception as e:
+                logger.error(f"signup error: {e}", exc_info=True)
+                flash("Erreur d’inscription.", "error")
+    # GET + fallback
+    try:
+        return render_template("signup.html")
+    except Exception:
+        return Response(
+            """<!doctype html><meta charset="utf-8"><title>Inscription</title>
+               <form method="post" style="padding:40px;font-family:Inter">
+                 <input name="email" placeholder="vous@exemple.com" />
+                 <button type="submit">Continuer</button>
+               </form>""",
+            mimetype="text/html"
+        )
+
+# Alias /signin → /signup
+@app.get("/signin")
+def signin_alias():
+    return redirect(url_for("signup"), code=302)
+
+# -----------------------------------------------------------------------------
+# PAY (Page 4) — Stripe Checkout (one-shot ou abonnement simple)
+# -----------------------------------------------------------------------------
+@app.get("/pay")
+@login_required
+def pay():
+    # Page avec bouton pour créer la session
+    try:
+        return render_template("pay.html")
+    except Exception:
+        return Response(
+            """<!doctype html><meta charset="utf-8"><title>Paiement</title>
+               <form action="/pay/stripe" method="post" style="padding:40px;font-family:Inter">
+                 <button type="submit">Payer l’abonnement</button>
+               </form>""",
+            mimetype="text/html"
+        )
+
+@app.post("/pay/stripe")
+@login_required
+def pay_stripe():
+    if not STRIPE_SECRET_KEY:
+        flash("Stripe n’est pas configuré.", "error")
+        return redirect(url_for("preview"))
+
+    success_url = base_url_for_checkout() + "/confirm"
+    cancel_url  = base_url_for_checkout() + "/preview"
+
+    # Checkout sans Price ID : on utilise price_data (montant en cents)
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",  # passe à "subscription" si tu utilises des Price récurrents
+            line_items=[{
+                "price_data": {
+                    "currency": STRIPE_CURRENCY,
+                    "product_data": {"name": "Abonnement Betty Bot"},
+                    "unit_amount": int(STRIPE_PRICE_CENTS),
+                },
+                "quantity": 1,
+            }],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            billing_address_collection="auto",
+        )
+        return redirect(session.url, code=303)
+    except Exception as e:
+        logger.error(f"Stripe error: {e}", exc_info=True)
+        flash("Erreur Stripe.", "error")
+        return redirect(url_for("pay"))
+
+# -----------------------------------------------------------------------------
+# CONFIRM (Page 5) — récap + code d’intégration
+# -----------------------------------------------------------------------------
+@app.get("/confirm")
+@login_required
+def confirm():
+    row = ensure_user_bot(int(current_user.id))
+    if not row:
+        return redirect(url_for("dashboard"))
+    bot = dict(row)
+    urls = build_embed_urls(bot)
+    try:
+        return render_template(
+            "confirm.html",
+            bot=bot,
+            embed_code=urls.get("code_block"),
+            embed_iframe=Markup(urls.get("iframe","")),
+            embed_url_simple=urls.get("embed_url_simple"),
+            embed_url_page=urls.get("embed_url_page"),
+        )
+    except Exception:
+        html = f"""<!doctype html><meta charset="utf-8">
+<title>Confirmation — BettyBots</title>
+<body style="background:#0d1117;color:#fff;font-family:Inter,system-ui;padding:40px">
+  <h1>Merci !</h1>
+  <p>Voici votre code d’intégration :</p>
+  <pre style="white-space:pre-wrap;background:#111827;padding:16px;border-radius:12px">{urls.get('code_block') or ''}</pre>
+  <p><a style="color:#a5b4fc" href="/install">Page d’installation</a></p>
+</body>"""
+        return Response(html, mimetype="text/html")
+
+# -----------------------------------------------------------------------------
+# CHAT — iframe du bot (simulé ici)
+# -----------------------------------------------------------------------------
+@app.get("/chat")
+def chat_widget():
+    # NB: à remplacer par ta vraie logique de bot plus tard
+    bot_id = request.args.get("bot") or ""
+    greeting = "Bonjour 👋 Je suis votre Betty Bot."
+    try:
+        return render_template("chat.html", bot_id=bot_id, greeting=greeting)
+    except Exception:
+        return Response(
+            f"""<!doctype html><meta charset="utf-8"><title>BettyBot</title>
+            <div style="font-family:Inter,system-ui;padding:16px">
+              <p>{greeting}</p>
+              <form onsubmit="event.preventDefault();const a=document.getElementById('a');const b=document.getElementById('b');b.innerHTML+=`<div><b>Vous:</b> ${a.value}</div>`;a.value='';">
+                <input id="a" placeholder="Votre question…" />
+                <button>Envoyer</button>
+              </form>
+              <div id="b" style="margin-top:10px;font-size:14px;color:#111;background:#f3f4f6;padding:8px;border-radius:8px"></div>
+            </div>""",
+            mimetype="text/html"
+        )
+
+# -----------------------------------------------------------------------------
+# EMBED — page wrapper autour de /chat
+# -----------------------------------------------------------------------------
+@app.get("/embed/<int:bot_id>")
+def embed_page(bot_id: int):
+    key = request.args.get("key","")
+    src = f"/chat?bot={bot_id}&key={key}" if key else f"/chat?bot={bot_id}"
+    try:
+        return render_template("embed.html", src=src)
+    except Exception:
+        return Response(
+            f"""<!doctype html><meta charset="utf-8"><title>Embed</title>
+                <iframe src="{src}" width="420" height="580" style="border:0;border-radius:18px;
+                box-shadow:0 0 25px rgba(0,0,0,.4)"></iframe>""",
+            mimetype="text/html"
+        )
 
 # -----------------------------------------------------------------------------
 # INSTALL
