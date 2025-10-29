@@ -862,6 +862,16 @@ def healthz():
     status = 200 if ok else 500
     return jsonify({"ok": ok, "time": datetime.utcnow().isoformat() + "Z"}), status
 
+@app.get("/diag/env")
+def diag_env():
+    # NE PAS exposer la clé, on vérifie juste la présence et la longueur
+    val = os.getenv("STRIPE_SECRET_KEY", "")
+    return jsonify({
+        "stripe_secret_key_present": bool(val),
+        "stripe_secret_key_len": len(val),
+        "env": os.getenv("VERCEL_ENV", "local")
+    })
+
 @app.get("/robots.txt")
 def robots_txt():
     txt = "User-agent: *\nDisallow: /leads\nDisallow: /pay\nDisallow: /confirm\n"
