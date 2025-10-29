@@ -1,7 +1,7 @@
 # app.py — BettyBots (corrigé, Vercel-ready)
 from __future__ import annotations
 
-import os, re, json, logging, secrets, sqlite3, smtplib, urllib.request
+import os, re, json, logging, secrets, sqlite3, smtplib, urllib.request, traceback
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -390,14 +390,17 @@ def dashboard():
         internal_slug, pack_slug = normalize_metier((bot or {}).get("metier") or "")
         # avatar_url canonique si absent/erroné
         avatar_url = (bot or {}).get("avatar_url") or f"/avatar/{internal_slug}"
+        greeting = (bot or {}).get("welcome_text", "Bonjour 👋")
         cfg = {
             "name": (bot or {}).get("name", "Mon Betty Bot"),
             "color_hex": (bot or {}).get("color_hex", "#4F46E5"),
-            "welcome_text": (bot or {}).get("welcome_text", "Bonjour 👋"),
+            "welcome_text": greeting,
+            "greeting": greeting,                  # <-- clé ajoutée (certains templates l'utilisent)
             "persona": (bot or {}).get("persona", "neutre"),
             "shape": (bot or {}).get("shape", "rounded"),
             "widget_size": (bot or {}).get("widget_size", "m"),
             "slug": pack_slug,
+            "pack_slug": pack_slug,               # <-- clé ajoutée
             "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
             "avatar_url": avatar_url,
             "metier": (bot or {}).get("metier") or pack_slug,
@@ -411,7 +414,6 @@ def dashboard():
     # POST
     name       = (request.form.get("bot_name") or "Mon Betty Bot").strip()[:100]
     pack_input = (request.form.get("pack_slug") or "agent_immobilier").strip().lower()
-    # 🔒 Normalisation pack robuste (évite retombée sur agent_immo)
     internal_slug, pack_slug = normalize_metier(pack_input)
 
     color_hex  = sanitize_color(request.form.get("color_hex") or "#4F46E5")
@@ -426,7 +428,6 @@ def dashboard():
     pro_address_url  = (request.form.get("pro_address_url") or "").strip()[:300]
     pro_description  = (request.form.get("pro_description") or "").strip()[:400]
 
-    # Avatar URL cohérent avec internal_slug
     avatar_url = f"/avatar/{internal_slug}"
 
     if bot:
@@ -452,37 +453,44 @@ def dashboard():
 @app.get("/preview")
 @login_required
 def preview():
-    row = get_bot(int(current_user.id))
-    if not row:
-        flash("Configure d'abord ton bot.", "warning")
-        return redirect(url_for("dashboard"))
+    try:
+        row = get_bot(int(current_user.id))
+        if not row:
+            flash("Configure d'abord ton bot.", "warning")
+            return redirect(url_for("dashboard"))
 
-    bot = dict(row)
-    internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
-    shape = bot.get("shape") or "rounded"
-    shape_to_size = {"circle":"s","square":"m","rounded":"l"}
+        bot = dict(row)
+        internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
+        shape = bot.get("shape") or "rounded"
+        shape_to_size = {"circle":"s","square":"m","rounded":"l"}
+        greeting = bot.get("welcome_text", "Bonjour 👋")
 
-    cfg = {
-        "name": bot.get("name", "Mon Betty Bot"),
-        "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
-        "persona": bot.get("persona", "neutre"),
-        "shape": shape,
-        "widget_size": shape_to_size.get(shape, "m"),
-        "slug": pack_slug,
-        "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
-        "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
-        "metier": bot.get("metier") or pack_slug,
-        "pro_phone": bot.get("pro_phone"),
-        "pro_address_label": bot.get("pro_address_label"),
-        "pro_address_url": bot.get("pro_address_url"),
-        "pro_description": bot.get("pro_description"),
-        # Flags UI preview
-        "show_controls": True,
-        "show_brand": False,
-        "inject_hide_css": False
-    }
-    return render_template("preview.html", bot=bot, cfg=cfg)
+        cfg = {
+            "name": bot.get("name", "Mon Betty Bot"),
+            "color_hex": bot.get("color_hex", "#4F46E5"),
+            "welcome_text": greeting,
+            "greeting": greeting,                # <-- clé ajoutée
+            "persona": bot.get("persona", "neutre"),
+            "shape": shape,
+            "widget_size": shape_to_size.get(shape, "m"),
+            "slug": pack_slug,
+            "pack_slug": pack_slug,             # <-- clé ajoutée
+            "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
+            "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
+            "metier": bot.get("metier") or pack_slug,
+            "pro_phone": bot.get("pro_phone"),
+            "pro_address_label": bot.get("pro_address_label"),
+            "pro_address_url": bot.get("pro_address_url"),
+            "pro_description": bot.get("pro_description"),
+            # Flags UI preview
+            "show_controls": True,
+            "show_brand": False,
+            "inject_hide_css": False
+        }
+        return render_template("preview.html", bot=bot, cfg=cfg)
+    except Exception as e:
+        logger.error("Erreur /preview: %s\n%s", e, traceback.format_exc())
+        return render_template("error.html"), 500
 
 # -----------------------------------------------------------------------------
 # CHAT PUBLIC (iframe) — sécurisé par bot_id + auth_key (si visiteur externe)
@@ -515,15 +523,18 @@ def chat_public():
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
     shape_to_size = {"circle":"s","square":"m","rounded":"l"}
+    greeting = bot.get("welcome_text", "Bonjour 👋")
 
     cfg = {
         "name": bot.get("name", "Mon Betty Bot"),
         "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
+        "welcome_text": greeting,
+        "greeting": greeting,                # <-- clé ajoutée
         "persona": bot.get("persona", "neutre"),
         "shape": shape,
         "widget_size": shape_to_size.get(shape, "m"),
         "slug": pack_slug,
+        "pack_slug": pack_slug,             # <-- clé ajoutée
         "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
         "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
         "metier": bot.get("metier") or pack_slug,
@@ -661,8 +672,13 @@ def pay_stripe():
         return redirect(url_for("pay"))
 
 # -----------------------------------------------------------------------------
-# CONFIRM
+# CONFIRM (normalisation robuste des objets Stripe)
 # -----------------------------------------------------------------------------
+def _get_attr(obj, key):
+    if obj is None: return None
+    if isinstance(obj, dict): return obj.get(key)
+    return getattr(obj, key, None)
+
 @app.get("/confirm")
 @login_required
 def confirm():
@@ -674,11 +690,13 @@ def confirm():
     try:
         checkout = stripe.checkout.Session.retrieve(session_id, expand=["subscription", "customer"])
         payment_status = (checkout.get("payment_status") or "").lower()
+
         subscription = checkout.get("subscription")
-        sub_id = getattr(subscription, "id", None) if subscription else None
-        sub_status = getattr(subscription, "status", None) if subscription else None
+        sub_id = _get_attr(subscription, "id")
+        sub_status = _get_attr(subscription, "status")
+
         customer = checkout.get("customer")
-        cust_id = getattr(customer, "id", None) if customer else (checkout.get("customer") if isinstance(checkout.get("customer"), str) else None)
+        cust_id = _get_attr(customer, "id") or (customer if isinstance(customer, str) else None)
 
         if cust_id:
             db_exec("UPDATE users SET stripe_customer_id=? WHERE id=?", (cust_id, int(current_user.id)))
@@ -751,9 +769,10 @@ def confirm():
             embed_iframe=embed_iframe,
         )
     except Exception as e:
-        logger.error(f"Confirm error: {e}", exc_info=True)
+        logger.error(f"Confirm error: {e}\n{traceback.format_exc()}")
         flash("Erreur lors de la confirmation.", "error")
         return redirect(url_for("pay"))
+
 # -----------------------------------------------------------------------------
 # API CHAT (simple + “qualif lead” intelligente par pack)
 # -----------------------------------------------------------------------------
@@ -777,7 +796,6 @@ def api_chat():
         if not message:
             return jsonify({"reply": "Bonjour 👋", "ask_lead": False})
 
-        # Réponses “intelligentes” rapides selon pack
         if pack == "avocat":
             if any(w in message for w in ("divorce","garde","pension","famille")):
                 return jsonify({"reply": "Dossier de droit de la famille — avez-vous déjà une date d’audience ou une échéance ?", "ask_lead": True})
@@ -878,15 +896,18 @@ def embed(bot_id: int):
     internal_slug, pack_slug = normalize_metier(bot.get("metier") or "")
     shape = bot.get("shape") or "rounded"
     shape_to_size = {"circle":"s","square":"m","rounded":"l"}
+    greeting = bot.get("welcome_text", "Bonjour 👋")
 
     cfg = {
         "name": bot.get("name", "Mon Betty Bot"),
         "color_hex": bot.get("color_hex", "#4F46E5"),
-        "welcome_text": bot.get("welcome_text", "Bonjour 👋"),
+        "welcome_text": greeting,
+        "greeting": greeting,              # <-- clé ajoutée
         "persona": bot.get("persona", "neutre"),
         "shape": shape,
         "widget_size": shape_to_size.get(shape, "m"),
         "slug": pack_slug,
+        "pack_slug": pack_slug,           # <-- clé ajoutée
         "avatar_key": 0 if internal_slug == "agent_immo" else (1 if internal_slug == "avocat" else 2),
         "avatar_url": bot.get("avatar_url") or f"/avatar/{internal_slug}",
         "metier": bot.get("metier") or pack_slug,
@@ -913,18 +934,21 @@ def embed(bot_id: int):
         return Response(html, mimetype="text/html")
 
 # -----------------------------------------------------------------------------
-# ERREUR 500 (fallback)
+# ERREURS GLOBALES (log stacktrace + page “Oups…”)
 # -----------------------------------------------------------------------------
-@app.errorhandler(500)
-def on_500(err):
-    logger.error("HTTP 500: %s", err, exc_info=True)
-    html = """<!doctype html><meta charset="utf-8">
+@app.errorhandler(Exception)
+def on_any_error(err):
+    logger.error("Unhandled error: %s\n%s", err, traceback.format_exc())
+    try:
+        return render_template("error.html"), 500
+    except Exception:
+        html = """<!doctype html><meta charset="utf-8">
 <title>Erreur</title>
 <body style="background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;padding:40px">
   <h1>Oups…</h1>
   <p>Une erreur s’est produite. Vous pouvez réessayer ou <a href="/pay">aller au paiement</a>.</p>
 </body>"""
-    return Response(html, mimetype="text/html"), 500
+        return Response(html, mimetype="text/html"), 500
 
 # -----------------------------------------------------------------------------
 # MAIN (local)
