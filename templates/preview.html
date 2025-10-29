@@ -8,7 +8,7 @@
   {# ====== CONFIG venues de app.py ====== #}
   {% set bot_name  = (cfg.name or 'Mon Betty Bot') if cfg else 'Mon Betty Bot' %}
   {% set pack_slug = (cfg.slug or 'agent_immobilier') if cfg else 'agent_immobilier' %}
-  {% set greeting  = (cfg.greeting) if (cfg and cfg.greeting) else 'Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous aujourd'hui ?' %}
+  {% set greeting  = (cfg.greeting) if (cfg and cfg.greeting) else 'Bonjour, je suis Betty, votre assistante AI. Que puis-je faire pour vous aujourd hui ?' %}
   {% set avatar_url = (cfg.avatar_url) if (cfg and cfg.avatar_url) else '/avatar/' + pack_slug %}
   {% set color_hex = (cfg.color_hex or '#4F46E5') if cfg else '#4F46E5' %}
   {% set persona   = (cfg.persona or 'neutre') if cfg else 'neutre' %}
