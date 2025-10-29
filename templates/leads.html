@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Leads — Betty Bots</title>
+  <style>
+    body{background:#0d1117;color:#fff;font-family:Inter,system-ui,sans-serif;padding:40px}
+    table{width:100%;border-collapse:collapse;margin-top:20px}
+    th,td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.1);vertical-align:top}
+    th{background:#111827;text-align:left}
+    tr:hover{background:#1e293b}
+    a{color:#a5b4fc;text-decoration:none}
+  </style>
+</head>
+<body>
+  <h1>Leads reçus</h1>
+  {% if leads %}
+  <table>
+    <thead>
+      <tr><th>Nom</th><th>Email</th><th>Métier</th><th>Message</th><th>Date</th></tr>
+    </thead>
+    <tbody>
+      {% for l in leads %}
+      <tr>
+        <td>{{ l.name or "—" }}</td>
+        <td>{{ l.email or "—" }}</td>
+        <td>{{ l.metier or "—" }}</td>
+        <td>{{ l.message or "" }}</td>
+        <td>{{ l.created_at or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Aucun lead enregistré pour le moment.</p>
+  {% endif %}
+  <p style="margin-top:20px"><a href="/dashboard">← Retour au dashboard</a></p>
+</body>
+</html>
